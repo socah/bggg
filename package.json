@@ -1,0 +1,14 @@
+{
+  "name": "bggg",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "echo \"No dev script yet — add per-app scripts as services are built.\""
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

@@ -1,0 +1,39 @@
+version: 2
+
+updates:
+
+  # Scans apps/api/package-lock.json against the npm advisory database.
+  # Skipped silently until a lockfile exists — safe to declare now.
+  - package-ecosystem: "npm"
+    directory: "/apps/api"
+    schedule:
+      interval: "weekly"
+    groups:
+      # Batch routine patch bumps into one PR to reduce noise.
+      # Security advisories always get their own PR regardless of this grouping.
+      non-security-patches:
+        update-types: ["patch"]
+
+  # Same for the Next.js frontend.
+  - package-ecosystem: "npm"
+    directory: "/apps/web"
+    schedule:
+      interval: "weekly"
+    groups:
+      non-security-patches:
+        update-types: ["patch"]
+
+  # Scans 'image:' lines in docker-compose.dev.yml and any Dockerfiles.
+  # Currently watches: postgres:16-alpine
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  # Scans .devcontainer/devcontainer.json — both the base image and features.
+  # Features (e.g. docker-in-docker) are versioned images on ghcr.io and can
+  # carry CVEs just like any other container image.
+  - package-ecosystem: "devcontainers"
+    directory: "/"
+    schedule:
+      interval: "weekly"

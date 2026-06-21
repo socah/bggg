@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+.next/
+out/
+
+# Environment files — real values never go in Git
+.env
+.env.local
+.env.*.local
+.env.production
+.env.staging
+# The template is the exception: it documents variables without leaking values
+!.env.example
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/settings.json
+
+# Terraform state — contains sensitive output values
+infra/**/.terraform/
+infra/**/terraform.tfstate
+infra/**/terraform.tfstate.backup
+infra/**/.terraform.lock.hcl
+
+# Logs
+*.log
+logs/

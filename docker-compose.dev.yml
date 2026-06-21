@@ -1,0 +1,23 @@
+services:
+
+  db:
+    image: postgres:16-alpine
+    # Credentials read from .env via ${VAR} substitution.
+    # Compose automatically loads .env from the same directory as this file.
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    # Named volume: Docker manages this directory.
+    # Data survives 'docker compose down' — only 'docker compose down -v' removes it.
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    # Exposes port to the host so GUI tools (TablePlus, pgAdmin) can connect.
+    # Other services reach 'db' by service name — they do not need this port mapping.
+    ports:
+      - "5432:5432"
+
+# Top-level volume declaration — required for any named volume referenced above.
+# Without this block, Docker does not know to create and manage 'db_data'.
+volumes:
+  db_data:

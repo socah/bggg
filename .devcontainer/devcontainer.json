@@ -1,0 +1,38 @@
+{
+  "name": "bggg",
+
+  // Microsoft's official Node 20 dev container image.
+  // Includes: non-root 'node' user, git, curl, VS Code server support.
+  // We use the image directly (no custom Dockerfile) until we need
+  // system packages the base image doesn't provide.
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:20",
+
+  // Dev Container features: pre-packaged install scripts run after container start.
+  // Docker-in-Docker lets us run 'docker compose' from the integrated terminal
+  // without exposing the host Docker socket to the container.
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+
+  // Extensions installed inside the container, not on the host.
+  // They must run here because they depend on the container's Node and node_modules.
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "ms-azuretools.vscode-docker",
+        "anthropic.claude-code"
+      ]
+    }
+  },
+
+  // No ports forwarded yet — services are added in later phases.
+  // Add ports here as each service is introduced.
+  "forwardPorts": [],
+
+  // Runs once after the container is created and project files are mounted.
+  // npm install is here (not in a Dockerfile) because it needs package.json,
+  // which only exists in the mounted project — not inside the image.
+  "postCreateCommand": "npm install"
+}
