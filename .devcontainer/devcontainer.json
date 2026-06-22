@@ -11,7 +11,7 @@
   // Docker-in-Docker lets us run 'docker compose' from the integrated terminal
   // without exposing the host Docker socket to the container.
   "features": {
-    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+    "ghcr.io/devcontainers/features/docker-in-docker:3": {}
   },
 
   // Extensions installed inside the container, not on the host.
