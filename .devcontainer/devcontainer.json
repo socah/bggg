@@ -11,7 +11,8 @@
   // Docker-in-Docker lets us run 'docker compose' from the integrated terminal
   // without exposing the host Docker socket to the container.
   "features": {
-    "ghcr.io/devcontainers/features/docker-in-docker:3": {}
+    // set "moby" to false because image is based on Debian Trixie which does not support moby
+    "ghcr.io/devcontainers/features/docker-in-docker:3": { "moby": false }
   },
 
   // Extensions installed inside the container, not on the host.

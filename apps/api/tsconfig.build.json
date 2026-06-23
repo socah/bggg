@@ -1,0 +1,9 @@
+{
+  // Extends the app tsconfig — gets all the same compiler options.
+  "extends": "./tsconfig.json",
+
+  // Exclude test files from the production build.
+  // If test files compiled into dist, the deployed image would ship Jest
+  // infrastructure and test mocks — dead weight and a minor attack surface.
+  "exclude": ["node_modules", "test", "dist", "**/*spec.ts"]
+}

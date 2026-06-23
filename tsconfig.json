@@ -1,0 +1,61 @@
+{
+  "compilerOptions": {
+    // ── Language target ───────────────────────────────────────────────────
+    // Node 20 (our engine) understands ES2021 natively, so we can target it
+    // directly instead of down-compiling to ES5. Keeps output readable.
+    "target": "ES2021",
+
+    // CommonJS modules because NestJS expects require() at runtime.
+    // Next.js (apps/web) will override this to ESNext in its own tsconfig.
+    "module": "commonjs",
+
+    // ── Decorator support ─────────────────────────────────────────────────
+    // Without these two flags, @Module(), @Entity(), @Column() etc. do nothing.
+
+    // Enables the @Decorator syntax — without this the compiler rejects it.
+    "experimentalDecorators": true,
+
+    // Makes the compiler emit type metadata alongside compiled JS.
+    // NestJS reads this metadata at runtime to resolve constructor argument
+    // types for dependency injection. Without it, DI silently breaks.
+    "emitDecoratorMetadata": true,
+
+    // ── Strictness ────────────────────────────────────────────────────────
+    // Enables strictNullChecks, noImplicitAny, and several others in one go.
+    // This is the main reason to use TypeScript — don't turn it off.
+    "strict": true,
+
+    // Disallow fall-through in switch statements (a common source of bugs).
+    "noFallthroughCasesInSwitch": true,
+
+    // ── Module resolution ─────────────────────────────────────────────────
+    // How TypeScript finds imported modules. "node" matches how Node resolves:
+    // look in node_modules, follow package.json "main", etc.
+    "moduleResolution": "node",
+
+    // Allows `import x from 'module'` even if the module only has a default
+    // export via module.exports. Many CommonJS packages need this.
+    "allowSyntheticDefaultImports": true,
+
+    // ── Output ────────────────────────────────────────────────────────────
+    // Emit .js.map files so stack traces in production point to .ts source.
+    "sourceMap": true,
+
+    // Emit .d.ts files so packages in this monorepo can share types.
+    "declaration": true,
+
+    // Strip comments from compiled output (they're in the source, not the JS).
+    "removeComments": true,
+
+    // Speed up repeated builds by caching the last compile state.
+    "incremental": true,
+
+    // Skip type-checking inside node_modules — they ship their own .d.ts files
+    // and checking them roughly doubles compile time for no benefit.
+    "skipLibCheck": true,
+
+    // Prevents bugs caused by case-insensitive filesystems (macOS) that
+    // wouldn't show up on Linux CI servers.
+    "forceConsistentCasingInFileNames": true
+  }
+}

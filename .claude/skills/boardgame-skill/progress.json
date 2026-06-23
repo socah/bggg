@@ -1,19 +1,25 @@
 {
-  "current_phase": 1,
-  "current_topic": "1_typescript",
+  "current_phase": 2,
+  "current_topic": "2_nestjs_modules",
   "completed": [
     "0_repo_structure",
     "0_devcontainer",
     "0_docker_compose_dev",
-    "0_dependabot"
+    "0_dependabot",
+    "1_typescript",
+    "1_postgresql",
+    "1_rest"
   ],
   "in_progress": [],
   "notes_generated": [
     "notes/0_repo_structure.md",
     "notes/0_devcontainer.md",
     "notes/0_docker_compose_dev.md",
-    "notes/0_dependabot.md"
+    "notes/0_dependabot.md",
+    "notes/1_typescript.md",
+    "notes/1_postgresql.md",
+    "notes/1_rest.md"
   ],
-  "last_session": "2026-06-22",
+  "last_session": "2026-06-23",
   "detours": []
 }

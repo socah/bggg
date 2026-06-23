@@ -1,0 +1,135 @@
+# Groups API — REST Client file
+#
+# Requires the VS Code "REST Client" extension (humao.rest-client).
+# Run requests with Ctrl+Click on "Send Request" above each block.
+#
+# Set these variables to match your local environment:
+@baseUrl = http://localhost:3000
+@token   = paste-your-jwt-here
+@groupId = 1
+@memberId = 2
+@gameId  = 5
+
+###
+# ── GROUPS ────────────────────────────────────────────────────────────────
+
+# List all groups the authenticated user belongs to.
+# Expected: 200 OK — array of group objects
+GET {{baseUrl}}/groups
+Authorization: Bearer {{token}}
+
+###
+
+# Fetch a single group by id.
+# Expected: 200 OK — one group object
+# Expected: 404 Not Found — if the group does not exist
+# Expected: 403 Forbidden — if the caller is not a member
+GET {{baseUrl}}/groups/{{groupId}}
+Authorization: Bearer {{token}}
+
+###
+
+# Create a new group. The caller automatically becomes the owner.
+# Expected: 201 Created — the new group object
+# Expected: 400 Bad Request — if name is missing or empty
+POST {{baseUrl}}/groups
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Tuesday Night Gamers",
+  "description": "We meet every Tuesday at 7pm."
+}
+
+###
+
+# Update a group's name or description (partial update — only send changed fields).
+# Expected: 200 OK — the updated group object
+# Expected: 403 Forbidden — if the caller is not owner or admin
+# Expected: 404 Not Found — if the group does not exist
+PATCH {{baseUrl}}/groups/{{groupId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "description": "Updated description."
+}
+
+###
+
+# Delete a group and all its members, games, and sessions (cascade).
+# Expected: 204 No Content
+# Expected: 403 Forbidden — only the owner can delete the group
+DELETE {{baseUrl}}/groups/{{groupId}}
+Authorization: Bearer {{token}}
+
+###
+# ── MEMBERS ───────────────────────────────────────────────────────────────
+
+# List all members of a group.
+# Expected: 200 OK — array of { userId, displayName, role, joinedAt }
+GET {{baseUrl}}/groups/{{groupId}}/members
+Authorization: Bearer {{token}}
+
+###
+
+# Add a member to a group. Typically called after an invite is redeemed.
+# Expected: 201 Created — the new group_member record
+# Expected: 409 Conflict — if the user is already a member
+POST {{baseUrl}}/groups/{{groupId}}/members
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "userId": 7
+}
+
+###
+
+# Change a member's role within the group.
+# Expected: 200 OK — the updated group_member record
+# Expected: 403 Forbidden — only owner or admin can change roles
+# Expected: 400 Bad Request — if role is not 'owner' | 'admin' | 'member'
+PATCH {{baseUrl}}/groups/{{groupId}}/members/{{memberId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "role": "admin"
+}
+
+###
+
+# Remove a member from a group.
+# Expected: 204 No Content
+# Expected: 403 Forbidden — only owner or admin can remove members
+DELETE {{baseUrl}}/groups/{{groupId}}/members/{{memberId}}
+Authorization: Bearer {{token}}
+
+###
+# ── GROUP GAMES ───────────────────────────────────────────────────────────
+
+# List all games in the group's collection.
+# Expected: 200 OK — array of game objects
+GET {{baseUrl}}/groups/{{groupId}}/games
+Authorization: Bearer {{token}}
+
+###
+
+# Add a game to the group's collection (looked up by BGG id).
+# Expected: 201 Created — the game object (fetched from BGG if not cached)
+# Expected: 409 Conflict — if the game is already in the collection
+POST {{baseUrl}}/groups/{{groupId}}/games
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "bggId": 161936
+}
+
+###
+
+# Remove a game from the group's collection.
+# Expected: 204 No Content
+DELETE {{baseUrl}}/groups/{{groupId}}/games/{{gameId}}
+Authorization: Bearer {{token}}

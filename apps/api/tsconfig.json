@@ -1,0 +1,31 @@
+{
+  // Pull in all shared options from the root. We only declare what differs
+  // or is specific to this app.
+  "extends": "../../tsconfig.json",
+
+  "compilerOptions": {
+    // Compile everything under apps/api/src/.
+    // rootDir must contain all source files — TypeScript errors if a file
+    // being compiled sits outside this directory.
+    "rootDir": "src",
+
+    // Where the compiled .js files (and .js.map, .d.ts) go.
+    // This folder is what gets deployed — never commit it to git.
+    "outDir": "dist",
+
+    // Lets you write `import { GameService } from '@api/games/game.service'`
+    // instead of `../../games/game.service`. Keeps imports readable as the
+    // directory tree grows.
+    "paths": {
+      "@api/*": ["src/*"]
+    }
+  },
+
+  // Tell the compiler which files to include.
+  // ** = any subdirectory, *.ts = any TypeScript file (but not .d.ts —
+  // those are emitted output, not source input).
+  "include": ["src/**/*.ts"],
+
+  // Exclude compiled output so it is never fed back in as input.
+  "exclude": ["dist"]
+}
