@@ -253,8 +253,8 @@ that you can explain every line you write.
 
 ## Summary
 
-[Filled in after checkpoint is complete.]
+Built: Groups feature module — `GroupsModule`, `GroupsController`, `GroupsService` — with full CRUD over an in-memory store. Wired into `AppModule` as the first feature module.
 
-Built: —
-Demonstrated understanding of: —
-To revisit: —
+Demonstrated understanding of: the distinction between `providers` (internal registry) and `exports` (public API); that `imports` takes modules not services; the three-way wiring required for cross-module injection (`exports` on the source, `imports` on the consumer, constructor annotation on the dependent class); and that missing any of the three causes a startup error, not a runtime one.
+
+To revisit: none identified.

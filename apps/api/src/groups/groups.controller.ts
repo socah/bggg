@@ -10,6 +10,8 @@ import {
   ParseIntPipe,
 } from '@nestjs/common';
 import { GroupsService, CreateGroupDto, UpdateGroupDto } from './groups.service';
+// Return types are now Promise<Group[]> etc. — the controller stays the same
+// because NestJS automatically awaits promises before serialising the response.
 
 // @Controller('groups') means every method in this class lives under /groups.
 // The controller's only job is to translate HTTP in/out — no business logic here.

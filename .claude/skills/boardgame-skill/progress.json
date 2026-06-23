@@ -1,6 +1,6 @@
 {
   "current_phase": 2,
-  "current_topic": "2_nestjs_modules",
+  "current_topic": "2_typeorm_entities",
   "completed": [
     "0_repo_structure",
     "0_devcontainer",
@@ -8,7 +8,8 @@
     "0_dependabot",
     "1_typescript",
     "1_postgresql",
-    "1_rest"
+    "1_rest",
+    "2_nestjs_modules"
   ],
   "in_progress": [],
   "notes_generated": [
@@ -18,8 +19,9 @@
     "notes/0_dependabot.md",
     "notes/1_typescript.md",
     "notes/1_postgresql.md",
-    "notes/1_rest.md"
+    "notes/1_rest.md",
+    "notes/2_nestjs_modules.md"
   ],
-  "last_session": "2026-06-23",
+  "last_session": "2026-06-24",
   "detours": []
 }

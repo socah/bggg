@@ -1,11 +1,14 @@
 import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { Group } from './group.entity';
 import { GroupsController } from './groups.controller';
 import { GroupsService } from './groups.service';
 
 @Module({
-  // imports: other modules whose exported providers we need inside this module.
-  // Empty for now — TypeOrmModule.forFeature([Group]) arrives next topic.
-  imports: [],
+  // TypeOrmModule.forFeature([Group]) registers Repository<Group> for injection
+  // within this module. Without this, @InjectRepository(Group) in GroupsService
+  // would throw at startup.
+  imports: [TypeOrmModule.forFeature([Group])],
 
   // controllers: NestJS instantiates these and registers their routes.
   controllers: [GroupsController],

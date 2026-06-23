@@ -31,7 +31,6 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS groups (
   id          SERIAL       PRIMARY KEY,
   name        TEXT         NOT NULL,
-  description TEXT,
   created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 

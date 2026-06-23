@@ -1,66 +1,63 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Group } from './group.entity';
 
-// Describes the shape of a group record. This will become a TypeORM entity
-// in the next topic — for now it is a plain interface.
-export interface Group {
-  id: number;
+// DTOs live here for now — they move to their own files once the codebase grows.
+// Using classes (not interfaces) so NestJS's ValidationPipe can inspect them
+// at runtime in a later topic (2_guards_pipes).
+export class CreateGroupDto {
   name: string;
-  description: string;
 }
 
-// Describes the data a caller must provide to create a group.
-// Using a separate type (not the full Group) means callers cannot accidentally
-// pass an id — the service assigns that.
-export interface CreateGroupDto {
-  name: string;
-  description: string;
-}
-
-// Patch requests only send the fields being changed, so every field is optional.
-export interface UpdateGroupDto {
+export class UpdateGroupDto {
+  // Partial: every field optional — a PATCH only sends the fields being changed.
   name?: string;
-  description?: string;
 }
 
 @Injectable()
 export class GroupsService {
-  // In-memory store — replaced by a TypeORM repository in 2_typeorm_entities.
-  // The counter simulates auto-increment primary keys.
-  private readonly groups: Group[] = [
-    { id: 1, name: 'Tuesday Night Gamers', description: 'We meet every Tuesday at 7pm.' },
-    { id: 2, name: 'Weekend Warriors', description: 'Long games, long weekends.' },
-  ];
-  private nextId = 3;
+  constructor(
+    // @InjectRepository(Group) tells NestJS which entity's repository to inject.
+    // The repository is the TypeORM object you call .find(), .save(), .delete() on.
+    // It is available because GroupsModule imports TypeOrmModule.forFeature([Group]).
+    @InjectRepository(Group)
+    private readonly groupRepository: Repository<Group>,
+  ) {}
 
-  findAll(): Group[] {
-    return this.groups;
+  findAll(): Promise<Group[]> {
+    // .find() → SELECT * FROM groups ORDER BY id
+    return this.groupRepository.find();
   }
 
-  findOne(id: number): Group {
-    const group = this.groups.find((g) => g.id === id);
-    // NotFoundException maps to HTTP 404 automatically — NestJS reads the
-    // exception class and sets the response status code.
+  async findOne(id: number): Promise<Group> {
+    // .findOneBy() → SELECT * FROM groups WHERE id = $1
+    const group = await this.groupRepository.findOneBy({ id });
+    // NotFoundException maps to HTTP 404 — same behaviour as before.
     if (!group) throw new NotFoundException(`Group ${id} not found`);
     return group;
   }
 
-  create(dto: CreateGroupDto): Group {
-    const group: Group = { id: this.nextId++, ...dto };
-    this.groups.push(group);
-    return group;
+  create(dto: CreateGroupDto): Promise<Group> {
+    // .create() builds an entity instance in memory (no DB call yet).
+    // .save() then runs INSERT and returns the saved row with id and createdAt filled in.
+    const group = this.groupRepository.create(dto);
+    return this.groupRepository.save(group);
   }
 
-  update(id: number, dto: UpdateGroupDto): Group {
-    const group = this.findOne(id); // reuses the 404 logic above
-    // Object.assign mutates `group` in place — fine for an in-memory store.
-    // TypeORM's save() will replace this pattern entirely next topic.
+  async update(id: number, dto: UpdateGroupDto): Promise<Group> {
+    const group = await this.findOne(id); // reuses the 404 logic above
+    // Object.assign merges dto fields onto the entity instance.
+    // .save() detects the existing id and runs UPDATE instead of INSERT.
     Object.assign(group, dto);
-    return group;
+    return this.groupRepository.save(group);
   }
 
-  remove(id: number): void {
-    const index = this.groups.findIndex((g) => g.id === id);
-    if (index === -1) throw new NotFoundException(`Group ${id} not found`);
-    this.groups.splice(index, 1);
+  async remove(id: number): Promise<void> {
+    const group = await this.findOne(id); // 404 if missing
+    // .remove() issues DELETE FROM groups WHERE id = $1.
+    // Alternative: .delete({ id }) skips the SELECT but cannot throw 404
+    // before attempting the delete — we prefer the explicit check.
+    await this.groupRepository.remove(group);
   }
 }
