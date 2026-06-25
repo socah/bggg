@@ -35,5 +35,11 @@
   // Runs once after the container is created and project files are mounted.
   // npm install is here (not in a Dockerfile) because it needs package.json,
   // which only exists in the mounted project — not inside the image.
-  "postCreateCommand": "npm install"
+  "postCreateCommand": "npm install",
+
+  // Runs every time the container starts (every VS Code open or resume).
+  // Syncs node_modules with the lockfile after a git pull without requiring
+  // a manual npm install. npm install is a no-op when nothing has changed,
+  // so the overhead on a clean start is negligible.
+  "postStartCommand": "npm install"
 }
