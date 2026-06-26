@@ -5,6 +5,7 @@
 import 'reflect-metadata';
 
 import { NestFactory } from '@nestjs/core';
+import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -14,6 +15,14 @@ async function bootstrap() {
   // connections. Any misconfiguration (missing provider, circular dep) throws
   // here — never silently at request time.
   const app = await NestFactory.create(AppModule);
+
+  // Registered globally so every handler in the app validates its DTOs
+  // automatically — no need to add @UsePipes() to each controller.
+  app.useGlobalPipes(new ValidationPipe({
+    whitelist: true,             // strip properties not declared in the DTO
+    forbidNonWhitelisted: true,  // throw 400 if unknown properties are sent
+    transform: true,             // coerce plain JSON objects to DTO class instances
+  }));
 
   // Read the port from the environment so the same image works in dev,
   // staging, and production without code changes.

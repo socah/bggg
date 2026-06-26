@@ -8,13 +8,18 @@ import {
   Body,
   HttpCode,
   ParseIntPipe,
+  UseGuards,
 } from '@nestjs/common';
-import { GroupsService, CreateGroupDto, UpdateGroupDto } from './groups.service';
+import { GroupsService } from './groups.service';
+import { CreateGroupDto } from './dto/create-group.dto';
+import { UpdateGroupDto } from './dto/update-group.dto';
+import { AuthGuard } from '../auth/auth.guard';
 // Return types are now Promise<Group[]> etc. — the controller stays the same
 // because NestJS automatically awaits promises before serialising the response.
 
-// @Controller('groups') means every method in this class lives under /groups.
-// The controller's only job is to translate HTTP in/out — no business logic here.
+// @UseGuards runs AuthGuard before every handler in this controller.
+// Any request without a valid JWT never reaches the methods below.
+@UseGuards(AuthGuard)
 @Controller('groups')
 export class GroupsController {
   // NestJS injects the GroupsService singleton automatically.

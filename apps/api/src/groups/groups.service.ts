@@ -2,18 +2,8 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Group } from './group.entity';
-
-// DTOs live here for now — they move to their own files once the codebase grows.
-// Using classes (not interfaces) so NestJS's ValidationPipe can inspect them
-// at runtime in a later topic (2_guards_pipes).
-export class CreateGroupDto {
-  name: string;
-}
-
-export class UpdateGroupDto {
-  // Partial: every field optional — a PATCH only sends the fields being changed.
-  name?: string;
-}
+import { CreateGroupDto } from './dto/create-group.dto';
+import { UpdateGroupDto } from './dto/update-group.dto';
 
 @Injectable()
 export class GroupsService {
