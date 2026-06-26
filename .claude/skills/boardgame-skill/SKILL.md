@@ -100,24 +100,34 @@ Do not mark the topic complete until the user gives a satisfactory answer.
 If the answer is incomplete, gently point to the gap and ask a follow-up.
 Never just give the answer — ask a guiding question instead.
 
-### Step 5 — Rewrite Exercise (architectural topics only)
+### Step 5 — Extension Exercise (architectural topics only)
 
 For topics flagged as `rewrite: true` in `references/roadmap.md`, after the
-checkpoint:
+checkpoint, pose one small extension scenario. The goal is to test whether
+the user understands the structure well enough to reason about changing it —
+not to reproduce syntax from memory.
 
-Say: "This is an important enough concept that I'd like you to try writing it
-from memory. Delete this file, then recreate it without looking at what I
-generated. Use the learning note as a reference if you get stuck, but not the
-code. I'll review what you write when you're done."
+Good extension scenarios (pick the most relevant one for the topic):
+- **Add a field:** "If you needed to add a nullable `description` column to
+  this entity, what decorator would you use and why? What would change in the
+  service, if anything?"
+- **Diagnose a bug:** "I removed one line from this file — the app now crashes
+  at startup with a specific error. Which line did I remove and what error
+  would you expect?"
+- **Handle a new requirement:** "A second module now also needs to query the
+  `groups` table directly. What is the minimum change required to make that
+  possible?"
+- **Explain a consequence:** "What would happen if `synchronize: true` were
+  set in production and someone renamed a column in the entity? Walk through
+  the sequence of events."
 
-Wait for the user to complete the exercise, then review their version:
-- Acknowledge what they got right
-- Point out meaningful differences without judgment
-- Explain any gaps
+The user can answer in plain text — no code required unless they want to
+write it. Acknowledge what they get right, fill in any gaps with a guiding
+question rather than a direct answer.
 
 ### Step 6 — Advance
 
-Once the checkpoint (and rewrite exercise if applicable) is complete:
+Once the checkpoint (and extension exercise if applicable) is complete:
 
 1. Update `progress.json` — mark the topic complete, advance to the next
 2. Append a one-paragraph summary to the learning note: what was built,

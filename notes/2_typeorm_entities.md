@@ -304,4 +304,8 @@ most likely to be fuzzy after a first pass.
 
 ## Summary
 
-[Filled in after checkpoint is complete.]
+Built: `group.entity.ts` (TypeORM entity mirroring the `groups` SQL table), `TypeOrmModule.forFeature([Group])` in `GroupsModule`, `Repository<Group>` injection in `GroupsService` replacing the in-memory array, and `TypeOrmModule.forRoot()` in `AppModule` reading DB credentials from environment variables. Also installed `typeorm`, `@nestjs/typeorm`, and `pg`.
+
+Demonstrated understanding of: the difference between `forRoot()` (one shared connection, lives in AppModule) and `forFeature()` (scopes a Repository to a specific module); why `autoLoadEntities: true` avoids manual entity list maintenance; and — critically — why `synchronize: true` in production is dangerous (TypeORM drops and recreates columns rather than renaming them, causing data loss or startup crashes).
+
+To revisit: the precise error message NestJS throws when `forFeature` is missing (`Nest can't resolve dependencies of PostsService (?)`); and how `exports: [TypeOrmModule]` in a feature module would expose `Repository<T>` to importers (not needed here but worth knowing).
