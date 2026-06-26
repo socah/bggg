@@ -28,8 +28,9 @@ updates:
       non-security-patches:
         update-types: ["patch"]
 
-  # Scans 'image:' lines in docker-compose.dev.yml and any Dockerfiles.
-  # Currently watches: postgres:16-alpine
+  # Scans docker-compose.yml for 'image:' tags (e.g. postgres:16-alpine).
+  # Dev-specific overrides live in docker-compose.dev.yml which Dependabot ignores
+  # because it uses a non-standard filename — image tags belong in the base file.
   - package-ecosystem: "docker"
     directory: "/"
     schedule:

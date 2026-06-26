@@ -1,0 +1,9 @@
+services:
+
+  db:
+    # Image tag lives here so Dependabot can track it via the standard filename.
+    # Dev-specific config (credentials, ports, volumes) is in docker-compose.dev.yml.
+    image: postgres:16-alpine
+
+volumes:
+  db_data:

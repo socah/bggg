@@ -1,7 +1,6 @@
 services:
 
   db:
-    image: postgres:16-alpine
     # Credentials read from .env via ${VAR} substitution.
     # Compose automatically loads .env from the same directory as this file.
     environment:
@@ -16,8 +15,3 @@ services:
     # Other services reach 'db' by service name — they do not need this port mapping.
     ports:
       - "5432:5432"
-
-# Top-level volume declaration — required for any named volume referenced above.
-# Without this block, Docker does not know to create and manage 'db_data'.
-volumes:
-  db_data:
