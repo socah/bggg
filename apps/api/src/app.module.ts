@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { GroupsModule } from './groups/groups.module';
 import { GamesModule } from './games/games.module';
+import { AuditModule } from './audit/audit.module';
 
 // AppModule is the root of the dependency graph. NestFactory starts here.
 // Every feature module must be listed in `imports` for its routes and
@@ -35,6 +36,7 @@ import { GamesModule } from './games/games.module';
       synchronize: false,
     }),
 
+    AuditModule,
     GroupsModule,
     GamesModule,
   ],

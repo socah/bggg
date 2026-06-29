@@ -4,15 +4,17 @@ import { Repository } from 'typeorm';
 import { Group } from './group.entity';
 import { CreateGroupDto } from './dto/create-group.dto';
 import { UpdateGroupDto } from './dto/update-group.dto';
+import { AuditService } from '../audit/audit.service';
 
 @Injectable()
 export class GroupsService {
   constructor(
-    // @InjectRepository(Group) tells NestJS which entity's repository to inject.
-    // The repository is the TypeORM object you call .find(), .save(), .delete() on.
-    // It is available because GroupsModule imports TypeOrmModule.forFeature([Group]).
     @InjectRepository(Group)
     private readonly groupRepository: Repository<Group>,
+    // AuditService is injectable here because GroupsModule imports AuditModule,
+    // which exports AuditService. No circular dependency — AuditModule never
+    // imports GroupsModule.
+    private readonly auditService: AuditService,
   ) {}
 
   findAll(requestingUserId: string): Promise<Group[]> {
@@ -39,12 +41,20 @@ export class GroupsService {
     return group;
   }
 
-  create(dto: CreateGroupDto, requestingUserId: string): Promise<Group> {
-    // .create() builds the entity in memory, merging dto fields.
-    // We add ownerId here — it is never accepted from the request body
-    // (not in CreateGroupDto) so the user cannot forge ownership.
+  async create(dto: CreateGroupDto, requestingUserId: string): Promise<Group> {
     const group = this.groupRepository.create({ ...dto, ownerId: requestingUserId });
-    return this.groupRepository.save(group);
+    const saved = await this.groupRepository.save(group);
+
+    // Audit after save — we need the generated ID for targetId.
+    await this.auditService.log({
+      actorId: requestingUserId,
+      action: 'group.created',
+      targetType: 'group',
+      targetId: String(saved.id),
+      metadata: { name: saved.name },
+    });
+
+    return saved;
   }
 
   async update(id: string, dto: UpdateGroupDto, requestingUserId: string): Promise<Group> {
@@ -58,5 +68,13 @@ export class GroupsService {
   async remove(id: string, requestingUserId: string): Promise<void> {
     const group = await this.findOne(id, requestingUserId);
     await this.groupRepository.remove(group);
+
+    await this.auditService.log({
+      actorId: requestingUserId,
+      action: 'group.deleted',
+      targetType: 'group',
+      targetId: id,
+      metadata: { name: group.name },
+    });
   }
 }
