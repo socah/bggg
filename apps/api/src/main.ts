@@ -26,6 +26,16 @@ async function bootstrap() {
 
   // Read the port from the environment so the same image works in dev,
   // staging, and production without code changes.
+  // CORS: allow only the specific frontend origin, never a wildcard.
+  // CORS_ORIGIN is set per-environment (.env.dev, production env vars).
+  // Without this, a page at evil.com could make credentialed requests to
+  // the API using the victim's browser token — a CSRF-adjacent attack.
+  app.enableCors({
+    origin: process.env.CORS_ORIGIN,
+    methods: ['GET', 'POST', 'PATCH', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  });
+
   const port = process.env.PORT ?? 3000;
 
   await app.listen(port);

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Group } from './group.entity';
@@ -15,39 +15,48 @@ export class GroupsService {
     private readonly groupRepository: Repository<Group>,
   ) {}
 
-  findAll(): Promise<Group[]> {
-    // .find() → SELECT * FROM groups ORDER BY id
-    return this.groupRepository.find();
+  findAll(requestingUserId: string): Promise<Group[]> {
+    // Scoped to groups owned by the requester — not the entire table.
+    // A user with a valid JWT should only see their own groups.
+    // When group membership (member/admin roles) is added in Phase 3,
+    // this query will expand to include groups where the user is a member.
+    return this.groupRepository.findBy({ ownerId: requestingUserId });
   }
 
-  async findOne(id: number): Promise<Group> {
-    // .findOneBy() → SELECT * FROM groups WHERE id = $1
+  async findOne(id: string, requestingUserId: string): Promise<Group> {
+    // Step 1: look up by id only — determines whether the row exists at all.
     const group = await this.groupRepository.findOneBy({ id });
-    // NotFoundException maps to HTTP 404 — same behaviour as before.
     if (!group) throw new NotFoundException(`Group ${id} not found`);
+
+    // Step 2: ownership check — determines whether this user may see it.
+    // ForbiddenException → HTTP 403 (authenticated but not authorised).
+    // Separated from the 404 so AuditService (next topic) can distinguish
+    // a genuine missing resource from an unauthorised access attempt.
+    if (group.ownerId !== requestingUserId) {
+      throw new ForbiddenException('You do not have access to this group');
+    }
+
     return group;
   }
 
-  create(dto: CreateGroupDto): Promise<Group> {
-    // .create() builds an entity instance in memory (no DB call yet).
-    // .save() then runs INSERT and returns the saved row with id and createdAt filled in.
-    const group = this.groupRepository.create(dto);
+  create(dto: CreateGroupDto, requestingUserId: string): Promise<Group> {
+    // .create() builds the entity in memory, merging dto fields.
+    // We add ownerId here — it is never accepted from the request body
+    // (not in CreateGroupDto) so the user cannot forge ownership.
+    const group = this.groupRepository.create({ ...dto, ownerId: requestingUserId });
     return this.groupRepository.save(group);
   }
 
-  async update(id: number, dto: UpdateGroupDto): Promise<Group> {
-    const group = await this.findOne(id); // reuses the 404 logic above
-    // Object.assign merges dto fields onto the entity instance.
-    // .save() detects the existing id and runs UPDATE instead of INSERT.
+  async update(id: string, dto: UpdateGroupDto, requestingUserId: string): Promise<Group> {
+    // findOne already enforces the 404 + ownership check — if it returns,
+    // we know the group exists and belongs to the requester.
+    const group = await this.findOne(id, requestingUserId);
     Object.assign(group, dto);
     return this.groupRepository.save(group);
   }
 
-  async remove(id: number): Promise<void> {
-    const group = await this.findOne(id); // 404 if missing
-    // .remove() issues DELETE FROM groups WHERE id = $1.
-    // Alternative: .delete({ id }) skips the SELECT but cannot throw 404
-    // before attempting the delete — we prefer the explicit check.
+  async remove(id: string, requestingUserId: string): Promise<void> {
+    const group = await this.findOne(id, requestingUserId);
     await this.groupRepository.remove(group);
   }
 }

@@ -7,58 +7,59 @@ import {
   Param,
   Body,
   HttpCode,
-  ParseIntPipe,
+  ParseUUIDPipe,
   UseGuards,
+  Request,
 } from '@nestjs/common';
 import { GroupsService } from './groups.service';
 import { CreateGroupDto } from './dto/create-group.dto';
 import { UpdateGroupDto } from './dto/update-group.dto';
 import { AuthGuard } from '../auth/auth.guard';
-// Return types are now Promise<Group[]> etc. — the controller stays the same
-// because NestJS automatically awaits promises before serialising the response.
 
 // @UseGuards runs AuthGuard before every handler in this controller.
 // Any request without a valid JWT never reaches the methods below.
 @UseGuards(AuthGuard)
 @Controller('groups')
 export class GroupsController {
-  // NestJS injects the GroupsService singleton automatically.
   constructor(private readonly groupsService: GroupsService) {}
 
-  // GET /groups → 200 OK with array of groups
+  // GET /groups → 200 OK with groups owned by the authenticated user only
   @Get()
-  findAll() {
-    return this.groupsService.findAll();
+  findAll(@Request() req) {
+    // req.user is the decoded JWT payload, set by AuthGuard.
+    // sub (subject) is the JWT standard claim for the user's unique ID.
+    return this.groupsService.findAll(req.user.sub);
   }
 
-  // GET /groups/:id → 200 OK with one group, or 404 if not found
-  // ParseIntPipe converts the route param string "1" to the number 1.
-  // Without it, `id` is a string and `findOne("1" === 1)` would be false.
+  // GET /groups/:id → 200 OK, or 404 if not found, or 403 if not the owner
+  // ParseUUIDPipe validates that :id is a well-formed UUID before the
+  // service is called — malformed strings never reach the database.
   @Get(':id')
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.groupsService.findOne(id);
+  findOne(@Param('id', ParseUUIDPipe) id: string, @Request() req) {
+    return this.groupsService.findOne(id, req.user.sub);
   }
 
-  // POST /groups → 201 Created with the new group
-  // NestJS defaults to 200 for @Post; @HttpCode(201) corrects this to follow
-  // the REST convention that a successful creation returns 201.
+  // POST /groups → 201 Created. ownerId is set from the token — not the body.
   @Post()
   @HttpCode(201)
-  create(@Body() dto: CreateGroupDto) {
-    return this.groupsService.create(dto);
+  create(@Body() dto: CreateGroupDto, @Request() req) {
+    return this.groupsService.create(dto, req.user.sub);
   }
 
-  // PATCH /groups/:id → 200 OK with updated group, or 404 if not found
+  // PATCH /groups/:id → 200 OK, or 403 if not the owner
   @Patch(':id')
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateGroupDto) {
-    return this.groupsService.update(id, dto);
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateGroupDto,
+    @Request() req,
+  ) {
+    return this.groupsService.update(id, dto, req.user.sub);
   }
 
-  // DELETE /groups/:id → 204 No Content (body is empty by convention)
+  // DELETE /groups/:id → 204 No Content, or 403 if not the owner
   @Delete(':id')
   @HttpCode(204)
-  remove(@Param('id', ParseIntPipe) id: number) {
-    this.groupsService.remove(id);
-    // Returning nothing with @HttpCode(204) means NestJS sends an empty body.
+  remove(@Param('id', ParseUUIDPipe) id: string, @Request() req) {
+    this.groupsService.remove(id, req.user.sub);
   }
 }

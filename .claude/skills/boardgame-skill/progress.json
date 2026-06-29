@@ -1,6 +1,6 @@
 {
   "current_phase": 2,
-  "current_topic": "2_owasp",
+  "current_topic": "2_audit_logging",
   "completed": [
     "0_repo_structure",
     "0_devcontainer",
@@ -13,7 +13,8 @@
     "2_typeorm_entities",
     "2_guards_pipes",
     "2_testing",
-    "2_bgg_integration"
+    "2_bgg_integration",
+    "2_owasp"
   ],
   "in_progress": [],
   "notes_generated": [
@@ -28,8 +29,9 @@
     "notes/2_typeorm_entities.md",
     "notes/2_guards_pipes.md",
     "notes/2_testing.md",
-    "notes/2_bgg_integration.md"
+    "notes/2_bgg_integration.md",
+    "notes/2_owasp.md"
   ],
-  "last_session": "2026-06-27",
+  "last_session": "2026-06-29",
   "detours": []
 }
