@@ -1,0 +1,133 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
+import request, { Response } from 'supertest';
+import { GroupsController } from '../src/groups/groups.controller';
+import { GroupsService } from '../src/groups/groups.service';
+import { AuthGuard } from '../src/auth/auth.guard';
+import { Group } from '../src/groups/group.entity';
+
+describe('Groups (e2e)', () => {
+  let app: INestApplication;
+
+  const mockGroupsService = {
+    findAll: jest.fn(),
+    findOne: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    remove: jest.fn(),
+  };
+
+  beforeAll(async () => {
+    // e2e tests use beforeAll (not beforeEach) so the app boots once and
+    // stays running for all tests — booting NestJS is expensive compared to
+    // a single test.
+    // We register only GroupsController — no AppModule, no TypeOrmModule.
+    // Importing AppModule would trigger TypeOrmModule.forRoot() which tries to
+    // connect to Postgres. Since we're mocking the service, the database is
+    // not needed; bringing it in would just add a slow, fragile dependency.
+    const module: TestingModule = await Test.createTestingModule({
+      controllers: [GroupsController],
+      providers: [
+        { provide: GroupsService, useValue: mockGroupsService },
+      ],
+    })
+      // .overrideGuard replaces AuthGuard wherever @UseGuards(AuthGuard)
+      // appears, without needing to import or register it as a provider.
+      .overrideGuard(AuthGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
+
+    app = module.createNestApplication();
+
+    // Apply the same global ValidationPipe that runs in production (main.ts).
+    // Without this, the e2e tests would not catch validation failures, making
+    // them less representative of real behaviour.
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
+
+    // init() starts the HTTP server internally — no port is bound; supertest
+    // communicates with it directly via the underlying http.Server instance.
+    await app.init();
+  });
+
+  afterAll(async () => {
+    // Close the app after all tests to release the HTTP server and any open
+    // connections. Without this, Jest may hang after the suite finishes.
+    await app.close();
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  // ── GET /groups ───────────────────────────────────────────────────────────
+
+  it('GET /groups → 200 with array', async () => {
+    const groups: Group[] = [
+      { id: 1, name: 'Chess Club', createdAt: new Date() },
+    ];
+    mockGroupsService.findAll.mockResolvedValue(groups);
+
+    // request(app.getHttpServer()) creates a supertest agent bound to the
+    // NestJS HTTP server. .get('/groups') sends a real GET request through
+    // the full middleware + guard + controller + pipe stack.
+    await request(app.getHttpServer())
+      .get('/groups')
+      .expect(200)
+      .expect((res: Response) => {
+        expect(res.body).toHaveLength(1);
+        expect(res.body[0].name).toBe('Chess Club');
+      });
+  });
+
+  // ── GET /groups/:id ───────────────────────────────────────────────────────
+
+  it('GET /groups/:id → 200 with group', async () => {
+    const group: Group = { id: 1, name: 'Chess Club', createdAt: new Date() };
+    mockGroupsService.findOne.mockResolvedValue(group);
+
+    await request(app.getHttpServer())
+      .get('/groups/1')
+      .expect(200)
+      .expect((res: Response) => {
+        expect(res.body.name).toBe('Chess Club');
+      });
+  });
+
+  it('GET /groups/:id → 404 when not found', async () => {
+    // NestJS's built-in exception filter catches NotFoundException and maps
+    // it to a 404 response. This test confirms that mapping is in place.
+    const { NotFoundException } = await import('@nestjs/common');
+    mockGroupsService.findOne.mockRejectedValue(new NotFoundException());
+
+    await request(app.getHttpServer()).get('/groups/99').expect(404);
+  });
+
+  it('GET /groups/:id → 400 when id is not a number', async () => {
+    // ParseIntPipe rejects non-numeric route params with 400 Bad Request.
+    // This test verifies the pipe is wired correctly — it would pass even
+    // without any service mock because the pipe runs before the service.
+    await request(app.getHttpServer()).get('/groups/abc').expect(400);
+  });
+
+  // ── POST /groups ──────────────────────────────────────────────────────────
+
+  it('POST /groups → 201 with created group', async () => {
+    const created: Group = { id: 3, name: 'Go Club', createdAt: new Date() };
+    mockGroupsService.create.mockResolvedValue(created);
+
+    await request(app.getHttpServer())
+      .post('/groups')
+      .send({ name: 'Go Club' })
+      .expect(201)
+      .expect((res: Response) => {
+        expect(res.body.id).toBe(3);
+        expect(res.body.name).toBe('Go Club');
+      });
+  });
+
+  // ── DELETE /groups/:id ────────────────────────────────────────────────────
+
+  it('DELETE /groups/:id → 204 no content', async () => {
+    mockGroupsService.remove.mockResolvedValue(undefined);
+
+    await request(app.getHttpServer()).delete('/groups/1').expect(204);
+  });
+});

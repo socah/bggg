@@ -12,15 +12,15 @@ import {
 @Entity('groups')
 export class Group {
   @PrimaryGeneratedColumn()
-  id: number;
+  id!: number;
 
   // NOT NULL by default — matches the SQL constraint in db/schema.sql.
   @Column()
-  name: string;
+  name!: string;
 
   // @CreateDateColumn sets this automatically on INSERT — you never pass it in.
   // name: 'created_at' matches the snake_case column in the DB; the property
   // stays camelCase to follow TypeScript conventions.
   @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
+  createdAt!: Date;
 }

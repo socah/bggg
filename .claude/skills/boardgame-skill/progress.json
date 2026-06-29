@@ -1,6 +1,6 @@
 {
   "current_phase": 2,
-  "current_topic": "2_testing",
+  "current_topic": "2_bgg_integration",
   "completed": [
     "0_repo_structure",
     "0_devcontainer",
@@ -11,7 +11,8 @@
     "1_rest",
     "2_nestjs_modules",
     "2_typeorm_entities",
-    "2_guards_pipes"
+    "2_guards_pipes",
+    "2_testing"
   ],
   "in_progress": [],
   "notes_generated": [
@@ -24,8 +25,9 @@
     "notes/1_rest.md",
     "notes/2_nestjs_modules.md",
     "notes/2_typeorm_entities.md",
-    "notes/2_guards_pipes.md"
+    "notes/2_guards_pipes.md",
+    "notes/2_testing.md"
   ],
-  "last_session": "2026-06-26",
+  "last_session": "2026-06-27",
   "detours": []
 }

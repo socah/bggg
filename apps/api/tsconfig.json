@@ -18,7 +18,13 @@
     // directory tree grows.
     "paths": {
       "@api/*": ["src/*"]
-    }
+    },
+
+    // Without this, TypeScript auto-discovers all @types/* packages but may
+    // miss hoisted workspace packages. Listing them explicitly makes Jest
+    // globals (describe, it, expect, jest) visible in .spec.ts files, and
+    // Node globals (process, Buffer) visible everywhere.
+    "types": ["jest", "node"]
   },
 
   // Tell the compiler which files to include.
