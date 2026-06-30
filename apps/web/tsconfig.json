@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    // Next.js uses its own bundler (Turbopack/webpack) — tsc is only
+    // used for type-checking, not for emitting JS files.
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    // 'preserve' tells tsc to leave JSX as-is; Next.js transforms it.
+    "incremental": true,
+    "paths": {
+      // '@/' is a shortcut so imports read 'import X from @/components/X'
+      // instead of '../../components/X' — avoids brittle relative paths.
+      "@/*": ["./*"]
+    }
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules"]
+}

@@ -6,7 +6,8 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "echo \"No dev script yet — add per-app scripts as services are built.\""
+    "dev:api": "PORT=3001 npm run start:dev --workspace=apps/api",
+    "dev:web": "npm run dev --workspace=apps/web"
   },
   "engines": {
     "node": ">=20.0.0"

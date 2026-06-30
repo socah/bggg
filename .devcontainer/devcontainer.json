@@ -28,9 +28,9 @@
     }
   },
 
-  // No ports forwarded yet — services are added in later phases.
-  // Add ports here as each service is introduced.
-  "forwardPorts": [],
+  // 3000 — Next.js web app (the browser-facing UI)
+  // 3001 — NestJS API (start with PORT=3001 npm run start:dev in apps/api)
+  "forwardPorts": [3000, 3001],
 
   // Runs once after the container is created and project files are mounted.
   // npm install is here (not in a Dockerfile) because it needs package.json,

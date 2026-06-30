@@ -1,0 +1,7 @@
+/* These three directives inject Tailwind's generated CSS.
+   'base'       → normalises browser defaults (box-sizing, margins, etc.)
+   'components' → any component classes defined in plugins
+   'utilities'  → all the utility classes (flex, text-lg, bg-gray-50, etc.) */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
