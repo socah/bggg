@@ -5,5 +5,10 @@ services:
     # Dev-specific config (credentials, ports, volumes) is in docker-compose.dev.yml.
     image: postgres:16-alpine
 
+  keycloak:
+    # Same split as 'db': version-pinned tag here for Dependabot, dev-only
+    # config (admin bootstrap, ports, realm import) in docker-compose.dev.yml.
+    image: quay.io/keycloak/keycloak:26.0
+
 volumes:
   db_data:

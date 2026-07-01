@@ -1,0 +1,44 @@
+{
+  "realm": "boardgame",
+  "enabled": true,
+
+  "sslRequired": "external",
+  "registrationAllowed": true,
+
+  "clients": [
+    {
+      "clientId": "web",
+      "name": "Board Game Platform — Web",
+      "protocol": "openid-connect",
+
+      "publicClient": false,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+
+      "redirectUris": ["http://localhost:3000/*"],
+      "webOrigins": ["http://localhost:3000"],
+
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      }
+    }
+  ],
+
+  "components": {
+    "org.keycloak.keys.KeyProvider": [
+      {
+        "name": "rsa-generated",
+        "providerId": "rsa-generated",
+        "config": {
+          "priority": ["100"],
+          "enabled": ["true"],
+          "active": ["true"],
+          "algorithm": ["RS256"],
+          "keySize": ["2048"]
+        }
+      }
+    ]
+  }
+}

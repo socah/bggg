@@ -15,3 +15,27 @@ services:
     # Other services reach 'db' by service name — they do not need this port mapping.
     ports:
       - "5432:5432"
+
+  keycloak:
+    # 'start-dev' enables an in-memory-friendly dev mode (HTTP allowed, no
+    # need for a real TLS cert locally). Never use start-dev in production —
+    # it disables hostname/TLS checks that matter there.
+    # '--import-realm' loads any realm JSON found in the import directory
+    # below on every startup, so the realm config lives in git, not in
+    # admin-UI clicks that vanish when the container is recreated.
+    command: start-dev --import-realm
+    environment:
+      # Bootstrap admin account for the Keycloak admin console itself —
+      # unrelated to any application user. KC_BOOTSTRAP_ADMIN_* only takes
+      # effect on first boot, when there is no admin user yet.
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USER}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+    volumes:
+      # Realm export, read once at startup because of --import-realm above.
+      # Editing this file and restarting the container re-applies it —
+      # no manual admin-console steps to reproduce on a fresh clone.
+      - ./infra/keycloak/boardgame-realm.json:/opt/keycloak/data/import/boardgame-realm.json
+    # 8080: Keycloak's own HTTP port (login pages, token endpoint, JWKS).
+    # Next.js and NestJS both reach it at http://localhost:8080 in dev.
+    ports:
+      - "8080:8080"
