@@ -488,4 +488,20 @@ exact function signatures.
 
 ## Summary
 
-[To be filled in after checkpoint.]
+Built the JWT verification rewrite end-to-end: `AuthGuard` now fetches
+Keycloak's JWKS and verifies with RS256 instead of a shared `JWT_SECRET`,
+Auth.js drives the Authorization Code + PKCE flow as a confidential client
+from Next.js's server, and the realm/client config lives in
+`boardgame-realm.json` under `--import-realm`. At checkpoint, correctly
+explained why a compromised NestJS container gains nothing under JWKS/RS256
+(it never holds the private signing key) versus full forgery power under the
+old symmetric secret, and correctly separated PKCE (protects the code
+exchange, Decision 1) from JWKS/RS256 (protects what NestJS holds to verify,
+Decision 2) after a nudge. In the extension exercise, independently spotted
+that `canActivate`'s `context.switchToHttp().getRequest()` call for
+attaching `request.user` is *also* HTTP-specific — not just `extractToken`
+as the note implied — a real gap that `3_websockets` will need to close.
+Didn't yet know Socket.io's handshake mechanics (reading the token from
+`handshake.auth.token`, not a header or URL), which is expected since that's
+`3_websockets` material, not yet covered — flagged as a head start for that
+topic rather than a gap in this one.

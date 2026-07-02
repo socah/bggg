@@ -1,6 +1,6 @@
 {
   "current_phase": 3,
-  "current_topic": "3_keycloak",
+  "current_topic": "3_pwa",
   "completed": [
     "0_repo_structure",
     "0_devcontainer",
@@ -16,7 +16,8 @@
     "2_bgg_integration",
     "2_owasp",
     "2_audit_logging",
-    "3_nextjs"
+    "3_nextjs",
+    "3_keycloak"
   ],
   "in_progress": [],
   "notes_generated": [
@@ -34,8 +35,9 @@
     "notes/2_bgg_integration.md",
     "notes/2_owasp.md",
     "notes/2_audit_logging.md",
-    "notes/3_nextjs.md"
+    "notes/3_nextjs.md",
+    "notes/3_keycloak.md"
   ],
-  "last_session": "2026-06-30",
+  "last_session": "2026-07-02",
   "detours": []
 }
