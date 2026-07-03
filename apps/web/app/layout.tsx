@@ -3,14 +3,24 @@
 // and provides the <html> and <body> tags that Next.js requires.
 // Child pages slot in via the {children} prop.
 
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 // Metadata exported from a Server Component is picked up by Next.js and
-// injected into <head> as <title> and <meta> tags — no manual <Head> needed.
+// injected into <head> as <title>, <meta>, and <link> tags server-side.
 export const metadata: Metadata = {
   title: 'BGGG — Board Game Group',
   description: 'Organise play sessions with your board game group',
+  // Generates: <link rel="manifest" href="/manifest.json" />
+  // The browser reads this to discover the app's name, icons, and display mode.
+  manifest: '/manifest.json',
+};
+
+// themeColor lives in viewport (not metadata) in Next.js 14+ because it
+// also affects the browser viewport meta tag, not just a <head> entry.
+// Generates: <meta name="theme-color" content="#4f46e5" />
+export const viewport: Viewport = {
+  themeColor: '#4f46e5',
 };
 
 export default function RootLayout({
