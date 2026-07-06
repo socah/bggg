@@ -6,6 +6,7 @@ import 'reflect-metadata';
 
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { IoAdapter } from '@nestjs/platform-socket.io';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -15,6 +16,12 @@ async function bootstrap() {
   // connections. Any misconfiguration (missing provider, circular dep) throws
   // here — never silently at request time.
   const app = await NestFactory.create(AppModule);
+
+  // Nest's built-in WebSocket adapter uses the raw 'ws' library, which has
+  // no concept of rooms or the 'auth' handshake field ChatGateway depends
+  // on. Without this line, @WebSocketGateway would silently fall back to
+  // 'ws' semantics and client.handshake.auth.token would always be undefined.
+  app.useWebSocketAdapter(new IoAdapter(app));
 
   // Registered globally so every handler in the app validates its DTOs
   // automatically — no need to add @UsePipes() to each controller.

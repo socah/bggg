@@ -52,10 +52,19 @@ export class AuthGuard implements CanActivate {
         algorithms: ['RS256'],
       });
 
-      // Attach the decoded payload to the request so any controller can read
-      // req.user.sub (the user's ID) without decoding the token a second time.
-      const request = context.switchToHttp().getRequest();
-      request.user = payload;
+      // Attach the decoded payload to whichever object the handler will
+      // actually receive, so it can read `.sub` (the user's ID) without
+      // decoding the token a second time. This has to branch the same way
+      // extractToken() does — switchToHttp().getRequest() and
+      // switchToWs().getClient() return different underlying objects, and
+      // calling the wrong one for the current transport throws.
+      if (context.getType() === 'ws') {
+        const client = context.switchToWs().getClient();
+        client.data.user = payload;
+      } else {
+        const request = context.switchToHttp().getRequest();
+        request.user = payload;
+      }
 
       return true;
     } catch {
@@ -63,9 +72,10 @@ export class AuthGuard implements CanActivate {
     }
   }
 
-  // All transport-specific logic lives here — canActivate never calls
-  // switchToHttp() or switchToWs() directly. When WebSockets are added in
-  // Phase 3, only this method grows a new branch; nothing else changes.
+  // Extracting the token is centralised here so canActivate's verification
+  // logic (JWKS lookup, issuer check, algorithm pinning) is identical for
+  // every transport — only the "where does the raw token come from" part
+  // differs between HTTP and WebSocket.
   private extractToken(context: ExecutionContext): string | null {
     if (context.getType() === 'http') {
       const request = context.switchToHttp().getRequest();
@@ -73,7 +83,17 @@ export class AuthGuard implements CanActivate {
       // split(' ')[1] isolates the token part after the space.
       return request.headers.authorization?.split(' ')[1] ?? null;
     }
-    // 'ws' branch will be added here in Phase 3 when group chat is built.
+    if (context.getType() === 'ws') {
+      // getClient() returns the underlying Socket.io socket. Socket.io
+      // exposes whatever the client passed at connect time under
+      // `handshake.auth` — NOT a header, since a WebSocket handshake is a
+      // single upgrade request and Socket.io's client API sends `auth` as a
+      // dedicated field rather than requiring a raw header to be set.
+      // Deliberately NOT `handshake.query` — query strings end up in
+      // Traefik access logs (Phase 4), leaking tokens; `auth` does not.
+      const client = context.switchToWs().getClient();
+      return client.handshake?.auth?.token ?? null;
+    }
     return null;
   }
 }

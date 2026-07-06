@@ -1,6 +1,6 @@
 {
   "current_phase": 3,
-  "current_topic": "3_websockets",
+  "current_topic": null,
   "completed": [
     "0_repo_structure",
     "0_devcontainer",
@@ -18,7 +18,8 @@
     "2_audit_logging",
     "3_nextjs",
     "3_keycloak",
-    "3_pwa"
+    "3_pwa",
+    "3_websockets"
   ],
   "in_progress": [],
   "notes_generated": [
@@ -38,8 +39,9 @@
     "notes/2_audit_logging.md",
     "notes/3_nextjs.md",
     "notes/3_keycloak.md",
-    "notes/3_pwa.md"
+    "notes/3_pwa.md",
+    "notes/3_websockets.md"
   ],
-  "last_session": "2026-07-03",
+  "last_session": "2026-07-06",
   "detours": []
 }
