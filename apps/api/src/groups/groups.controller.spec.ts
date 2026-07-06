@@ -10,6 +10,11 @@ import { Group } from './group.entity';
 // Implements CanActivate so NestJS treats it as a valid guard.
 const alwaysAllowGuard = { canActivate: () => true };
 
+// Since alwaysAllowGuard never runs the real AuthGuard, req.user is never
+// populated by anything — the controller methods read req.user.sub directly,
+// so tests have to fake that shape themselves.
+const fakeRequest = { user: { sub: 'user-1' } };
+
 describe('GroupsController', () => {
   let controller: GroupsController;
 
@@ -51,15 +56,16 @@ describe('GroupsController', () => {
   describe('findAll', () => {
     it('should return the array from the service', async () => {
       const groups: Group[] = [
-        { id: 1, name: 'Chess Club', createdAt: new Date() },
+        { id: 'group-1', name: 'Chess Club', ownerId: 'user-1', createdAt: new Date() },
       ];
       mockGroupsService.findAll.mockResolvedValue(groups);
 
-      const result = await controller.findAll();
+      const result = await controller.findAll(fakeRequest);
 
       expect(result).toEqual(groups);
-      // Verify the controller delegates to the service — its only job.
-      expect(mockGroupsService.findAll).toHaveBeenCalledTimes(1);
+      // Verify the controller delegates to the service with the requester's
+      // id extracted from the token — its only job.
+      expect(mockGroupsService.findAll).toHaveBeenCalledWith('user-1');
     });
   });
 
@@ -67,12 +73,12 @@ describe('GroupsController', () => {
 
   describe('findOne', () => {
     it('should return the group from the service', async () => {
-      const group: Group = { id: 1, name: 'Chess Club', createdAt: new Date() };
+      const group: Group = { id: 'group-1', name: 'Chess Club', ownerId: 'user-1', createdAt: new Date() };
       mockGroupsService.findOne.mockResolvedValue(group);
 
-      const result = await controller.findOne(1);
+      const result = await controller.findOne('group-1', fakeRequest);
 
-      expect(mockGroupsService.findOne).toHaveBeenCalledWith(1);
+      expect(mockGroupsService.findOne).toHaveBeenCalledWith('group-1', 'user-1');
       expect(result).toEqual(group);
     });
 
@@ -81,7 +87,7 @@ describe('GroupsController', () => {
       // and lets any exception bubble up to NestJS's exception filter.
       mockGroupsService.findOne.mockRejectedValue(new NotFoundException());
 
-      await expect(controller.findOne(99)).rejects.toThrow(NotFoundException);
+      await expect(controller.findOne('missing-id', fakeRequest)).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -90,12 +96,12 @@ describe('GroupsController', () => {
   describe('create', () => {
     it('should return the created group from the service', async () => {
       const dto = { name: 'Go Club' };
-      const created: Group = { id: 3, name: 'Go Club', createdAt: new Date() };
+      const created: Group = { id: 'group-3', name: 'Go Club', ownerId: 'user-1', createdAt: new Date() };
       mockGroupsService.create.mockResolvedValue(created);
 
-      const result = await controller.create(dto);
+      const result = await controller.create(dto, fakeRequest);
 
-      expect(mockGroupsService.create).toHaveBeenCalledWith(dto);
+      expect(mockGroupsService.create).toHaveBeenCalledWith(dto, 'user-1');
       expect(result).toEqual(created);
     });
   });
@@ -106,9 +112,9 @@ describe('GroupsController', () => {
     it('should call the service remove method', async () => {
       mockGroupsService.remove.mockResolvedValue(undefined);
 
-      await controller.remove(1);
+      await controller.remove('group-1', fakeRequest);
 
-      expect(mockGroupsService.remove).toHaveBeenCalledWith(1);
+      expect(mockGroupsService.remove).toHaveBeenCalledWith('group-1', 'user-1');
     });
   });
 });

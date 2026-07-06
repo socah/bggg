@@ -31,7 +31,15 @@
     // ── Module resolution ─────────────────────────────────────────────────
     // How TypeScript finds imported modules. "node" matches how Node resolves:
     // look in node_modules, follow package.json "main", etc.
+    // TypeScript 6 renamed this to "node10" and deprecated it in favor of
+    // "node16"/"nodenext"/"bundler" — those change actual module/interop
+    // behavior, not just naming, so this project isn't migrating to one
+    // opportunistically inside an unrelated task. ignoreDeprecations silences
+    // the warning for the "node10" name specifically, without changing how
+    // modules actually resolve. Revisit before TypeScript 7, which removes
+    // "node10" entirely.
     "moduleResolution": "node",
+    "ignoreDeprecations": "6.0",
 
     // Allows `import x from 'module'` even if the module only has a default
     // export via module.exports. Many CommonJS packages need this.

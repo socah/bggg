@@ -13,6 +13,12 @@
     // This folder is what gets deployed — never commit it to git.
     "outDir": "dist",
 
+    // baseUrl anchors the "paths" mapping below — TypeScript requires it
+    // explicitly; it won't infer one from rootDir or outDir. "." here means
+    // "relative to this tsconfig.json file" (apps/api/), matching how
+    // "src/*" is written in the paths entry.
+    "baseUrl": ".",
+
     // Lets you write `import { GameService } from '@api/games/game.service'`
     // instead of `../../games/game.service`. Keeps imports readable as the
     // directory tree grows.
