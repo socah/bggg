@@ -1,0 +1,41 @@
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeorm';
+
+// @Entity('play_photos') — table name matches db/schema.sql.
+@Entity('play_photos')
+export class PlayPhoto {
+  // uuid PK: this is a public-facing resource (returned to and referenced by
+  // the client), so it follows the same convention as Group and Message —
+  // see secops.md's "public-facing IDs are UUIDs" checklist item.
+  @PrimaryGeneratedColumn('uuid')
+  id!: string;
+
+  // Deliberately a plain int column, NOT a TypeORM relation. play_sessions
+  // exists in db/schema.sql as a reference table (id SERIAL) but has no
+  // TypeORM entity yet — that lands with topic 3_scheduling. Until then
+  // there is no @ManyToOne(() => PlaySession) to point at, so this column
+  // carries the id without a FK constraint or ORM-level relation. The FK
+  // constraint gets added via ALTER TABLE once PlaySession exists, the same
+  // pattern already used for play_sessions.proposal_id in db/schema.sql.
+  @Column({ name: 'session_id' })
+  sessionId!: number;
+
+  // Stores the JWT `sub` claim of the user who uploaded this photo — same
+  // ownership-anchor pattern as Group.ownerId.
+  @Column({ name: 'uploaded_by' })
+  uploadedBy!: string;
+
+  // The R2 object key (e.g. "play-photos/<userId>/<uuid>") — the source of
+  // truth for locating the file in the bucket. Kept even though `url` is
+  // also stored, so the public URL can be rebuilt if R2_PUBLIC_URL_BASE
+  // ever changes (custom domain migration, etc.) without losing the photo.
+  @Column({ unique: true })
+  key!: string;
+
+  // Public URL, derived from `key` at confirm time via R2Service.buildPublicUrl
+  // and stored so reads never need to reconstruct it.
+  @Column()
+  url!: string;
+
+  @CreateDateColumn({ name: 'created_at' })
+  createdAt!: Date;
+}

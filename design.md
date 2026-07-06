@@ -216,7 +216,7 @@ Responsibilities:
 * JWT validation (tokens issued by Keycloak)
 * Business logic
 * Validation
-* File upload handling (proxied to Cloudflare R2)
+* Presigned upload URL generation for Cloudflare R2 (file bytes go client → R2 directly, not through NestJS)
 * BGG API integration (game lookup, collection sync)
 * Background jobs (collection sync via `@nestjs/schedule`)
 * iCal feed generation (play session scheduling)
@@ -280,17 +280,22 @@ Reasons:
 
 Cover art is served directly from BGG CDN URLs — no local storage needed.
 
-Upload flow:
+Upload flow (presigned URL — NestJS never touches file bytes):
 
 ```text
-Client
-  ↓ multipart upload
-NestJS
-  ↓ streams to R2
-Cloudflare R2
-  ↓ returns public URL
-NestJS stores URL in PostgreSQL
+Client                          NestJS                        Cloudflare R2
+  |--- POST /uploads/presign --->|                                  |
+  |                              | (generates object key,           |
+  |                              |  signs a short-lived PUT URL)    |
+  |<-- { url, key } -------------|                                  |
+  |------------------------------ PUT file (direct) --------------->|
+  |--- POST /uploads/confirm --->|                                  |
+  |     { key }                  | (persists key/URL in PostgreSQL) |
 ```
+
+Object key is always generated server-side (never client-supplied) and the
+signature is scoped to one key, one content-type, and a short expiry window
+(minutes) — see `notes/3_r2_uploads.md` for the full rationale.
 
 ---
 

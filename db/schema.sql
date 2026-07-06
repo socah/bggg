@@ -169,6 +169,24 @@ CREATE TABLE IF NOT EXISTS play_session_players (
   PRIMARY KEY (session_id, user_id)
 );
 
+-- ── PLAY PHOTOS ───────────────────────────────────────────────────────────
+-- User-uploaded photos for a play session (Phase 3 — r2_uploads topic).
+-- Binaries live in Cloudflare R2; this table only stores the object key and
+-- the derived public URL. Uploaded via a presigned URL the client PUTs
+-- directly to R2 — NestJS never receives the file bytes.
+-- session_id: no FK constraint yet — play_sessions has no TypeORM entity
+--   until topic 3_scheduling. Added via ALTER TABLE once that lands, same
+--   deferred-FK pattern already used for play_sessions.proposal_id above.
+-- key: UNIQUE — the R2 object key, one row per uploaded object.
+CREATE TABLE IF NOT EXISTS play_photos (
+  id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  session_id  INT          NOT NULL, -- FK to play_sessions, added later
+  uploaded_by INT          NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  key         TEXT         NOT NULL UNIQUE,
+  url         TEXT         NOT NULL,
+  created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
 -- ── INVITES ───────────────────────────────────────────────────────────────
 -- Signed invite tokens for joining a group (Phase 3 — invite_system topic).
 -- token: a random URL-safe string; UNIQUE so it can be looked up directly.
