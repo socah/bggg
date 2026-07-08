@@ -19,7 +19,8 @@
     "3_nextjs",
     "3_keycloak",
     "3_pwa",
-    "3_websockets"
+    "3_websockets",
+    "3_r2_uploads"
   ],
   "in_progress": [],
   "notes_generated": [
@@ -40,8 +41,9 @@
     "notes/3_nextjs.md",
     "notes/3_keycloak.md",
     "notes/3_pwa.md",
-    "notes/3_websockets.md"
+    "notes/3_websockets.md",
+    "notes/3_r2_uploads.md"
   ],
-  "last_session": "2026-07-06",
+  "last_session": "2026-07-08",
   "detours": []
 }

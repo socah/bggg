@@ -294,8 +294,17 @@ Client                          NestJS                        Cloudflare R2
 ```
 
 Object key is always generated server-side (never client-supplied) and the
-signature is scoped to one key, one content-type, and a short expiry window
-(minutes) — see `notes/3_r2_uploads.md` for the full rationale.
+signature is scoped to one key, one content-type, one exact size, and a
+short expiry window (minutes) — see `notes/3_r2_uploads.md` for the full
+rationale.
+
+Limits enforced (both configurable via env, defaults shown):
+
+* Per-file size: 10 MiB (`MAX_UPLOAD_BYTES`), pinned into the presigned
+  URL's signature so R2 itself rejects a PUT of the wrong size
+* Total bucket storage: 10 GiB (`R2_MAX_STORAGE_BYTES`), matching the free
+  tier — checked (approximately; not an atomic reservation) against the sum
+  of confirmed photos' real sizes before a new presign URL is issued
 
 ---
 

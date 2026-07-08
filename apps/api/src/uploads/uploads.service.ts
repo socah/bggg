@@ -1,4 +1,10 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import {
+  ForbiddenException,
+  HttpException,
+  HttpStatus,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { PlayPhoto } from './play-photo.entity';
@@ -15,6 +21,18 @@ export class UploadsService {
   ) {}
 
   async presign(userId: string, dto: PresignUploadDto) {
+    // Approximate free-tier storage guard: sum every confirmed photo's real
+    // size and check whether this upload would push the bucket over the
+    // configured cap before we even bother signing a URL. See
+    // R2Service.hasCapacityFor for the race-condition caveat.
+    const currentTotalBytes = await this.getTotalStorageBytes();
+    if (!this.r2Service.hasCapacityFor(currentTotalBytes, dto.contentLength)) {
+      throw new HttpException(
+        'R2 storage quota would be exceeded by this upload',
+        HttpStatus.INSUFFICIENT_STORAGE,
+      );
+    }
+
     // Key is generated here, from the authenticated user's id — dto never
     // supplies a key. This is the step that actually enforces "you can only
     // request an upload URL for a path under your own user id".
@@ -22,6 +40,7 @@ export class UploadsService {
     const { url, expiresIn } = await this.r2Service.createPresignedUploadUrl(
       key,
       dto.contentType,
+      dto.contentLength,
     );
 
     return { url, key, expiresIn };
@@ -35,8 +54,18 @@ export class UploadsService {
     // link). This check makes sure the key this user is confirming actually
     // belongs to them before a row is written — without it, User A could
     // attach a row (and audit trail) claiming ownership of User B's photo.
-    if (!dto.key.startsWith(`play-photos/${userId}/`)) {
+    if (!this.r2Service.keyBelongsToUser(dto.key, userId)) {
       throw new ForbiddenException('This upload key does not belong to you');
+    }
+
+    // Without this, confirming a key that was never actually PUT to R2 (a
+    // buggy client, an upload that failed partway through, or someone just
+    // calling this endpoint directly) would create a play_photos row
+    // pointing at a URL that 404s whenever anyone views it. The returned
+    // size is R2's own account of what it stored — see PlayPhoto.sizeBytes.
+    const head = await this.r2Service.headObject(dto.key);
+    if (!head) {
+      throw new NotFoundException('No uploaded object found for this key');
     }
 
     const photo = this.playPhotoRepository.create({
@@ -44,8 +73,26 @@ export class UploadsService {
       uploadedBy: userId,
       key: dto.key,
       url: this.r2Service.buildPublicUrl(dto.key),
+      sizeBytes: head.sizeBytes,
     });
 
     return this.playPhotoRepository.save(photo);
+  }
+
+  // SUM across every confirmed photo. Cast to bigint in SQL then parsed back
+  // to a JS number here — Postgres's SUM(int) returns bigint (driver returns
+  // it as a string) to avoid silent overflow on the aggregate, even though
+  // any realistic total for this project stays well under
+  // Number.MAX_SAFE_INTEGER.
+  private async getTotalStorageBytes(): Promise<number> {
+    // SUM with no GROUP BY always yields exactly one row (COALESCE keeps it
+    // 0 rather than NULL when the table is empty) — getRawOne's return type
+    // is nullable only because TypeORM can't express that guarantee.
+    const row = await this.playPhotoRepository
+      .createQueryBuilder('photo')
+      .select('COALESCE(SUM(photo.sizeBytes), 0)', 'total')
+      .getRawOne<{ total: string }>();
+
+    return parseInt(row?.total ?? '0', 10);
   }
 }

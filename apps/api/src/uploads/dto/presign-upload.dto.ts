@@ -15,4 +15,15 @@ export class PresignUploadDto {
   @IsString()
   @IsNotEmpty()
   contentType!: string;
+
+  // The exact size (in bytes) of the file the client is about to upload —
+  // e.g. `file.size` in the browser. Not just an advisory value: this gets
+  // pinned into the presigned URL's signature (see R2Service), so the
+  // actual PUT must match this exact byte count. Not validated with a fixed
+  // decorator max here on purpose — the real cap (MAX_UPLOAD_BYTES) lives
+  // in R2Service so it stays configurable via env var without touching this
+  // DTO. This decorator only rejects structurally invalid values.
+  @IsInt()
+  @IsPositive()
+  contentLength!: number;
 }

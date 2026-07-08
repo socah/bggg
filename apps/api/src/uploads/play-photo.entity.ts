@@ -36,6 +36,17 @@ export class PlayPhoto {
   @Column()
   url!: string;
 
+  // Read from R2's own HeadObject response at confirm time — NOT trusted
+  // from client input, even though the client also declares a contentLength
+  // at presign time. Two different jobs: contentLength (presign) constrains
+  // what the client is allowed to upload; sizeBytes (here) records what R2
+  // actually stored, which is what the storage-quota check in
+  // UploadsService sums against. Using the client's number for both would
+  // let a buggy client's inflated presign-time claim pollute the real quota
+  // total even if the actual uploaded file was smaller (or vice versa).
+  @Column({ name: 'size_bytes' })
+  sizeBytes!: number;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 }

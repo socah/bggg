@@ -170,6 +170,53 @@ vulnerability.
 
 ---
 
+## Follow-Up: Enforcing a Size Limit
+
+A plain presigned PUT URL has no "reject anything over X MB" primitive —
+that's a feature of S3 **POST policies** (`content-length-range` condition),
+not PUT presigning. The only way to bound a PUT upload's size is to sign one
+**exact** byte count and let the server (R2) reject a request whose real
+`Content-Length` doesn't match.
+
+Chose: the client declares its file's exact size (`contentLength`, e.g.
+`file.size` in the browser) when requesting the presign. The server rejects
+it up front if it's over a configurable `MAX_UPLOAD_BYTES`, then bakes that
+exact size into the `PutObjectCommand` used for signing — so the actual PUT
+must match it exactly, not just stay under a ceiling.
+
+Alternative considered: let any size through at presign time, then check the
+real size back from R2 in `/uploads/confirm` (already fetching object
+metadata there via `HeadObject`) and delete-and-reject if too large.
+
+Drawback of alternative: wastes bandwidth and briefly stores an oversized
+file before catching it — worse for a project explicitly trying to stay
+within a metered free tier.
+
+### Follow-Up: Approximate Free-Tier Storage Quota
+
+Beyond a single file's size, R2's free tier caps *total* bucket storage (10
+GiB, per `design.md`). Before issuing a new presigned URL,
+`UploadsService.presign` now sums `PlayPhoto.sizeBytes` across every
+confirmed photo (via Postgres `SUM`, not by asking R2 to list every object —
+far cheaper) and rejects the request with `507 Insufficient Storage` if
+adding the incoming file would exceed a configurable `R2_MAX_STORAGE_BYTES`.
+
+This is deliberately a **soft, approximate** guard, not an atomic
+reservation: two presign requests issued milliseconds apart could both pass
+the check before either photo is confirmed and counted, letting the total
+overshoot slightly. For a small private gaming group with occasional
+uploads, that race is negligible — but it's not a pattern to copy for a
+system under real concurrent load, where you'd want a reservation/ledger
+approach instead.
+
+Also worth noting: `PlayPhoto.sizeBytes` is populated from R2's own
+`HeadObject` response at confirm time, not from the client's presign-time
+`contentLength` claim — the two numbers serve different jobs (one constrains
+the upload, the other records what actually landed), and only the second one
+is safe to trust for the running quota total.
+
+---
+
 ## Now Apply It
 
 In the real codebase this becomes an `uploads` module following the same
@@ -183,19 +230,23 @@ this project), an `UploadsController` with `POST /uploads/presign` and
 `PlayPhoto` entity to persist the confirmed key/URL.
 
 One deliberate gap: `design.md`'s `play_photos` table has a `session_id`
-foreign key into `play_sessions` — but `play_sessions` doesn't exist yet
-(that's topic `3_scheduling`, still ahead of us). So `PlayPhoto.sessionId`
-will be built as a plain UUID column with no FK constraint for now, and wired
-up to a real foreign key once `3_scheduling` lands. This will be called out
-again when we get there.
+foreign key into `play_sessions` — but `play_sessions` has no TypeORM entity
+yet (that's topic `3_scheduling`, still ahead of us). So `PlayPhoto.sessionId`
+is a plain **INT** column (matching `play_sessions.id`, which is `SERIAL` in
+`db/schema.sql` — not UUID) with no FK constraint for now, wired up to a real
+foreign key once `3_scheduling` lands. This will be called out again when we
+get there.
 
 Files to look at after this note:
 - `apps/api/src/groups/groups.module.ts` — the module-wiring pattern
   (`TypeOrmModule.forFeature`, controller/provider/export) that `uploads`
-  will follow.
+  follows.
 - `apps/api/src/auth/auth.guard.ts` — how the guard reads `request.user.sub`;
   the upload confirm endpoint uses this the same way `groups` does for
   `ownerId`, to record `uploadedBy` on `PlayPhoto`.
+- `apps/api/src/uploads/r2.service.ts` — `headObject` (verifies the upload
+  actually happened, and is where `PlayPhoto.sizeBytes` comes from) and
+  `hasCapacityFor` (the free-tier storage guard).
 
 ---
 
@@ -227,16 +278,23 @@ sent to the client directly instead of presigning server-side, every user's
 browser session would hold full read/write access to the *entire* bucket.
 
 **Checklist applied:**
-- [ ] Object key generated server-side from `userId` + random UUID, never
+- [x] Object key generated server-side from `userId` + random UUID, never
       accepted from the client
-- [ ] `ContentType` baked into the signature, restricted to an image
-      allowlist (`image/jpeg`, `image/png`, `image/webp`) in the real
-      controller
-- [ ] `expiresIn` kept short (minutes, not hours)
-- [ ] R2 credentials only ever read via `process.env` on the server; never
+- [x] `ContentType` baked into the signature, restricted to an image
+      allowlist (`image/jpeg`, `image/png`, `image/webp`)
+- [x] `expiresIn` kept short (5 minutes, not hours)
+- [x] R2 credentials only ever read via `process.env` on the server; never
       sent to the client, never logged
-- [ ] `play_photos.id` will be a UUID primary key (public-facing resource) —
+- [x] `play_photos.id` is a UUID primary key (public-facing resource) —
       consistent with `secops.md`'s "public-facing IDs are UUIDs" rule
+- [x] `ContentLength` pinned into the signature — R2 rejects a PUT whose
+      real size doesn't match the declared one, bounding worst-case abuse of
+      a single upload
+- [x] `/uploads/confirm` verifies the object actually exists in R2
+      (`HeadObject`) before trusting the client's claim enough to write a
+      Postgres row
+- [x] Confirm-time ownership check (`keyBelongsToUser`) rejects a client
+      trying to confirm a key it wasn't actually issued
 
 ---
 
@@ -253,6 +311,46 @@ browser session would hold full read/write access to the *entire* bucket.
    that same pattern for `PlayPhoto.uploadedBy`?
 5. Why was the "proxy through NestJS" approach from `design.md` rejected in
    favor of presigned URLs, given this is a small/personal deployment?
+6. Why can't a plain presigned PUT URL enforce "reject anything over 10 MB"
+   the way an S3 POST policy can — and what does pinning `ContentLength`
+   into the signature actually achieve instead?
+7. `PlayPhoto.sizeBytes` is read from R2's `HeadObject` response rather than
+   from the client's `contentLength` field in the presign request, even
+   though both numbers usually agree. Why does that distinction matter for
+   the storage-quota check specifically?
+8. The storage-quota check in `hasCapacityFor` is described as a "soft,
+   approximate" guard. What specific sequence of two requests could cause
+   the real total to exceed `R2_MAX_STORAGE_BYTES` despite the check?
+
+---
+
+## Summary
+
+Built: an `uploads` module (`R2Service`, `UploadsService`, `UploadsController`,
+`PlayPhoto` entity) implementing presigned direct-to-R2 uploads for play
+session photos — `POST /uploads/presign` and `POST /uploads/confirm`, both
+behind `AuthGuard`. Along the way: fixed the design.md flow diagram to match
+the presigned-URL architecture (it originally showed a proxy-through-NestJS
+flow), fixed a pre-existing `groups.id` type drift between `db/schema.sql`
+(`SERIAL`) and `group.entity.ts` (`uuid`), stood up a previously-missing
+ESLint config for `apps/api`, added an exact-size-pinning mechanism for a
+configurable per-file upload cap, and added an approximate running-total
+guard against R2's free-tier storage allowance.
+
+Demonstrated understanding of: the full presign → direct-PUT → confirm
+lifecycle and why NestJS never touches file bytes; that R2 verifies
+signatures, not identities (it doesn't know what a "user" is — only that a
+request matches what was signed); independently identified two real gaps in
+the first draft (unverified confirms, a duplicated hardcoded key prefix) and
+proposed correct fixes for both; understood *why* SigV4 presigned PUT
+signing has no range primitive (not just "bytes skip the server," but a
+genuine capability gap versus S3 POST policies) after one clarifying pass.
+
+To revisit: the distinction between "R2 checks an exact pinned value" and
+"our app enforces the actual limit before signing" took a second explanation
+to land fully — worth a quick gut-check next time size/quota enforcement
+comes up elsewhere (e.g. if `3_scheduling` or a future topic adds its own
+upload-adjacent limit).
 
 ---
 

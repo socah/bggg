@@ -1,5 +1,14 @@
-import { Injectable } from '@nestjs/common';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import {
+  Injectable,
+  PayloadTooLargeException,
+  UnsupportedMediaTypeException,
+} from '@nestjs/common';
+import {
+  S3Client,
+  PutObjectCommand,
+  HeadObjectCommand,
+  NotFound,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomUUID } from 'crypto';
 
@@ -14,7 +23,30 @@ const PRESIGN_EXPIRY_SECONDS = 300;
 // an HTML/SVG payload through by lying about the type when it PUTs the file.
 const ALLOWED_CONTENT_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
-export class UnsupportedContentTypeError extends Error {}
+// Single source of truth for the key layout ("play-photos/<userId>/<uuid>").
+// Both buildObjectKey and keyBelongsToUser derive from this constant so the
+// format can never drift out of sync between "how a key is created" and
+// "how a key's owner is checked" — those used to be two separate hardcoded
+// string literals in two different files.
+const PLAY_PHOTOS_PREFIX = 'play-photos';
+
+// Configurable via env, not a compile-time constant, so the cap can be
+// raised or lowered without a code change or redeploy of application logic —
+// matches this project's "raw process.env, no ConfigService" convention
+// (see auth.guard.ts). Defaults to 10 MiB if unset.
+const MAX_UPLOAD_BYTES = parseInt(
+  process.env.MAX_UPLOAD_BYTES ?? String(10 * 1024 * 1024),
+  10,
+);
+
+// R2's free tier is 10 GiB of storage (per design.md). Configurable so a
+// paid tier or a different bucket's actual limit can be reflected without a
+// code change. This is a soft, approximate guard, not a hard guarantee —
+// see the caveat on hasCapacityFor below.
+const MAX_STORAGE_BYTES = parseInt(
+  process.env.R2_MAX_STORAGE_BYTES ?? String(10 * 1024 * 1024 * 1024),
+  10,
+);
 
 @Injectable()
 export class R2Service {
@@ -34,16 +66,32 @@ export class R2Service {
   private readonly bucket = process.env.R2_BUCKET!;
 
   // Generates a presigned PUT URL scoped to exactly one object key, one
-  // content type, and a short expiry. The caller (UploadsService) decides
-  // WHO is allowed to call this and WHAT key to use — this method only
-  // knows how to sign, not how to authorize.
+  // content type, one exact size, and a short expiry. The caller
+  // (UploadsService) decides WHO is allowed to call this and WHAT key to
+  // use — this method only knows how to validate-and-sign.
+  //
+  // Decision: contentLength is pinned into the signature (via
+  // PutObjectCommand's ContentLength field), not just checked against a
+  // max here. A plain presigned PUT URL has no "reject anything over X"
+  // primitive the way an S3 POST policy's content-length-range condition
+  // does — the only way to actually bound the upload is to sign one exact
+  // byte count and let R2 reject a PUT whose real Content-Length doesn't
+  // match. The client must know its own file size up front (trivial —
+  // File.size in the browser), so this isn't a real usability cost.
   async createPresignedUploadUrl(
     key: string,
     contentType: string,
+    contentLength: number,
   ): Promise<{ url: string; expiresIn: number }> {
     if (!ALLOWED_CONTENT_TYPES.includes(contentType)) {
-      throw new UnsupportedContentTypeError(
+      throw new UnsupportedMediaTypeException(
         `${contentType} is not an allowed image type`,
+      );
+    }
+
+    if (contentLength > MAX_UPLOAD_BYTES) {
+      throw new PayloadTooLargeException(
+        `File size ${contentLength} bytes exceeds the ${MAX_UPLOAD_BYTES} byte limit`,
       );
     }
 
@@ -51,12 +99,17 @@ export class R2Service {
       Bucket: this.bucket,
       Key: key,
       ContentType: contentType,
+      ContentLength: contentLength,
     });
 
     // getSignedUrl never contacts R2 — it computes an HMAC signature locally
     // from the command details, the credentials, and an expiry timestamp,
     // then encodes all of it into the URL's query string. R2 re-derives the
     // same signature on receipt to verify the request wasn't tampered with.
+    // Because ContentLength was part of the command, that signature is only
+    // valid for a PUT whose actual Content-Length header matches exactly —
+    // a client can't declare a small size to pass this check and then send
+    // more bytes.
     const url = await getSignedUrl(this.client, command, {
       expiresIn: PRESIGN_EXPIRY_SECONDS,
     });
@@ -69,7 +122,48 @@ export class R2Service {
   // stops one user from requesting a key that overwrites another user's
   // photo (e.g. by guessing or submitting someone else's path).
   buildObjectKey(userId: string): string {
-    return `play-photos/${userId}/${randomUUID()}`;
+    return `${PLAY_PHOTOS_PREFIX}/${userId}/${randomUUID()}`;
+  }
+
+  // Checks whether a key follows the layout buildObjectKey would have
+  // produced for this specific user. Used by UploadsService.confirm as a
+  // defense-in-depth check against a client submitting a key it wasn't
+  // actually issued (someone else's key, or a fabricated one) — see
+  // notes/3_r2_uploads.md.
+  keyBelongsToUser(key: string, userId: string): boolean {
+    return key.startsWith(`${PLAY_PHOTOS_PREFIX}/${userId}/`);
+  }
+
+  // Confirms the object actually exists in R2 before the caller trusts it
+  // enough to write a database row, and returns its real size. HeadObject
+  // asks R2 for an object's metadata without downloading its body; R2
+  // responds with metadata if the key exists, or throws NotFound if it
+  // doesn't — e.g. because the client called /uploads/confirm without ever
+  // completing the PUT, or the PUT failed partway through. Returning the
+  // size here (rather than trusting the client's presign-time contentLength)
+  // is what lets PlayPhoto.sizeBytes reflect what R2 actually stored.
+  async headObject(key: string): Promise<{ sizeBytes: number } | null> {
+    try {
+      const result = await this.client.send(
+        new HeadObjectCommand({ Bucket: this.bucket, Key: key }),
+      );
+      return { sizeBytes: result.ContentLength ?? 0 };
+    } catch (err) {
+      if (err instanceof NotFound) return null;
+      throw err;
+    }
+  }
+
+  // Approximates whether adding `incomingBytes` more storage would push the
+  // bucket over MAX_STORAGE_BYTES, given the caller's own running total.
+  //
+  // Caveat: this is a soft check, not an atomic reservation. Two presign
+  // requests issued milliseconds apart could both pass this check before
+  // either one's photo is confirmed and counted — for a small private
+  // gaming group with occasional uploads that race is negligible, but this
+  // is not the pattern to copy for a system with real concurrent load.
+  hasCapacityFor(currentTotalBytes: number, incomingBytes: number): boolean {
+    return currentTotalBytes + incomingBytes <= MAX_STORAGE_BYTES;
   }
 
   // Builds the public-facing URL for a confirmed upload, from the public

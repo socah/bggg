@@ -28,8 +28,13 @@ CREATE TABLE IF NOT EXISTS users (
 -- A group is the central organising unit: members, games, and sessions all
 -- belong to a group.
 -- Decision: 'groups' not 'group' — GROUP is a reserved word in SQL.
+-- id: UUID, not SERIAL — this table was originally written with an integer
+--   PK, but group.entity.ts already uses @PrimaryGeneratedColumn('uuid')
+--   (groups are a public-facing resource returned directly to clients, e.g.
+--   GET /groups/:id — see secops.md's "public-facing IDs are UUIDs" rule).
+--   This file had drifted out of sync with the entity; fixed to match.
 CREATE TABLE IF NOT EXISTS groups (
-  id          SERIAL       PRIMARY KEY,
+  id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
   name        TEXT         NOT NULL,
   created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
@@ -42,7 +47,7 @@ CREATE TABLE IF NOT EXISTS groups (
 CREATE TABLE IF NOT EXISTS group_members (
   id          SERIAL       PRIMARY KEY,
   user_id     INT          NOT NULL REFERENCES users(id)  ON DELETE CASCADE,
-  group_id    INT          NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  group_id    UUID         NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
   role        TEXT         NOT NULL DEFAULT 'member'
                            CHECK (role IN ('owner', 'admin', 'member')),
   joined_at   DATE         NOT NULL DEFAULT CURRENT_DATE,
@@ -113,7 +118,7 @@ CREATE TABLE IF NOT EXISTS reviews (
 --   FK constraint added later via ALTER TABLE once play_session_proposals exists.
 CREATE TABLE IF NOT EXISTS play_sessions (
   id           SERIAL       PRIMARY KEY,
-  group_id     INT          NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  group_id     UUID         NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
   played_at    TIMESTAMPTZ  NOT NULL,
   notes        TEXT,                   -- session-level notes (e.g. "hosted at Alice's")
   proposal_id  INT,                    -- FK to play_session_proposals, added later
@@ -178,12 +183,20 @@ CREATE TABLE IF NOT EXISTS play_session_players (
 --   until topic 3_scheduling. Added via ALTER TABLE once that lands, same
 --   deferred-FK pattern already used for play_sessions.proposal_id above.
 -- key: UNIQUE — the R2 object key, one row per uploaded object.
+-- uploaded_by: the Keycloak JWT `sub` claim, not an int FK to users(id) —
+--   same "plain column holding the JWT subject, no relation" pattern as
+--   Group.ownerId and Message.senderId elsewhere in this schema.
+-- size_bytes: read from R2's HeadObject response at confirm time, not from
+--   client input — this is what the storage-quota check in
+--   UploadsService.presign sums across all rows before issuing a new
+--   presigned URL, to stay under the R2 free tier allowance.
 CREATE TABLE IF NOT EXISTS play_photos (
   id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
   session_id  INT          NOT NULL, -- FK to play_sessions, added later
-  uploaded_by INT          NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  uploaded_by TEXT         NOT NULL,
   key         TEXT         NOT NULL UNIQUE,
   url         TEXT         NOT NULL,
+  size_bytes  INT          NOT NULL,
   created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
@@ -193,7 +206,7 @@ CREATE TABLE IF NOT EXISTS play_photos (
 -- used_at / used_by: NULL until the invite is redeemed. Single-use.
 CREATE TABLE IF NOT EXISTS invites (
   id          SERIAL       PRIMARY KEY,
-  group_id    INT          NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  group_id    UUID         NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
   created_by  INT          NOT NULL REFERENCES users(id)  ON DELETE CASCADE,
   token       TEXT         NOT NULL UNIQUE,
   expires_at  TIMESTAMPTZ  NOT NULL,
