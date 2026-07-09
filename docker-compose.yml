@@ -10,5 +10,28 @@ services:
     # config (admin bootstrap, ports, realm import) in docker-compose.dev.yml.
     image: quay.io/keycloak/keycloak:26.0
 
+  vault:
+    # Same split as 'db' and 'keycloak' again: tag here, dev-mode config
+    # (root token, listener address, port) in docker-compose.dev.yml.
+    image: hashicorp/vault:1.18
+
+  vault-bootstrap:
+    # One-shot container: writes the DB password into Vault's KV store,
+    # then exits. Same image as 'vault' — it's just the Vault CLI, no
+    # separate bootstrap image needed.
+    image: hashicorp/vault:1.18
+
+  vault-agent:
+    # Authenticates to Vault and renders secrets to files other services
+    # read — see infra/vault/agent.hcl for what it fetches.
+    image: hashicorp/vault:1.18
+
 volumes:
   db_data:
+  # Holds vault-agent's own auth token. Only vault-agent mounts this —
+  # not 'db' or any other service — so nothing besides Agent itself can
+  # read the credential it uses to talk to Vault.
+  vault_token:
+  # Holds secrets Agent has rendered to plain files (e.g. db_password).
+  # Shared with whichever service needs to read that specific file.
+  vault_secrets:

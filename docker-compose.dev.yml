@@ -1,20 +1,34 @@
 services:
 
   db:
-    # Credentials read from .env via ${VAR} substitution.
-    # Compose automatically loads .env from the same directory as this file.
+    # POSTGRES_PASSWORD replaced with the '_FILE' variant: the official
+    # postgres image's entrypoint checks for '<VAR>_FILE' first and, if
+    # set, reads the password from that path instead of the plain env var
+    # — this is Docker's general convention for file-based secrets, not
+    # something specific to Vault. POSTGRES_USER/POSTGRES_DB stay as plain
+    # vars: usernames and database names aren't secrets worth protecting
+    # the same way.
     environment:
       POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
       POSTGRES_DB: ${DB_NAME}
     # Named volume: Docker manages this directory.
     # Data survives 'docker compose down' — only 'docker compose down -v' removes it.
+    # vault_secrets is mounted read-only: 'db' only ever needs to read the
+    # password file vault-agent rendered, never write to that volume.
     volumes:
       - db_data:/var/lib/postgresql/data
+      - vault_secrets:/run/secrets:ro
     # Exposes port to the host so GUI tools (TablePlus, pgAdmin) can connect.
     # Other services reach 'db' by service name — they do not need this port mapping.
     ports:
       - "5432:5432"
+    # Without this, 'db' could start before vault-agent has rendered
+    # db_password, and Postgres would fail its first-boot init with
+    # "no such file or directory" on POSTGRES_PASSWORD_FILE.
+    depends_on:
+      vault-agent:
+        condition: service_healthy
 
   keycloak:
     # 'start-dev' enables an in-memory-friendly dev mode (HTTP allowed, no
@@ -39,3 +53,61 @@ services:
     # Next.js and NestJS both reach it at http://localhost:8080 in dev.
     ports:
       - "8080:8080"
+
+  vault:
+    # IPC_LOCK lets Vault mlock() its memory pages so secrets can't be
+    # swapped to disk — Vault refuses to start without it (or without
+    # 'disable_mlock', which would defeat the point).
+    cap_add:
+      - IPC_LOCK
+    environment:
+      # Dev mode's server auto-generates a root token unless one is given;
+      # pinning it via .env means vault-bootstrap and vault-agent can both
+      # reference the same known value instead of scraping container logs.
+      VAULT_DEV_ROOT_TOKEN_ID: ${VAULT_DEV_ROOT_TOKEN}
+      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+    # Lets you open http://localhost:8200 and use the Vault UI/CLI from the
+    # host to poke around — not required for the app itself to work.
+    ports:
+      - "8200:8200"
+
+  vault-bootstrap:
+    # Runs once, writes the DB password into Vault, then exits — Compose
+    # doesn't restart it, so 'docker compose up' is idempotent even though
+    # this container's job is a one-time write.
+    depends_on:
+      - vault
+    environment:
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: ${VAULT_DEV_ROOT_TOKEN}
+      DB_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - ./infra/vault/bootstrap.sh:/bootstrap.sh:ro
+    entrypoint: ["sh", "/bootstrap.sh"]
+
+  vault-agent:
+    # Waits for the secret to actually exist before starting — otherwise
+    # Agent's first template render would fail against a path Vault
+    # doesn't have yet.
+    depends_on:
+      vault-bootstrap:
+        condition: service_completed_successfully
+    environment:
+      # Consumed by agent-entrypoint.sh, not by Vault Agent itself — Agent
+      # only ever reads the token file that script writes.
+      VAULT_TOKEN: ${VAULT_DEV_ROOT_TOKEN}
+    volumes:
+      - ./infra/vault/agent.hcl:/vault/config/agent.hcl:ro
+      - ./infra/vault/agent-entrypoint.sh:/agent-entrypoint.sh:ro
+      - vault_token:/vault/token
+      - vault_secrets:/vault/secrets
+    entrypoint: ["sh", "/agent-entrypoint.sh"]
+    # 'depends_on: service_started' (the default) only means the container
+    # process launched — not that the template has rendered yet. 'db'
+    # needs to wait for the actual file, so this healthcheck's only job is
+    # to give 'db's depends_on something real to block on.
+    healthcheck:
+      test: ["CMD", "test", "-f", "/vault/secrets/db_password"]
+      interval: 2s
+      timeout: 2s
+      retries: 30

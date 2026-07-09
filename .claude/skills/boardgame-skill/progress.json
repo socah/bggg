@@ -20,7 +20,8 @@
     "3_keycloak",
     "3_pwa",
     "3_websockets",
-    "3_r2_uploads"
+    "3_r2_uploads",
+    "3_vault"
   ],
   "in_progress": [],
   "notes_generated": [
@@ -42,8 +43,9 @@
     "notes/3_keycloak.md",
     "notes/3_pwa.md",
     "notes/3_websockets.md",
-    "notes/3_r2_uploads.md"
+    "notes/3_r2_uploads.md",
+    "notes/3_vault.md"
   ],
-  "last_session": "2026-07-08",
+  "last_session": "2026-07-09",
   "detours": []
 }
