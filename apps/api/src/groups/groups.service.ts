@@ -1,7 +1,8 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { Group } from './group.entity';
+import { GroupMember } from './group-member.entity';
 import { CreateGroupDto } from './dto/create-group.dto';
 import { UpdateGroupDto } from './dto/update-group.dto';
 import { AuditService } from '../audit/audit.service';
@@ -11,18 +12,25 @@ export class GroupsService {
   constructor(
     @InjectRepository(Group)
     private readonly groupRepository: Repository<Group>,
+    @InjectRepository(GroupMember)
+    private readonly members: Repository<GroupMember>,
     // AuditService is injectable here because GroupsModule imports AuditModule,
     // which exports AuditService. No circular dependency — AuditModule never
     // imports GroupsModule.
     private readonly auditService: AuditService,
   ) {}
 
-  findAll(requestingUserId: string): Promise<Group[]> {
-    // Scoped to groups owned by the requester — not the entire table.
-    // A user with a valid JWT should only see their own groups.
-    // When group membership (member/admin roles) is added in Phase 3,
-    // this query will expand to include groups where the user is a member.
-    return this.groupRepository.findBy({ ownerId: requestingUserId });
+  // Scoped to groups this user is a MEMBER of (owner, admin, or member role
+  // in group_members) — not groups.ownerId. Now that invites can add people
+  // to a group (see notes/3_invite_system.md), ownerId alone would hide
+  // every group an invited member joined but didn't create.
+  async findAll(requestingUserId: string): Promise<Group[]> {
+    const memberships = await this.members.findBy({ userId: requestingUserId });
+    if (memberships.length === 0) return [];
+
+    return this.groupRepository.findBy({
+      id: In(memberships.map((m) => m.groupId)),
+    });
   }
 
   async findOne(id: string, requestingUserId: string): Promise<Group> {
@@ -30,11 +38,17 @@ export class GroupsService {
     const group = await this.groupRepository.findOneBy({ id });
     if (!group) throw new NotFoundException(`Group ${id} not found`);
 
-    // Step 2: ownership check — determines whether this user may see it.
-    // ForbiddenException → HTTP 403 (authenticated but not authorised).
-    // Separated from the 404 so AuditService (next topic) can distinguish
-    // a genuine missing resource from an unauthorised access attempt.
-    if (group.ownerId !== requestingUserId) {
+    // Step 2: membership check — determines whether this user may see it.
+    // Any role (owner, admin, member) grants read access; mutating actions
+    // below additionally require assertCanManage. ForbiddenException → HTTP
+    // 403 (authenticated but not authorised), separated from the 404 so
+    // AuditService can distinguish a genuine missing resource from an
+    // unauthorised access attempt.
+    const membership = await this.members.findOneBy({
+      groupId: id,
+      userId: requestingUserId,
+    });
+    if (!membership) {
       throw new ForbiddenException('You do not have access to this group');
     }
 
@@ -44,6 +58,18 @@ export class GroupsService {
   async create(dto: CreateGroupDto, requestingUserId: string): Promise<Group> {
     const group = this.groupRepository.create({ ...dto, ownerId: requestingUserId });
     const saved = await this.groupRepository.save(group);
+
+    // Group.ownerId records who created the group (a fixed, immutable fact);
+    // this group_members row is what actually grants access going forward —
+    // findAll/findOne check membership, not ownerId. Without this row, the
+    // creator couldn't see the group they just made.
+    await this.members.save(
+      this.members.create({
+        userId: requestingUserId,
+        groupId: saved.id,
+        role: 'owner',
+      }),
+    );
 
     // Audit after save — we need the generated ID for targetId.
     await this.auditService.log({
@@ -58,15 +84,20 @@ export class GroupsService {
   }
 
   async update(id: string, dto: UpdateGroupDto, requestingUserId: string): Promise<Group> {
-    // findOne already enforces the 404 + ownership check — if it returns,
-    // we know the group exists and belongs to the requester.
+    // findOne enforces the 404 + "is any kind of member" check; renaming or
+    // deleting a group is a step above plain viewing, so it needs its own,
+    // stricter check on top.
     const group = await this.findOne(id, requestingUserId);
+    await this.assertCanManage(id, requestingUserId);
+
     Object.assign(group, dto);
     return this.groupRepository.save(group);
   }
 
   async remove(id: string, requestingUserId: string): Promise<void> {
     const group = await this.findOne(id, requestingUserId);
+    await this.assertCanManage(id, requestingUserId);
+
     await this.groupRepository.remove(group);
 
     await this.auditService.log({
@@ -76,5 +107,21 @@ export class GroupsService {
       targetId: id,
       metadata: { name: group.name },
     });
+  }
+
+  // Same 'member role can look but not touch' rule InvitesService.
+  // assertCanInvite enforces for creating invites — duplicated here rather
+  // than shared, since GroupsModule and InvitesModule each independently
+  // own their access to GroupMember and neither imports the other (avoiding
+  // a circular module dependency for a two-line check).
+  private async assertCanManage(groupId: string, requestingUserId: string): Promise<void> {
+    const membership = await this.members.findOneBy({
+      groupId,
+      userId: requestingUserId,
+    });
+
+    if (!membership || membership.role === 'member') {
+      throw new ForbiddenException('Only group owners and admins can modify this group');
+    }
   }
 }

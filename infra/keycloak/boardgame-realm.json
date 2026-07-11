@@ -3,7 +3,7 @@
   "enabled": true,
 
   "sslRequired": "external",
-  "registrationAllowed": true,
+  "registrationAllowed": false,
 
   "clients": [
     {
@@ -22,6 +22,21 @@
 
       "attributes": {
         "pkce.code.challenge.method": "S256"
+      }
+    },
+    {
+      "clientId": "api-service",
+      "name": "Board Game Platform — API (service account)",
+      "protocol": "openid-connect",
+
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": true,
+
+      "serviceAccountClientRoles": {
+        "realm-management": ["manage-users"]
       }
     }
   ],

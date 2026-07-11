@@ -1,8 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, ForbiddenException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { In } from 'typeorm';
 import { GroupsService } from './groups.service';
 import { Group } from './group.entity';
+import { GroupMember } from './group-member.entity';
 import { AuditService } from '../audit/audit.service';
 
 // A fixed owner id reused across fixtures — every Group row needs one now
@@ -22,6 +24,15 @@ describe('GroupsService', () => {
     create: jest.fn(),
     save: jest.fn(),
     remove: jest.fn(),
+  };
+
+  // Mock for Repository<GroupMember> — every access check now goes through
+  // this, not Group.ownerId directly. See groups.service.ts.
+  const mockMembersRepository = {
+    findBy: jest.fn(),
+    findOneBy: jest.fn(),
+    create: jest.fn(),
+    save: jest.fn(),
   };
 
   // AuditService is a real dependency of GroupsService (2_audit_logging) —
@@ -45,6 +56,10 @@ describe('GroupsService', () => {
           useValue: mockRepository,
         },
         {
+          provide: getRepositoryToken(GroupMember),
+          useValue: mockMembersRepository,
+        },
+        {
           provide: AuditService,
           useValue: mockAuditService,
         },
@@ -61,34 +76,60 @@ describe('GroupsService', () => {
   // ── findAll ──────────────────────────────────────────────────────────────
 
   describe('findAll', () => {
-    it('should return groups owned by the requesting user', async () => {
+    it('should return groups the requesting user is a member of', async () => {
+      const memberships: GroupMember[] = [
+        { id: 1, userId: OWNER_ID, groupId: 'group-1', role: 'owner', joinedAt: new Date() },
+        { id: 2, userId: OWNER_ID, groupId: 'group-2', role: 'member', joinedAt: new Date() },
+      ];
       const groups: Group[] = [
         { id: 'group-1', name: 'Chess Club', ownerId: OWNER_ID, createdAt: new Date() },
-        { id: 'group-2', name: 'Catan Night', ownerId: OWNER_ID, createdAt: new Date() },
+        { id: 'group-2', name: 'Catan Night', ownerId: 'someone-else', createdAt: new Date() },
       ];
-      // Configure the mock to resolve with our fixture data for this test only.
+      mockMembersRepository.findBy.mockResolvedValue(memberships);
       mockRepository.findBy.mockResolvedValue(groups);
 
       const result = await service.findAll(OWNER_ID);
 
+      // findAll now looks up membership rows first, not Group.ownerId — a
+      // member who didn't create the group still needs to see it.
+      expect(mockMembersRepository.findBy).toHaveBeenCalledWith({ userId: OWNER_ID });
+      expect(mockRepository.findBy).toHaveBeenCalledWith({
+        id: In(['group-1', 'group-2']),
+      });
       expect(result).toEqual(groups);
-      // findAll scopes the query to the requester — verify that WHERE clause,
-      // not just that some query ran.
-      expect(mockRepository.findBy).toHaveBeenCalledWith({ ownerId: OWNER_ID });
+    });
+
+    it('should return an empty array without querying groups when the user has no memberships', async () => {
+      mockMembersRepository.findBy.mockResolvedValue([]);
+
+      const result = await service.findAll(OWNER_ID);
+
+      expect(result).toEqual([]);
+      // No memberships means no possible groups — querying the groups table
+      // at all would be wasted work.
+      expect(mockRepository.findBy).not.toHaveBeenCalled();
     });
   });
 
   // ── findOne ──────────────────────────────────────────────────────────────
 
   describe('findOne', () => {
-    it('should return the group when it exists and the requester owns it', async () => {
+    it('should return the group when it exists and the requester is a member', async () => {
       const group: Group = { id: 'group-1', name: 'Chess Club', ownerId: OWNER_ID, createdAt: new Date() };
       mockRepository.findOneBy.mockResolvedValue(group);
+      // 'member' (not 'owner') on purpose — findOne grants read access to
+      // ANY role; the stricter owner/admin check only applies to update/remove.
+      mockMembersRepository.findOneBy.mockResolvedValue({
+        id: 1, userId: 'someone-else', groupId: 'group-1', role: 'member', joinedAt: new Date(),
+      });
 
-      const result = await service.findOne('group-1', OWNER_ID);
+      const result = await service.findOne('group-1', 'someone-else');
 
-      // Verify the service passed the right WHERE clause to the repository.
       expect(mockRepository.findOneBy).toHaveBeenCalledWith({ id: 'group-1' });
+      expect(mockMembersRepository.findOneBy).toHaveBeenCalledWith({
+        groupId: 'group-1',
+        userId: 'someone-else',
+      });
       expect(result).toEqual(group);
     });
 
@@ -102,9 +143,10 @@ describe('GroupsService', () => {
       await expect(service.findOne('missing-id', OWNER_ID)).rejects.toThrow(NotFoundException);
     });
 
-    it('should throw ForbiddenException when the requester does not own the group', async () => {
+    it('should throw ForbiddenException when the requester has no membership row', async () => {
       const group: Group = { id: 'group-1', name: 'Chess Club', ownerId: OWNER_ID, createdAt: new Date() };
       mockRepository.findOneBy.mockResolvedValue(group);
+      mockMembersRepository.findOneBy.mockResolvedValue(null);
 
       await expect(service.findOne('group-1', 'someone-else')).rejects.toThrow(ForbiddenException);
     });
@@ -113,20 +155,33 @@ describe('GroupsService', () => {
   // ── create ───────────────────────────────────────────────────────────────
 
   describe('create', () => {
-    it('should persist and return the new group, owned by the requester', async () => {
+    it('should persist the group, insert an owner membership row, and audit log', async () => {
       const dto = { name: 'Go Club' };
       // create() builds an in-memory entity; save() persists it.
       // We mock both so the test doesn't need a database.
       const built: Group = { id: 'group-3', name: 'Go Club', ownerId: OWNER_ID, createdAt: new Date() };
       const saved: Group = { id: 'group-3', name: 'Go Club', ownerId: OWNER_ID, createdAt: new Date() };
+      const builtMembership: GroupMember = {
+        id: 10, userId: OWNER_ID, groupId: 'group-3', role: 'owner', joinedAt: new Date(),
+      };
       mockRepository.create.mockReturnValue(built);   // create() is sync
       mockRepository.save.mockResolvedValue(saved);   // save() is async
+      mockMembersRepository.create.mockReturnValue(builtMembership);
+      mockMembersRepository.save.mockResolvedValue(builtMembership);
 
       const result = await service.create(dto, OWNER_ID);
 
       // ownerId is set from the requester, not the DTO — verify it's merged in.
       expect(mockRepository.create).toHaveBeenCalledWith({ ...dto, ownerId: OWNER_ID });
       expect(mockRepository.save).toHaveBeenCalledWith(built);
+      // Without this row, the creator couldn't see their own group afterwards
+      // — findAll/findOne check group_members, not Group.ownerId.
+      expect(mockMembersRepository.create).toHaveBeenCalledWith({
+        userId: OWNER_ID,
+        groupId: saved.id,
+        role: 'owner',
+      });
+      expect(mockMembersRepository.save).toHaveBeenCalledWith(builtMembership);
       expect(result).toEqual(saved);
       // create() writes an audit event after saving — see groups.service.ts.
       expect(mockAuditService.log).toHaveBeenCalledWith(
@@ -135,13 +190,48 @@ describe('GroupsService', () => {
     });
   });
 
+  // ── update ───────────────────────────────────────────────────────────────
+
+  describe('update', () => {
+    it('should update the group when the requester is an owner or admin', async () => {
+      const group: Group = { id: 'group-1', name: 'Chess Club', ownerId: OWNER_ID, createdAt: new Date() };
+      mockRepository.findOneBy.mockResolvedValue(group);
+      mockMembersRepository.findOneBy.mockResolvedValue({
+        id: 1, userId: OWNER_ID, groupId: 'group-1', role: 'admin', joinedAt: new Date(),
+      });
+      mockRepository.save.mockResolvedValue({ ...group, name: 'Chess Club Renamed' });
+
+      const result = await service.update('group-1', { name: 'Chess Club Renamed' }, OWNER_ID);
+
+      expect(result.name).toBe('Chess Club Renamed');
+    });
+
+    it('should throw ForbiddenException when the requester is only a member', async () => {
+      const group: Group = { id: 'group-1', name: 'Chess Club', ownerId: OWNER_ID, createdAt: new Date() };
+      mockRepository.findOneBy.mockResolvedValue(group);
+      // findOne's own membership check passes (any role can view)...
+      mockMembersRepository.findOneBy.mockResolvedValue({
+        id: 2, userId: 'a-member', groupId: 'group-1', role: 'member', joinedAt: new Date(),
+      });
+
+      // ...but assertCanManage's stricter check should still reject it.
+      await expect(
+        service.update('group-1', { name: 'New Name' }, 'a-member'),
+      ).rejects.toThrow(ForbiddenException);
+      expect(mockRepository.save).not.toHaveBeenCalled();
+    });
+  });
+
   // ── remove ───────────────────────────────────────────────────────────────
 
   describe('remove', () => {
-    it('should delete the group when it exists and is owned by the requester', async () => {
+    it('should delete the group when it exists and the requester is an owner or admin', async () => {
       const group: Group = { id: 'group-1', name: 'Chess Club', ownerId: OWNER_ID, createdAt: new Date() };
       // remove() calls findOne() internally, so we mock findOneBy here too.
       mockRepository.findOneBy.mockResolvedValue(group);
+      mockMembersRepository.findOneBy.mockResolvedValue({
+        id: 1, userId: OWNER_ID, groupId: 'group-1', role: 'owner', joinedAt: new Date(),
+      });
       mockRepository.remove.mockResolvedValue(undefined);
 
       await service.remove('group-1', OWNER_ID);
@@ -153,6 +243,17 @@ describe('GroupsService', () => {
       mockRepository.findOneBy.mockResolvedValue(null);
 
       await expect(service.remove('missing-id', OWNER_ID)).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw ForbiddenException when the requester is only a member', async () => {
+      const group: Group = { id: 'group-1', name: 'Chess Club', ownerId: OWNER_ID, createdAt: new Date() };
+      mockRepository.findOneBy.mockResolvedValue(group);
+      mockMembersRepository.findOneBy.mockResolvedValue({
+        id: 2, userId: 'a-member', groupId: 'group-1', role: 'member', joinedAt: new Date(),
+      });
+
+      await expect(service.remove('group-1', 'a-member')).rejects.toThrow(ForbiddenException);
+      expect(mockRepository.remove).not.toHaveBeenCalled();
     });
   });
 });

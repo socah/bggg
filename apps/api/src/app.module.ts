@@ -5,6 +5,7 @@ import { GamesModule } from './games/games.module';
 import { AuditModule } from './audit/audit.module';
 import { ChatModule } from './chat/chat.module';
 import { UploadsModule } from './uploads/uploads.module';
+import { InvitesModule } from './invites/invites.module';
 
 // AppModule is the root of the dependency graph. NestFactory starts here.
 // Every feature module must be listed in `imports` for its routes and
@@ -43,6 +44,7 @@ import { UploadsModule } from './uploads/uploads.module';
     GamesModule,
     ChatModule,
     UploadsModule,
+    InvitesModule,
   ],
 })
 export class AppModule {}

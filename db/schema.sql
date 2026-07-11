@@ -33,20 +33,33 @@ CREATE TABLE IF NOT EXISTS users (
 --   (groups are a public-facing resource returned directly to clients, e.g.
 --   GET /groups/:id — see secops.md's "public-facing IDs are UUIDs" rule).
 --   This file had drifted out of sync with the entity; fixed to match.
+-- owner_id: this file previously omitted it entirely, even though
+--   group.entity.ts has always had it — another drift, fixed here. Raw
+--   Keycloak sub (TEXT), not an int FK to users(id); see group_members below
+--   for why this table never actually adopted the users(id) FK pattern.
 CREATE TABLE IF NOT EXISTS groups (
   id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
   name        TEXT         NOT NULL,
+  owner_id    TEXT         NOT NULL,
   created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
 -- ── GROUP MEMBERS ─────────────────────────────────────────────────────────
 -- Join table: one user can belong to many groups; one group has many users.
+-- Added for real in Phase 3 — invite_system topic (see notes/3_invite_system.md).
 -- role: a user can be 'owner', 'admin', or 'member' within a group.
 --   CHECK constraint: the database rejects any other value.
 --   This is simpler than a separate roles table for a small, fixed set.
+-- user_id: TEXT, not an int FK to users(id) as originally sketched here —
+--   this schema's own 'users' table was never actually built as a TypeORM
+--   entity. Group.ownerId, AuditLog.actorId, Message.senderId, and
+--   PlayPhoto.uploadedBy all independently settled on "raw Keycloak sub as
+--   text, no relation" instead; group_members.user_id follows the same
+--   established pattern rather than being the first table to introduce a
+--   users(id) FK that nothing else in the running application uses.
 CREATE TABLE IF NOT EXISTS group_members (
   id          SERIAL       PRIMARY KEY,
-  user_id     INT          NOT NULL REFERENCES users(id)  ON DELETE CASCADE,
+  user_id     TEXT         NOT NULL,
   group_id    UUID         NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
   role        TEXT         NOT NULL DEFAULT 'member'
                            CHECK (role IN ('owner', 'admin', 'member')),
@@ -201,17 +214,33 @@ CREATE TABLE IF NOT EXISTS play_photos (
 );
 
 -- ── INVITES ───────────────────────────────────────────────────────────────
--- Signed invite tokens for joining a group (Phase 3 — invite_system topic).
--- token: a random URL-safe string; UNIQUE so it can be looked up directly.
--- used_at / used_by: NULL until the invite is redeemed. Single-use.
+-- Single-use invite tokens for joining a group (Phase 3 — invite_system
+-- topic; see notes/3_invite_system.md for the full design discussion).
+-- token_hash IS the primary key, not a separate SERIAL id — the raw token
+--   is 256 bits of random entropy hashed with SHA-256 before it ever reaches
+--   this table (Decision 1: opaque hashed token, not a self-contained signed
+--   JWT — single-use/revocation needs a DB row either way, so the token
+--   itself only needs to be unguessable, not self-describing). The plaintext
+--   token is shown to the inviter exactly once and never stored anywhere.
+-- role: deliberately excludes 'owner' — an invite can only grant 'admin' or
+--   'member'; ownership is set once, at group creation, not handed out via
+--   a shareable link. See InviteRole in invite.entity.ts.
+-- created_by / used_by: TEXT (raw Keycloak sub), same reasoning as
+--   group_members.user_id above — no users(id) FK, since nothing in this
+--   application actually populates a users table.
+-- used_at / used_by: NULL until redeemed. Both set atomically in the same
+--   UPDATE, guarded by `WHERE used_at IS NULL`, so two concurrent redemption
+--   attempts for the same invite can't both succeed — see the "atomic
+--   conditional UPDATE" discussion in notes/3_invite_system.md.
 CREATE TABLE IF NOT EXISTS invites (
-  id          SERIAL       PRIMARY KEY,
+  token_hash  TEXT         PRIMARY KEY,
   group_id    UUID         NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
-  created_by  INT          NOT NULL REFERENCES users(id)  ON DELETE CASCADE,
-  token       TEXT         NOT NULL UNIQUE,
+  role        TEXT         NOT NULL CHECK (role IN ('admin', 'member')),
+  created_by  TEXT         NOT NULL,
   expires_at  TIMESTAMPTZ  NOT NULL,
   used_at     TIMESTAMPTZ,           -- NULL = not yet used
-  used_by     INT          REFERENCES users(id) ON DELETE SET NULL
+  used_by     TEXT,                  -- NULL until redeemed
+  created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
 -- ── AUDIT LOG ─────────────────────────────────────────────────────────────

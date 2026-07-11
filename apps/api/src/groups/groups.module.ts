@@ -1,15 +1,18 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Group } from './group.entity';
+import { GroupMember } from './group-member.entity';
 import { GroupsController } from './groups.controller';
 import { GroupsService } from './groups.service';
 import { AuditModule } from '../audit/audit.module';
 
 @Module({
-  // TypeOrmModule.forFeature([Group]) registers Repository<Group> for injection
-  // within this module. Without this, @InjectRepository(Group) in GroupsService
-  // would throw at startup.
-  imports: [TypeOrmModule.forFeature([Group]), AuditModule],
+  // TypeOrmModule.forFeature([Group, GroupMember]) registers Repository<Group>
+  // and Repository<GroupMember> for injection within this module. Without
+  // this, @InjectRepository(...) for either in GroupsService would throw at
+  // startup. GroupMember is also registered in InvitesModule — see the
+  // comment there for why that's fine, not a conflict.
+  imports: [TypeOrmModule.forFeature([Group, GroupMember]), AuditModule],
 
   // controllers: NestJS instantiates these and registers their routes.
   controllers: [GroupsController],
