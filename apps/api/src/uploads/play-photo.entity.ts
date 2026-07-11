@@ -9,15 +9,14 @@ export class PlayPhoto {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  // Deliberately a plain int column, NOT a TypeORM relation. play_sessions
-  // exists in db/schema.sql as a reference table (id SERIAL) but has no
-  // TypeORM entity yet — that lands with topic 3_scheduling. Until then
-  // there is no @ManyToOne(() => PlaySession) to point at, so this column
-  // carries the id without a FK constraint or ORM-level relation. The FK
-  // constraint gets added via ALTER TABLE once PlaySession exists, the same
-  // pattern already used for play_sessions.proposal_id in db/schema.sql.
+  // Deliberately a plain uuid column, NOT a TypeORM relation — same
+  // bare-column choice as every other cross-table reference in this
+  // codebase (Group.ownerId, GroupMember.groupId, ...). PlaySession now
+  // exists (topic 3_scheduling) with a uuid PK, so this column's type
+  // follows it — see db/schema.sql's comment on play_sessions.id for why
+  // it's uuid rather than the originally-sketched SERIAL.
   @Column({ name: 'session_id' })
-  sessionId!: number;
+  sessionId!: string;
 
   // Stores the JWT `sub` claim of the user who uploaded this photo — same
   // ownership-anchor pattern as Group.ownerId.

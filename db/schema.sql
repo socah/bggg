@@ -122,19 +122,135 @@ CREATE TABLE IF NOT EXISTS reviews (
   UNIQUE (user_id, game_id)
 );
 
+-- ── PLAY SESSION PROPOSALS ────────────────────────────────────────────────
+-- Future scheduling — the "let's play sometime" step before a play_sessions
+-- row exists (Phase 3 — scheduling topic; see notes/3_scheduling.md for the
+-- full design discussion).
+-- id: UUID — public-facing (returned to and referenced by the client, e.g.
+--   GET /proposals/:id), same convention as groups.id and invites.
+-- host_id: nullable Keycloak sub of the RSVP holder hosting the session
+--   (e.g. "at my place"). Not a FK to group_members — same "plain column,
+--   no relation" pattern as everywhere else in this file. When set, the
+--   overlap-window computation in SchedulingService anchors to the host's
+--   own availability window rather than any pair of members (Decision D in
+--   notes/3_scheduling.md).
+-- status: the confirmation state machine (Decision B).
+--   'collecting'  — RSVPs are being gathered, nothing computed yet.
+--   'confirming'  — creator requested confirmation; confirmed_start/end
+--                   below are now populated, and RSVP holders can lock in.
+--   'confirmed'   — creator finalized; a play_sessions row now exists with
+--                   this row's id as its proposal_id.
+--   'cancelled'   — proposal abandoned; no play_sessions row will follow.
+-- confirmed_start / confirmed_end: the trimmed overlap window (Decision D),
+--   computed once at the 'collecting' -> 'confirming' transition and stored
+--   rather than recomputed on every read, so it can't silently shift while
+--   people are still deciding whether to lock in. NULL until 'confirming'.
+CREATE TABLE IF NOT EXISTS play_session_proposals (
+  id               UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  group_id         UUID         NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  created_by       TEXT         NOT NULL,
+  proposed_date    DATE         NOT NULL, -- the calendar day this proposal is about; RSVP windows default their time-of-day against this
+  host_id          TEXT,
+  status           TEXT         NOT NULL DEFAULT 'collecting'
+                               CHECK (status IN ('collecting', 'confirming', 'confirmed', 'cancelled')),
+  confirmed_start  TIMESTAMPTZ,
+  confirmed_end    TIMESTAMPTZ,
+  created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+-- ── PLAY SESSION PROPOSAL RSVPS ───────────────────────────────────────────
+-- One row per (proposal, user) — a member's answer to a specific proposal.
+-- UNIQUE (proposal_id, user_id): the same "one answer per person, ever"
+-- constraint group_members already enforces for group membership — a
+-- second RSVP from the same user updates this row, never inserts a new one.
+-- available_start / available_end: nullable — NULL when status = 'no'
+--   (someone who can't make it has no window to contribute). These are the
+--   per-user inputs the overlap-window computation (Decision D) consumes.
+-- confirmed: the per-user lock-in flag from the 'confirming' stage. Reset to
+--   false for every row when a proposal is un-confirmed (Decision B, step 5).
+CREATE TABLE IF NOT EXISTS play_session_proposal_rsvps (
+  id               SERIAL       PRIMARY KEY,
+  proposal_id      UUID         NOT NULL REFERENCES play_session_proposals(id) ON DELETE CASCADE,
+  user_id          TEXT         NOT NULL,
+  status           TEXT         NOT NULL CHECK (status IN ('yes', 'maybe', 'no')),
+  available_start  TIMESTAMPTZ,
+  available_end    TIMESTAMPTZ,
+  confirmed        BOOLEAN      NOT NULL DEFAULT false,
+  created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  updated_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+
+  UNIQUE (proposal_id, user_id)
+);
+
+-- ── PLAY SESSION PROPOSAL GAMES ───────────────────────────────────────────
+-- Games suggested for a specific proposal — a lightweight poll, separate
+-- from game_ownership (which tracks a user's personal BGG-synced library).
+-- UNIQUE (proposal_id, game_id): a game can only be proposed once per
+-- proposal; further interest in it is expressed as a vote (below), not a
+-- second proposal row.
+CREATE TABLE IF NOT EXISTS play_session_proposal_games (
+  id           UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  proposal_id  UUID         NOT NULL REFERENCES play_session_proposals(id) ON DELETE CASCADE,
+  game_id      INT          NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  proposed_by  TEXT         NOT NULL,
+  created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+
+  UNIQUE (proposal_id, game_id)
+);
+
+-- ── PLAY SESSION PROPOSAL GAME VOTES ──────────────────────────────────────
+-- One row per (proposed game, user) upvote. Deliberately a separate table
+-- rather than an upvote_count column on play_session_proposal_games
+-- (Decision E) — the PRIMARY KEY is what prevents the same user upvoting
+-- the same game twice; the count itself is derived with COUNT(*), never
+-- stored, so there is nothing to keep in sync.
+CREATE TABLE IF NOT EXISTS play_session_proposal_game_votes (
+  proposal_game_id  UUID  NOT NULL REFERENCES play_session_proposal_games(id) ON DELETE CASCADE,
+  user_id           TEXT  NOT NULL,
+
+  PRIMARY KEY (proposal_game_id, user_id)
+);
+
+-- ── CALENDAR FEED TOKENS ──────────────────────────────────────────────────
+-- One opaque, long-lived token per user, backing the personal iCal
+-- subscription feed (Phase 3 — scheduling topic; Decision C in
+-- notes/3_scheduling.md). Same hash-at-rest shape as invites — the raw
+-- token is shown once and never stored — but NOT single-use: a calendar
+-- app re-supplies the same token on every refresh, so there is no used_at.
+-- user_id UNIQUE: at most one active feed token per user. Regenerating
+-- replaces the row (old token_hash stops matching anything), which is the
+-- only revocation path — there's no per-token expiry to fall back on.
+CREATE TABLE IF NOT EXISTS calendar_feed_tokens (
+  token_hash  TEXT         PRIMARY KEY,
+  user_id     TEXT         NOT NULL UNIQUE,
+  created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
 -- ── PLAY SESSIONS ─────────────────────────────────────────────────────────
 -- Records a game night / session that actually happened (past tense).
--- Separate from play_session_proposals, which handle future scheduling.
+-- Separate from play_session_proposals above, which handle future scheduling.
 -- A session has no game_id — multiple games can be played in one session,
 -- tracked in play_session_games below.
--- proposal_id: nullable — sessions can be logged without a prior proposal.
---   FK constraint added later via ALTER TABLE once play_session_proposals exists.
+-- id: UUID, not SERIAL — this file originally sketched it as SERIAL, before
+--   the "public-facing resources get a uuid PK" convention (Group, Invite,
+--   PlaySessionProposal, PlayPhoto) was established. Corrected here rather
+--   than left inconsistent: no environment has real data yet, and none of
+--   play_session_games/play_session_game_results/play_session_players had a
+--   TypeORM entity built against the old INT type — only this reference
+--   file — so there is no actual migration cost, just column-type edits.
+--   The one dependent that DID already have a TypeORM entity,
+--   play_photos.session_id, is updated to match below.
+-- proposal_id: nullable — sessions can be logged without a prior proposal
+--   (someone just types up a session that happened spontaneously). Set
+--   exactly once, when a proposal is finalized into a session (Decision B,
+--   step 4); cleared along with the row itself if the proposal is later
+--   un-confirmed.
 CREATE TABLE IF NOT EXISTS play_sessions (
-  id           SERIAL       PRIMARY KEY,
+  id           UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
   group_id     UUID         NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
   played_at    TIMESTAMPTZ  NOT NULL,
   notes        TEXT,                   -- session-level notes (e.g. "hosted at Alice's")
-  proposal_id  INT,                    -- FK to play_session_proposals, added later
+  proposal_id  UUID         REFERENCES play_session_proposals(id),
   created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
@@ -148,7 +264,7 @@ CREATE TABLE IF NOT EXISTS play_sessions (
 -- No winner column here — winners are tracked per-player in play_session_game_results,
 -- which supports competitive (one winner), ties (multiple), co-op (all or none), and DNF.
 CREATE TABLE IF NOT EXISTS play_session_games (
-  session_id  INT   NOT NULL REFERENCES play_sessions(id) ON DELETE CASCADE,
+  session_id  UUID  NOT NULL REFERENCES play_sessions(id) ON DELETE CASCADE,
   game_id     INT   NOT NULL REFERENCES games(id)         ON DELETE CASCADE,
   status      TEXT  NOT NULL DEFAULT 'finished'
                     CHECK (status IN ('finished', 'abandoned')),
@@ -165,7 +281,7 @@ CREATE TABLE IF NOT EXISTS play_session_games (
 -- ON DELETE CASCADE on users: if a user is deleted, their result rows go with them.
 --   The game record and other players' results are unaffected.
 CREATE TABLE IF NOT EXISTS play_session_game_results (
-  session_id  INT     NOT NULL,
+  session_id  UUID    NOT NULL,
   game_id     INT     NOT NULL,
   user_id     INT     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   is_winner   BOOLEAN NOT NULL DEFAULT false,
@@ -180,8 +296,8 @@ CREATE TABLE IF NOT EXISTS play_session_game_results (
 -- notes: per-player personal note ("I had a terrible opening hand but recovered").
 --   Separate from the session-level notes, which are shared context for everyone.
 CREATE TABLE IF NOT EXISTS play_session_players (
-  session_id  INT  NOT NULL REFERENCES play_sessions(id) ON DELETE CASCADE,
-  user_id     INT  NOT NULL REFERENCES users(id)         ON DELETE CASCADE,
+  session_id  UUID  NOT NULL REFERENCES play_sessions(id) ON DELETE CASCADE,
+  user_id     INT   NOT NULL REFERENCES users(id)         ON DELETE CASCADE,
   notes       TEXT,
 
   PRIMARY KEY (session_id, user_id)
@@ -192,9 +308,10 @@ CREATE TABLE IF NOT EXISTS play_session_players (
 -- Binaries live in Cloudflare R2; this table only stores the object key and
 -- the derived public URL. Uploaded via a presigned URL the client PUTs
 -- directly to R2 — NestJS never receives the file bytes.
--- session_id: no FK constraint yet — play_sessions has no TypeORM entity
---   until topic 3_scheduling. Added via ALTER TABLE once that lands, same
---   deferred-FK pattern already used for play_sessions.proposal_id above.
+-- session_id: FK resolved now that play_sessions has a TypeORM entity
+--   (topic 3_scheduling) — this column originally had no constraint since
+--   play_sessions didn't exist as an entity yet. UUID, matching
+--   play_sessions.id's corrected type — see the comment on that table.
 -- key: UNIQUE — the R2 object key, one row per uploaded object.
 -- uploaded_by: the Keycloak JWT `sub` claim, not an int FK to users(id) —
 --   same "plain column holding the JWT subject, no relation" pattern as
@@ -205,7 +322,7 @@ CREATE TABLE IF NOT EXISTS play_session_players (
 --   presigned URL, to stay under the R2 free tier allowance.
 CREATE TABLE IF NOT EXISTS play_photos (
   id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-  session_id  INT          NOT NULL, -- FK to play_sessions, added later
+  session_id  UUID         NOT NULL REFERENCES play_sessions(id) ON DELETE CASCADE,
   uploaded_by TEXT         NOT NULL,
   key         TEXT         NOT NULL UNIQUE,
   url         TEXT         NOT NULL,

@@ -1,5 +1,5 @@
 {
-  "current_phase": 3,
+  "current_phase": 4,
   "current_topic": null,
   "completed": [
     "0_repo_structure",
@@ -22,7 +22,8 @@
     "3_websockets",
     "3_r2_uploads",
     "3_vault",
-    "3_invite_system"
+    "3_invite_system",
+    "3_scheduling"
   ],
   "in_progress": [],
   "notes_generated": [
@@ -46,7 +47,8 @@
     "notes/3_websockets.md",
     "notes/3_r2_uploads.md",
     "notes/3_vault.md",
-    "notes/3_invite_system.md"
+    "notes/3_invite_system.md",
+    "notes/3_scheduling.md"
   ],
   "last_session": "2026-07-11",
   "detours": []

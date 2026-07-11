@@ -1,4 +1,4 @@
-import { IsInt, IsNotEmpty, IsPositive, IsString } from 'class-validator';
+import { IsNotEmpty, IsString, IsUUID } from 'class-validator';
 
 export class ConfirmUploadDto {
   // The object key returned by a prior /uploads/presign call. UploadsService
@@ -8,7 +8,7 @@ export class ConfirmUploadDto {
   @IsNotEmpty()
   key!: string;
 
-  @IsInt()
-  @IsPositive()
-  sessionId!: number;
+  // uuid, matching PlaySession.id (topic 3_scheduling).
+  @IsUUID()
+  sessionId!: string;
 }
