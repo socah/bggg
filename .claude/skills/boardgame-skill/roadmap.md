@@ -195,10 +195,16 @@ Topics:
   depends_on: [0_docker_compose_dev]
 
 - id: `4_terraform`
-  label: Terraform — OCI resources, networking, Network Security Groups, state management
+  label: Terraform — OCI resources, networking, Network Security Groups, Cloudflare DNS, R2 bucket, state management
   rewrite: false
   secops: true
   depends_on: [0_repo_structure]
+
+- id: `4_ansible`
+  label: Ansible — playbooks, roles, inventory, idempotent config management
+  rewrite: true
+  secops: false
+  depends_on: [4_terraform]
 
 - id: `4_github_actions`
   label: GitHub Actions CI/CD — lint, test, npm audit, Trivy scan, SSH deploy
@@ -207,10 +213,10 @@ Topics:
   depends_on: [2_testing, 4_terraform]
 
 - id: `4_fail2ban`
-  label: Fail2ban + SSH hardening — Ansible playbook, Keycloak ban rules, sshd_config
+  label: Fail2ban + SSH hardening — applying an Ansible playbook, Keycloak ban rules, sshd_config
   rewrite: false
   secops: true
-  depends_on: [4_traefik]
+  depends_on: [4_traefik, 4_ansible]
 
 - id: `4_container_security`
   label: Container security — non-root users, read-only filesystems, Trivy, image pinning

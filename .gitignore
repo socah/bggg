@@ -28,6 +28,11 @@ infra/**/terraform.tfstate
 infra/**/terraform.tfstate.backup
 infra/**/.terraform.lock.hcl
 
+# Terraform variable files — contain real OCI/Cloudflare credentials
+infra/**/terraform.tfvars
+infra/**/*.auto.tfvars
+!infra/**/terraform.tfvars.example
+
 # Logs
 *.log
 logs/

@@ -23,7 +23,8 @@
     "3_r2_uploads",
     "3_vault",
     "3_invite_system",
-    "3_scheduling"
+    "3_scheduling",
+    "4_terraform"
   ],
   "in_progress": [],
   "notes_generated": [
@@ -48,8 +49,9 @@
     "notes/3_r2_uploads.md",
     "notes/3_vault.md",
     "notes/3_invite_system.md",
-    "notes/3_scheduling.md"
+    "notes/3_scheduling.md",
+    "notes/4_terraform.md"
   ],
-  "last_session": "2026-07-11",
+  "last_session": "2026-07-15",
   "detours": []
 }
