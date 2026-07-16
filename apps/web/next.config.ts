@@ -22,6 +22,16 @@ const withPWA = withPWAInit({
 });
 
 const nextConfig: NextConfig = {
+  // Decision: 'standalone' output traces only the files this app actually
+  // needs at runtime (its own code + the specific node_modules it
+  // imports) into .next/standalone, instead of the production image
+  // needing the full workspace node_modules copied in. Alternative: copy
+  // the whole pruned node_modules like apps/api's Dockerfile does.
+  // Drawback of that here: apps/web's tree includes React/Next.js's own
+  // considerable weight, so tracing (already built into Next) is worth
+  // using rather than skipping.
+  output: 'standalone',
+
   // Rewrites are URL transformations that happen on the Next.js server,
   // invisible to the browser. The browser sends '/api/groups', Next.js
   // forwards it to the NestJS backend and returns the response —

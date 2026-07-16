@@ -26,6 +26,55 @@ services:
     # read — see infra/vault/agent.hcl for what it fetches.
     image: hashicorp/vault:1.18
 
+  api:
+    # No image tag here, unlike the services above — this is our own code,
+    # built from source, not pulled from a registry. There is no separate
+    # dev-mode override for this service (unlike db/keycloak/vault): local
+    # development runs it directly via 'npm run dev:api', never through
+    # Docker at all, so this file is the only place it's ever defined.
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      DB_HOST: db
+      DB_USER: ${DB_USER}
+      DB_NAME: ${DB_NAME}
+      # File, not a plain var — see app.module.ts's readDbPassword() for
+      # why: this never becomes a process env var Vault didn't already
+      # know about, so it can't leak via 'docker inspect' or a crash
+      # report that dumps process.env.
+      DB_PASSWORD_FILE: /run/secrets/db_password
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM}
+      KEYCLOAK_API_SERVICE_ID: ${KEYCLOAK_API_SERVICE_ID}
+      KEYCLOAK_API_SERVICE_SECRET: ${KEYCLOAK_API_SERVICE_SECRET}
+    volumes:
+      - vault_secrets:/run/secrets:ro
+    depends_on:
+      vault-agent:
+        condition: service_healthy
+    # No 'ports:' — nothing outside this Docker network can reach 'api'
+    # directly yet. Traefik (a later topic) will route to it by service
+    # name over that network; until then this is deliberately unreachable
+    # from the host, the same "not wired up yet" gap as keycloak/vault
+    # below having no production startup config in this file at all.
+    expose:
+      - "3000"
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    environment:
+      # Same-network service name, not localhost — 'web' and 'api' are
+      # different containers now, so this can't fall back on sharing a
+      # loopback interface the way two local 'npm run dev' processes do.
+      NEXT_PUBLIC_API_URL: http://api:3000
+    depends_on:
+      - api
+    expose:
+      - "3000"
+
 volumes:
   db_data:
   # Holds vault-agent's own auth token. Only vault-agent mounts this —

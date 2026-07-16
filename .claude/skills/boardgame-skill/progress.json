@@ -24,7 +24,8 @@
     "3_vault",
     "3_invite_system",
     "3_scheduling",
-    "4_terraform"
+    "4_terraform",
+    "4_ansible"
   ],
   "in_progress": [],
   "notes_generated": [
@@ -50,8 +51,12 @@
     "notes/3_vault.md",
     "notes/3_invite_system.md",
     "notes/3_scheduling.md",
-    "notes/4_terraform.md"
+    "notes/4_terraform.md",
+    "notes/4_ansible.md"
   ],
-  "last_session": "2026-07-15",
-  "detours": []
+  "last_session": "2026-07-16",
+  "detours": [
+    "During 4_ansible: added Dockerfiles for apps/api and apps/web (containerizing them wasn't done in any prior topic) and api/web service entries in docker-compose.yml, so the app_deploy role would have something real to deploy.",
+    "During 4_ansible: fixed several pre-existing bugs unrelated to the roadmap, surfaced while verifying builds/containers actually work — typescript 7.x incompatibility with @nestjs/cli/ts-node/ts-jest (reverted to 6.0.3, added a Dependabot ignore for the major bump), a Turbopack/next-pwa incompatibility in apps/web, an incomplete Tailwind v3->v4 migration, and a TypeORM DataTypeNotSupportedError on nullable string columns (Invite.usedBy, PlaySessionProposal.hostId, PlaySession.proposalId) that blocked the API from ever booting against a real database."
+  ]
 }

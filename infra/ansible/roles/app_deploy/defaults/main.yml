@@ -1,0 +1,9 @@
+---
+# Non-secret values docker-compose.yml's api/db services need. Real
+# secrets (the DB password, Keycloak client secret) never live here —
+# see tasks/main.yml for how the DB password is handled.
+deploy_dir: /opt/bggg
+app_repo: https://github.com/socah/bggg.git
+app_repo_version: main
+db_user: bggg
+db_name: bggg

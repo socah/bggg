@@ -268,4 +268,58 @@ one most likely to break the moment the VM is ever recreated.
 
 ## Summary
 
-[To be filled in by Claude Code after checkpoint.]
+**Built:** `infra/ansible/generate_inventory.sh` (reads the VM's IP from
+`terraform output -raw`, never from `terraform.tfstate` directly); a
+`docker` role that derives both CPU architecture and OS distribution from
+Ansible's own gathered facts rather than hardcoding either; an `app_deploy`
+role that clones the repo, generates a fresh bootstrap DB password on
+every run via the `password` lookup's `/dev/null` cache-bypass trick
+(never persisted to disk), and runs `docker compose up -d --build` with
+that password scoped to just that one command's environment; and
+`infra/ansible/playbook.yml` tying `docker` + `app_deploy` together.
+Getting here also required a real detour: `apps/api` and `apps/web` had no
+Dockerfiles yet, so those were built and verified (multi-stage, workspace-
+aware, non-root, `standalone` output for web), `docker-compose.yml` gained
+`api`/`web` service definitions, and `infra/vault/bootstrap.sh` gained its
+own idempotency guard — the actual safety net behind the Vault "Approach
+B" decision (generate-at-deploy-time, no secret ever committed even
+encrypted).
+
+**Verified, not just written:** both Dockerfiles were built and run for
+real (API confirmed booting fully against a live throwaway Postgres
+container using `DB_PASSWORD_FILE`; web confirmed serving a real HTTP 200
+with working static assets). `ansible-core` was installed into this
+sandbox and the actual playbook was run against it (`--check` then for
+real, with `deploy_dir` overridden to keep it out of `/opt`) — that run
+caught two genuine bugs (the `docker` role's apt repo URL was hardcoded to
+`ubuntu`; this sandbox is Debian) before this note was written, not after.
+
+**Demonstrated understanding of:** why `terraform output` (not
+`terraform.tfstate`) is the right interface for the inventory script,
+correctly citing it as a versioned CLI contract versus an internal,
+version-dependent file format; solid idempotency reasoning for the
+`docker` role's re-run behavior, including the useful `state: present`
+vs. `state: latest` distinction once it was raised; and real engagement
+with the Ansible Vault vs. HashiCorp Vault question — correctly identified
+they're not the same tool after an initial ambiguous framing, and reasoned
+through *why* both still matter (a bootstrap/transport secret vs. a live
+runtime secret service), which led directly to preferring the
+generate-at-deploy-time approach over a committed encrypted file.
+
+**To revisit:**
+- The `hardening` role (SSH config, `PasswordAuthentication no`) is
+  intentionally deferred to `4_fail2ban`, per the roadmap's own dependency
+  ordering — not a gap in this topic, just not this topic's job.
+- This role has never actually run against the real Terraform-provisioned
+  VM, only against this local sandbox (which caught real bugs but is a
+  different OS than the actual target) — first real deploy will be the
+  true test.
+- `docker-compose.yml`'s `keycloak` and `vault` services still have zero
+  production runtime config — all of it currently lives in
+  `docker-compose.dev.yml`'s dev-mode flags (`start-dev`, dev-mode Vault).
+  Making those genuinely production-ready is real, separate work this
+  topic deliberately did not take on.
+- The Keycloak client secret (`KEYCLOAK_API_SERVICE_SECRET`) reaches the
+  `api` service as a plain env var in `docker-compose.yml` with no
+  production secret-delivery story yet — the same `_FILE` treatment given
+  to `DB_PASSWORD` hasn't been extended to it.

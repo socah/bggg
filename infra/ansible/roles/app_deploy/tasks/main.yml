@@ -1,0 +1,51 @@
+---
+# git itself isn't part of the 'docker' role's job — it's specifically
+# what this role needs to get source onto the server, so it's installed
+# here rather than bundled into a role that has nothing to do with it.
+- name: Install git
+  apt:
+    name: git
+    state: present
+
+- name: Clone or update the application repo
+  git:
+    repo: "{{ app_repo }}"
+    dest: "{{ deploy_dir }}"
+    version: "{{ app_repo_version }}"
+    # A normal 'git pull' would refuse to run if the working tree had
+    # local changes — force means this deploy always ends up exactly at
+    # app_repo_version, discarding anything that (should never, but
+    # could) have been hand-edited directly on the server.
+    force: true
+
+# Decision: generate a fresh random password on every single deploy run
+# rather than checking first whether one's needed. Because: infra/vault/
+# bootstrap.sh (see its own guard) already refuses to overwrite a secret
+# that exists — so generating one we might not end up using costs nothing
+# and keeps this role simpler than adding an Ansible-side check for the
+# same thing the script already checks for itself. Alternative: inspect
+# the 'bggg_db_data' Docker volume first and only generate when it's
+# genuinely a first deploy. Drawback: two places would need to agree on
+# what "already bootstrapped" means instead of one.
+- name: Generate a candidate bootstrap password for this run
+  # '/dev/null' as the lookup's cache path is a documented way to get a
+  # fresh value every call — normally this lookup writes its result to a
+  # file so repeated runs return the *same* password, which is exactly
+  # what we don't want: nothing about this value is meant to persist
+  # anywhere outside Vault itself.
+  set_fact:
+    bootstrap_db_password: "{{ lookup('ansible.builtin.password', '/dev/null', length=32, chars=['ascii_letters', 'digits']) }}"
+
+- name: Build and start the stack
+  command: docker compose -f docker-compose.yml up -d --build
+  args:
+    chdir: "{{ deploy_dir }}"
+  environment:
+    DB_USER: "{{ db_user }}"
+    DB_NAME: "{{ db_name }}"
+    DB_PASSWORD: "{{ bootstrap_db_password }}"
+  # This task's own env vars exist only for the lifetime of this one SSH
+  # command — they're never written to a file on the server, so
+  # bootstrap_db_password doesn't linger anywhere after 'docker compose
+  # up' returns, whether or not bootstrap.sh actually used it.
+  no_log: true

@@ -1,0 +1,9 @@
+---
+- name: Configure and deploy the board game platform
+  hosts: web
+  become: true
+
+  roles:
+    # docker must exist before app_deploy tries to run 'docker compose'.
+    - docker
+    - app_deploy

@@ -48,7 +48,10 @@ export class PlaySessionProposal {
   // how SchedulingService computes the trimmed overlap window (Decision D):
   // the window is anchored to THIS person's availability rather than any
   // pair of members.
-  @Column({ name: 'host_id', nullable: true })
+  // Explicit 'type' required — 'string | null' reflects as a bare
+  // 'Object' at runtime (reflect-metadata can't represent union types),
+  // which Postgres's driver rejects (same fix as Invite.usedBy).
+  @Column({ name: 'host_id', type: 'text', nullable: true })
   hostId!: string | null;
 
   // TypeScript narrows this to ProposalStatus; the matching CHECK

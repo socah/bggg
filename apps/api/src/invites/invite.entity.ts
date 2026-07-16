@@ -44,7 +44,13 @@ export class Invite {
   // usedAt (see InvitesService.redeem). Kept alongside createdBy so "who
   // invited whom" stays answerable directly from this row, without joining
   // through group_members or the audit log.
-  @Column({ name: 'used_by', nullable: true })
+  //
+  // Explicit 'type' required here (same reason usedAt has one): reflect-
+  // metadata can't represent a union type like 'string | null' — it
+  // reports a bare 'Object' at runtime, which Postgres's driver rejects
+  // outright. createdBy doesn't need this because it's a plain, non-null
+  // 'string', which reflects correctly on its own.
+  @Column({ name: 'used_by', type: 'text', nullable: true })
   usedBy!: string | null;
 
   @CreateDateColumn({ name: 'created_at' })

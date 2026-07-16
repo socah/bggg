@@ -38,7 +38,10 @@ export class PlaySession {
   // through a proposal. Set exactly once, when SchedulingService finalizes
   // a proposal (Decision B, step 4); cleared along with this whole row if
   // the proposal is later un-confirmed.
-  @Column({ name: 'proposal_id', nullable: true })
+  // Explicit 'type' required — 'string | null' reflects as a bare
+  // 'Object' at runtime (reflect-metadata can't represent union types),
+  // which Postgres's driver rejects (same fix as Invite.usedBy).
+  @Column({ name: 'proposal_id', type: 'text', nullable: true })
   proposalId!: string | null;
 
   @CreateDateColumn({ name: 'created_at' })

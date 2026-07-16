@@ -1,0 +1,14 @@
+# Docker build context is the repo root (needed so npm workspace installs
+# see every package.json), so anything heavy or generated has to be
+# excluded here explicitly — it won't be, just by being .gitignored.
+node_modules/
+apps/*/node_modules/
+apps/*/dist/
+apps/*/.next/
+.git/
+notes/
+infra/
+*.md
+.env
+.env.*
+!.env.example
