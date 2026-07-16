@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --port 3000",
-    "build": "next build",
+    "dev": "next dev --port 3000 --webpack",
+    "build": "next build --webpack",
     "start": "next start --port 3000",
     "lint": "next lint"
   },
@@ -17,12 +17,12 @@
     "workbox-window": "^7.4.1"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^26.1.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "autoprefixer": "^10.0.0",
     "postcss": "^8.0.0",
     "tailwindcss": "^4.3.2",
-    "typescript": "^7.0.2"
+    "typescript": "^6.0.3"
   }
 }

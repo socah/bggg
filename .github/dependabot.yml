@@ -18,6 +18,15 @@ updates:
       # Security advisories always get their own PR regardless of this grouping.
       non-security-patches:
         update-types: ["patch"]
+    ignore:
+      # typescript 7.x is Microsoft's native/Go-ported compiler — a
+      # different package shape (ESM-only, no classic Compiler API) that
+      # @nestjs/cli, ts-node, and ts-jest don't support yet (only an
+      # @nestjs/cli 12.0.0-alpha line exists so far). Blocks the major bump
+      # only — 6.x patch/security updates still come through normally.
+      # Remove once @nestjs/cli 12 is stable and ts-node/ts-jest support TS7.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   # Same for the Next.js frontend.
   - package-ecosystem: "npm"
@@ -27,6 +36,14 @@ updates:
     groups:
       non-security-patches:
         update-types: ["patch"]
+    ignore:
+      # Pinned to the same major as apps/api for consistency, though the
+      # web build's actual breakage under typescript 7.x turned out to be
+      # unrelated (a Turbopack/next-pwa incompatibility, fixed separately
+      # via 'next build --webpack') — this ignore just avoids re-testing
+      # an untested major bump here until apps/api's blockers clear.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   # Scans docker-compose.yml for 'image:' tags (e.g. postgres:16-alpine).
   # Dev-specific overrides live in docker-compose.dev.yml which Dependabot ignores

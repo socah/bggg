@@ -1,0 +1,67 @@
+---
+# Note: this uses the modern keyring + apt_repository approach, not the
+# 'apt_key' module shown in notes/4_ansible.md's worked example — apt_key
+# is deprecated on Ubuntu 22.04+, so the real role uses Docker's currently
+# documented install method instead of the simpler (but outdated) one used
+# there for teaching clarity.
+
+- name: Install packages Docker's own apt repo setup needs
+  apt:
+    name:
+      - ca-certificates
+      - curl
+    state: present
+    update_cache: true
+
+- name: Create the apt keyrings directory
+  file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+
+- name: Download Docker's official GPG key
+  get_url:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    dest: /etc/apt/keyrings/docker.asc
+    mode: "0644"
+
+# Decision: derive the repo architecture from ansible_facts['architecture']
+# (via docker_arch_map in vars/main.yml) rather than hardcoding 'arm64'.
+# Because: Ansible already gathers this fact from the live host for free —
+# no need to coordinate with Terraform or assume today's VM shape holds
+# forever. Alternative: hardcode 'arm64' since infra/terraform/main.tf only
+# ever provisions Ampere ARM today. Drawback: silently produces a broken
+# apt repo line the moment the VM shape/image changes without this file
+# being updated to match.
+- name: Add Docker's apt repository
+  apt_repository:
+    repo: >-
+      deb [arch={{ docker_arch_map[ansible_facts['architecture']] }} signed-by=/etc/apt/keyrings/docker.asc]
+      https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable
+    state: present
+
+- name: Install Docker Engine and the Compose plugin
+  apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-compose-plugin
+    state: present
+    update_cache: true
+
+- name: Ensure Docker is running and enabled at boot
+  service:
+    name: docker
+    state: started
+    enabled: true
+
+# Lets the SSH login user run 'docker'/'docker compose' directly without
+# sudo when debugging by hand over SSH. Ansible's own tasks don't need
+# this — they already run as root via the playbook's 'become: true' — this
+# is purely for the human at the keyboard.
+- name: Add the Ansible connection user to the docker group
+  user:
+    name: "{{ ansible_user }}"
+    groups: docker
+    append: true

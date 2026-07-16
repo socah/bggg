@@ -1,0 +1,8 @@
+---
+# Docker's apt repo names architectures differently than the Linux kernel
+# does (ansible_facts['architecture'] reports 'aarch64'/'x86_64'). This
+# role vars/ file, not defaults/, because it's an internal lookup table,
+# not something a user of this role should ever want to override.
+docker_arch_map:
+  x86_64: amd64
+  aarch64: arm64
