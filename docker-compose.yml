@@ -1,5 +1,61 @@
 services:
 
+  traefik:
+    image: traefik:v3.1
+    command:
+      # Docker provider: routers/middlewares/services come from container
+      # labels, discovered live — no static routing file to keep in sync
+      # when a new service is added.
+      - --providers.docker=true
+      # Without this, every container on the network becomes a routing
+      # target the moment it joins — including ones with no traefik.*
+      # labels at all. Opt-in only, via 'traefik.enable=true' per service.
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      # Static (not middleware) redirect: any request landing on :80 goes
+      # to :443 before Traefik even looks at routers for that request.
+      # Unlike a middleware, this can't be forgotten per-service — it's a
+      # property of the entrypoint itself, not an opt-in per router.
+      - --entrypoints.web.http.redirections.entryPoint.to=websecure
+      - --entrypoints.web.http.redirections.entryPoint.scheme=https
+      # ACME: HTTP-01 challenge answered on the 'web' entrypoint, cert
+      # cached in acme.json so this only runs once per domain, not on
+      # every restart.
+      - --certificatesresolvers.le.acme.httpchallenge=true
+      - --certificatesresolvers.le.acme.httpchallenge.entrypoint=web
+      - --certificatesresolvers.le.acme.email=${LETSENCRYPT_EMAIL}
+      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Read-only: Traefik only needs to read container labels/events,
+      # never write to the Docker API.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - letsencrypt:/letsencrypt
+    labels:
+      # Required even on Traefik's own container: with exposedbydefault
+      # false, a container without 'enable=true' is ignored entirely by
+      # the Docker provider — including labels that only define shared
+      # middlewares, not a router. Nothing here creates a router for
+      # Traefik itself; there's no traefik.http.routers.* rule below.
+      - traefik.enable=true
+      # Shared middlewares, defined once here rather than duplicated on
+      # every service — Traefik's Docker provider merges labels from all
+      # containers into one namespace, so 'api' and 'web' can reference
+      # these by name without redeclaring them.
+      - traefik.http.middlewares.ratelimit.ratelimit.average=10
+      - traefik.http.middlewares.ratelimit.ratelimit.burst=20
+      - traefik.http.middlewares.secheaders.headers.stsSeconds=31536000
+      - traefik.http.middlewares.secheaders.headers.frameDeny=true
+      - traefik.http.middlewares.secheaders.headers.contentTypeNosniff=true
+      # Strips '/api' before the request reaches the 'api' service —
+      # matches apps/web/next.config.ts's rewrite exactly (that rewrite
+      # forwards '/api/:path*' to the backend's ':path*', same stripping,
+      # done in Next.js instead of here). Only 'api's router uses this.
+      - traefik.http.middlewares.api-stripprefix.stripprefix.prefixes=/api
+
   db:
     # Image tag lives here so Dependabot can track it via the standard filename.
     # Dev-specific config (credentials, ports, volumes) is in docker-compose.dev.yml.
@@ -53,13 +109,45 @@ services:
     depends_on:
       vault-agent:
         condition: service_healthy
-    # No 'ports:' — nothing outside this Docker network can reach 'api'
-    # directly yet. Traefik (a later topic) will route to it by service
-    # name over that network; until then this is deliberately unreachable
-    # from the host, the same "not wired up yet" gap as keycloak/vault
-    # below having no production startup config in this file at all.
+    # Still no 'ports:' — 'api' is unreachable from the host directly.
+    # Traefik reaches it by service name over the Docker network; the
+    # router/service labels below are what makes it reachable from the
+    # internet, through Traefik, instead.
     expose:
       - "3000"
+    labels:
+      - traefik.enable=true
+      # PathPrefix makes this rule more specific than 'web's plain Host()
+      # rule below — Traefik computes router priority from rule length by
+      # default, so '/api/*' requests match this router, not 'web's, with
+      # no explicit priority needed.
+      - traefik.http.routers.api.rule=Host(`${DOMAIN_NAME}`) && PathPrefix(`/api`)
+      - traefik.http.routers.api.entrypoints=websecure
+      - traefik.http.routers.api.tls.certresolver=le
+      # Order matters: ratelimit rejects excess requests before anything
+      # else runs; api-stripprefix runs last, right before the request
+      # reaches the 'api' container, so NestJS sees '/groups/42' not
+      # '/api/groups/42' — same contract as next.config.ts's rewrite.
+      - traefik.http.routers.api.middlewares=ratelimit,secheaders,api-stripprefix
+      - traefik.http.routers.api.service=api
+      # Explicit even though EXPOSE 3000 is the only port apps/api/Dockerfile
+      # exposes — Traefik would auto-detect it, but relying on that breaks
+      # silently if a second port (e.g. metrics) is ever added.
+      - traefik.http.services.api.loadbalancer.server.port=3000
+      # Second router, same container, same 'api' service/port — chat.gateway.ts's
+      # IoAdapter listens on this same NestJS HTTP server, just at socket.io's
+      # default path ('/socket.io/', no custom 'path' option set on
+      # @WebSocketGateway), not under '/api'. No StripPrefix here: unlike the
+      # REST router, this path must reach NestJS unchanged. Traefik needs no
+      # separate config to proxy the WebSocket upgrade itself — it detects the
+      # 'Upgrade: websocket' header automatically and switches protocols,
+      # unlike e.g. Nginx, which needs explicit 'proxy_set_header Upgrade'
+      # directives to do the same thing.
+      - traefik.http.routers.chat.rule=Host(`${DOMAIN_NAME}`) && PathPrefix(`/socket.io`)
+      - traefik.http.routers.chat.entrypoints=websecure
+      - traefik.http.routers.chat.tls.certresolver=le
+      - traefik.http.routers.chat.middlewares=ratelimit,secheaders
+      - traefik.http.routers.chat.service=api
 
   web:
     build:
@@ -74,9 +162,24 @@ services:
       - api
     expose:
       - "3000"
+    labels:
+      - traefik.enable=true
+      # No PathPrefix: this is the catch-all for the domain. Any request
+      # that doesn't match 'api's more specific rule above lands here.
+      - traefik.http.routers.web.rule=Host(`${DOMAIN_NAME}`)
+      - traefik.http.routers.web.entrypoints=websecure
+      - traefik.http.routers.web.tls.certresolver=le
+      - traefik.http.routers.web.middlewares=ratelimit,secheaders
+      - traefik.http.routers.web.service=web
+      - traefik.http.services.web.loadbalancer.server.port=3000
 
 volumes:
   db_data:
+  # Let's Encrypt account key + issued certificates. Named volume so a
+  # renewed/reissued cert (and the ACME account registration) survives
+  # 'docker compose down' — losing this means re-solving the HTTP-01
+  # challenge from scratch and risking Let's Encrypt's rate limits.
+  letsencrypt:
   # Holds vault-agent's own auth token. Only vault-agent mounts this —
   # not 'db' or any other service — so nothing besides Agent itself can
   # read the credential it uses to talk to Vault.
