@@ -1,0 +1,166 @@
+name: CI
+
+# Push to main is what actually deploys (see the 'deploy' job's 'if:' below).
+# The pull_request trigger is what actually blocks bad code from merging —
+# it runs the same gates against the PR's branch *before* it can reach main,
+# giving a red X on the PR itself instead of a broken main branch after the fact.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # Decision: lint + test + npm audit share ONE job (matrixed per workspace)
+  # rather than three separate jobs. Because: all three need the exact same
+  # 'npm ci' first — splitting them into separate jobs would mean paying for
+  # that install twice (or three times) per workspace for no benefit, since
+  # none of the three depend on each other's output.
+  verify:
+    runs-on: ubuntu-latest
+    strategy:
+      # fail-fast: false means api's lint failing doesn't cancel web's job
+      # mid-run — you get both results instead of one being marked "cancelled".
+      fail-fast: false
+      matrix:
+        workspace: [api, web]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          # Caches ~/.npm keyed on package-lock.json's hash (root-level lockfile,
+          # since this is an npm workspaces monorepo — one lockfile for both apps).
+          cache: 'npm'
+
+      # Same install shape as apps/api/Dockerfile and apps/web/Dockerfile use
+      # ('--workspace=X --include-workspace-root') — one workspace's deps only,
+      # plus the root package.json workspaces needs to resolve at all.
+      - run: npm ci --workspace=apps/${{ matrix.workspace }} --include-workspace-root
+
+      - run: npm run lint --workspace=apps/${{ matrix.workspace }}
+
+      # apps/web has no "test" script (only "lint") — Next.js's own build is
+      # its type/compile check, and no unit tests exist for it yet. Running
+      # 'npm run test' unconditionally here would fail on web with
+      # "missing script: test", not a real test failure.
+      - name: Unit tests
+        if: matrix.workspace == 'api'
+        run: npm run test --workspace=apps/api
+
+      - name: E2E tests
+        if: matrix.workspace == 'api'
+        run: npm run test:e2e --workspace=apps/api
+
+      # audit-level=high per references/secops.md's Dependency Scanning
+      # checklist — fails the job (non-zero exit) on any high or critical
+      # advisory in this workspace's resolved dependency tree.
+      - name: npm audit (high+critical)
+        run: npm audit --workspace=apps/${{ matrix.workspace }} --audit-level=high
+
+  # Decision: a separate job from 'verify', not extra steps tacked onto it.
+  # Because: this needs Buildx set up and actually builds a full image
+  # (multi-stage, several minutes) — kept separate, it runs concurrently
+  # with 'verify' instead of queuing behind it, so a fast lint failure still
+  # surfaces immediately rather than waiting on a slow image build.
+  build-and-scan:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - workspace: api
+            dockerfile: apps/api/Dockerfile
+          - workspace: web
+            dockerfile: apps/web/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          # Root context, same as docker-compose.yml's 'build.context: .' for
+          # both services — these Dockerfiles COPY root-level package.json
+          # and package-lock.json, so the build context must be the repo root,
+          # not apps/${{ matrix.workspace }}.
+          context: .
+          file: ${{ matrix.dockerfile }}
+          tags: bggg-${{ matrix.workspace }}:ci
+          # load: true puts the built image into this runner's local Docker
+          # daemon so Trivy (next step) can scan it. Nothing is pushed to any
+          # registry — this project has none; the production server builds
+          # its own image from source, this is purely a CI-time quality gate.
+          load: true
+
+      - name: Trivy scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: bggg-${{ matrix.workspace }}:ci
+          # Same Dockerfile the production VM will build from — a CRITICAL
+          # finding here means the real deploy would produce the same
+          # vulnerable image, not just this CI run.
+          severity: CRITICAL
+          # Non-zero exit on any match — this is what actually fails the job.
+          # Without it, trivy-action only prints a report and the job goes green.
+          exit-code: '1'
+
+  deploy:
+    runs-on: ubuntu-latest
+    # Blocks on BOTH prior jobs (and both matrix legs of each) — a critical
+    # CVE in apps/web's image, or a failing apps/api unit test, stops this
+    # job exactly the same way.
+    needs: [verify, build-and-scan]
+    # Second gate, independent of 'needs': even when every check above is
+    # green, only a push to main should ever touch production. Without this,
+    # a green pull_request run (e.g. from a fork) could deploy on its own.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      # Ansible itself isn't in this repo's package.json anywhere — it's a
+      # Python tool, installed fresh on the runner, same as it would be on
+      # any machine that runs 'ansible-playbook' for the first time.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install --user ansible
+
+      # Loads the private key into an in-memory ssh-agent for this job only.
+      # The key text lives in GitHub's encrypted Secrets store and is
+      # injected at runtime — it never appears in this file, and GitHub
+      # automatically redacts any secret value it recognizes in job logs.
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      # Decision: inventory.ini is written here from a GitHub Secret
+      # (PROD_HOST), not generated with generate_inventory.sh's
+      # 'terraform output' approach. Because: that script reads Terraform
+      # state, and this repo has no remote state backend — the state file
+      # only exists on whoever's machine last ran 'terraform apply'. A
+      # GitHub-hosted runner has no way to read it, so the IP is stored as
+      # a secret instead and updated by hand if the VM is ever recreated.
+      - name: Write Ansible inventory
+        run: |
+          cat > infra/ansible/inventory.ini <<EOF
+          [web]
+          ${{ secrets.PROD_HOST }} ansible_user=ubuntu
+          EOF
+
+      - name: Run deploy playbook
+        # The runner has never connected to this host before, so it has no
+        # entry in its known_hosts file — StrictHostKeyChecking would
+        # otherwise stop and wait for interactive confirmation that will
+        # never come on a non-interactive runner.
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: 'False'
+        # Run from infra/ansible/ (not repo root) — playbook.yml's roles
+        # (docker, app_deploy) resolve from infra/ansible/roles/ relative to
+        # the playbook's own directory, exactly as they do when you run this
+        # by hand from your own machine.
+        run: |
+          cd infra/ansible
+          ansible-playbook -i inventory.ini playbook.yml
