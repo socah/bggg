@@ -50,23 +50,13 @@ variable "ssh_allowed_cidr" {
 }
 
 variable "cloudflare_api_token" {
-  description = "Cloudflare API token, scoped to DNS edit + R2 admin permissions only for this zone"
+  description = "Cloudflare API token, scoped to R2 admin permissions only for this account (DNS is handled by DuckDNS, not Terraform)"
   type        = string
   sensitive   = true
 }
 
 variable "cloudflare_account_id" {
-  description = "Cloudflare account ID that owns the zone and the R2 bucket"
-  type        = string
-}
-
-variable "cloudflare_zone_id" {
-  description = "Zone ID for the domain the app is served from"
-  type        = string
-}
-
-variable "domain_name" {
-  description = "Hostname the app is reachable at, e.g. boardgames.example.com"
+  description = "Cloudflare account ID that owns the R2 bucket"
   type        = string
 }
 

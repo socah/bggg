@@ -7,3 +7,8 @@
     # docker must exist before app_deploy tries to run 'docker compose'.
     - docker
     - app_deploy
+    # No ordering dependency on the other two roles — duckdns only talks
+    # to duckdns.org, not to anything docker/app_deploy set up. Listed
+    # last just because DNS being briefly a few minutes stale (until the
+    # timer's first tick) matters less than the app stack being deployed.
+    - duckdns

@@ -1,22 +1,9 @@
-# --- DNS: point the project's domain at the OCI VM's public IP ---
-
-resource "cloudflare_record" "app" {
-  zone_id = var.cloudflare_zone_id
-  name    = var.domain_name
-  type    = "A"
-  content = oci_core_instance.app_server.public_ip
-  ttl     = 300
-
-  # Decision: proxied = false (Cloudflare "DNS only", grey cloud) rather
-  # than true (orange cloud, Cloudflare's proxy/CDN in front of the VM).
-  # If Cloudflare proxied this record, it would terminate TLS at
-  # Cloudflare's edge and answer requests itself — but Traefik's own
-  # Let's Encrypt HTTP-01 challenge (next topic) needs the raw HTTP
-  # request to reach the VM directly and unmodified to prove ownership.
-  # Proxying and self-managed ACME don't mix without extra configuration
-  # this project doesn't need.
-  proxied = false
-}
+# --- DNS: handled by DuckDNS instead of a Terraform-managed resource ---
+# See notes/4_duckdns.md — a Terraform resource only reflects reality when
+# you run 'apply'; DuckDNS's whole point is staying correct even when the
+# VM's IP changes without anyone doing that (e.g. a reboot reassigning an
+# ephemeral IP). infra/ansible/roles/duckdns/ owns this instead, via a
+# systemd timer running directly on the VM.
 
 # --- R2: the bucket 3_r2_uploads' application code already assumes exists ---
 

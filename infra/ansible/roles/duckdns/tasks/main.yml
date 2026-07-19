@@ -1,0 +1,59 @@
+---
+- name: Create the duckdns directory
+  file:
+    path: /opt/duckdns
+    state: directory
+    mode: "0700"
+
+# no_log: true keeps duckdns_token out of Ansible's own console output and
+# logs — 'template' would otherwise print a diff of the rendered file
+# (including the token) the first time it's created or changed. mode
+# "0700" means only root can even read the file afterwards; same reasoning
+# as app_deploy/tasks/main.yml's no_log on the DB password task, applied to
+# a secret that (unlike that one) can't just be regenerated on every run.
+- name: Render the DuckDNS update script
+  template:
+    src: duck.sh.j2
+    dest: /opt/duckdns/duck.sh
+    mode: "0700"
+  no_log: true
+
+- name: Install the duckdns systemd service (what to run)
+  copy:
+    dest: /etc/systemd/system/duckdns.service
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Update DuckDNS with this VM's current public IP
+      [Service]
+      Type=oneshot
+      ExecStart=/opt/duckdns/duck.sh
+
+- name: Install the duckdns systemd timer (when to run it)
+  copy:
+    dest: /etc/systemd/system/duckdns.timer
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Run duckdns.service on a schedule
+      [Timer]
+      # Near-immediate first run after this timer is (re)started, so a
+      # fresh 'ansible-playbook' run has an observable effect right away
+      # rather than waiting on OnUnitActiveSec's first interval.
+      OnActiveSec=30s
+      # DuckDNS's own documented recommendation: check in every 5 minutes.
+      OnUnitActiveSec=5min
+      [Install]
+      WantedBy=timers.target
+
+- name: Reload systemd so it notices the new/changed unit files
+  systemd:
+    daemon_reload: true
+
+# Enable/start the .timer, never the .service directly — the service is
+# Type=oneshot (runs once and exits), the timer is what makes it repeat.
+- name: Enable and start the duckdns timer
+  systemd:
+    name: duckdns.timer
+    enabled: true
+    state: started

@@ -1,0 +1,8 @@
+#!/bin/sh
+# {{ ansible_managed }}
+# DuckDNS's own documented update call — 'ip=' left blank means DuckDNS
+# infers the IP from the address this request actually arrives from,
+# rather than trusting a value we send (the calling connection itself is
+# the proof of "this is the box's current IP").
+echo url="https://www.duckdns.org/update?domains={{ duckdns_domain }}&token={{ duckdns_token }}&ip=" \
+  | curl -k -o /opt/duckdns/duck.log -K -

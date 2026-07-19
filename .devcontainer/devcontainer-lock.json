@@ -4,6 +4,11 @@
       "version": "4.0.0",
       "resolved": "ghcr.io/devcontainers/features/docker-in-docker@sha256:4fa87399214366e320d489991769c4f3f461e1ffe461f54eea78a41b34945bb5",
       "integrity": "sha256:4fa87399214366e320d489991769c4f3f461e1ffe461f54eea78a41b34945bb5"
+    },
+    "ghcr.io/devcontainers/features/terraform:1": {
+      "version": "1.4.4",
+      "resolved": "ghcr.io/devcontainers/features/terraform@sha256:c6a4ed166fb749670db856c549f8858037c0af9ab3aacaf85fcb8634fadf6b05",
+      "integrity": "sha256:c6a4ed166fb749670db856c549f8858037c0af9ab3aacaf85fcb8634fadf6b05"
     }
   }
 }

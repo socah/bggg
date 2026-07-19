@@ -1,0 +1,12 @@
+---
+# Non-secret: the subdomain part only, e.g. "bggg" for bggg.duckdns.org.
+# Must match DOMAIN_NAME in the server's .env (see .env.example's comment).
+duckdns_domain: bggg
+
+# Deliberately no default here. duckdns_token is a long-lived credential —
+# unlike bootstrap_db_password in app_deploy/tasks/main.yml, it can't just
+# be regenerated fresh on every run, so it can't live in a committed
+# defaults file either. Pass it at run time instead:
+#   ansible-playbook -i inventory.ini playbook.yml -e duckdns_token="$DUCKDNS_TOKEN"
+# Same "lives in the operator's shell, never in git" pattern as
+# SSH_KEY_PATH in generate_inventory.sh.

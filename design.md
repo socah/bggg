@@ -559,10 +559,15 @@ Used for:
 * Networking
 * Firewall rules
 * Public IPs
-* DNS records
+* Cloudflare R2 bucket (object storage)
 * Cloud infrastructure provisioning
 
 Terraform should NOT manage application deployment.
+
+DNS is handled by DuckDNS instead of a Terraform-managed record — a systemd
+timer (installed by Ansible) runs on the VM itself and periodically updates
+DuckDNS with the VM's current IP, so DNS stays correct even if the IP
+changes without anyone running `terraform apply`.
 
 Application deployment remains container-based.
 

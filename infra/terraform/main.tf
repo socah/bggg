@@ -88,13 +88,13 @@ resource "oci_core_instance" "app_server" {
   display_name        = "bggg-app-server"
 
   # VM.Standard.A1.Flex (Ampere ARM) is the shape Oracle's Always Free tier
-  # covers up to 4 OCPUs / 24GB RAM total — using it is what keeps this
+  # covers up to 2 OCPUs / 12GB RAM total — using it is what keeps this
   # instance inside the free tier.
   shape = "VM.Standard.A1.Flex"
 
   shape_config {
-    ocpus         = 4
-    memory_in_gbs = 24
+    ocpus         = 2
+    memory_in_gbs = 12
   }
 
   create_vnic_details {
