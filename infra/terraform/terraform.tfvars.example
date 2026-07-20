@@ -10,5 +10,7 @@ oci_region               = "eu-milan-1"
 oci_compartment_id       = "ocid1.compartment.oc1..xxxxxxx"
 oci_availability_domain  = "RzWg:EU-MILAN-1-AD-1"
 oci_image_id             = "ocid1.image.oc1..xxxxxxx"
+boot_volume_size_in_gbs  = 150
 ssh_public_key           = "ssh-ed25519 AAAA... you@yourmachine"
 cloudflare_api_token     = "your-cloudflare-api-token"
+cloudflare_account_id    = ""

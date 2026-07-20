@@ -38,6 +38,12 @@ variable "oci_image_id" {
   type        = string
 }
 
+variable "boot_volume_size_in_gbs" {
+  description = "Size of the boot volume in GBs"
+  type        = number
+  default     = 50
+}
+
 variable "ssh_public_key" {
   description = "Public key injected into the VM's authorized_keys at boot; Ansible connects with the matching private key"
   type        = string

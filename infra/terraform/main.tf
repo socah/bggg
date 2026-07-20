@@ -25,6 +25,14 @@ provider "oci" {
   fingerprint      = var.oci_fingerprint
   private_key_path = var.oci_private_key_path
   region           = var.oci_region
+
+  # How long the provider keeps retrying an API call it considers
+  # retryable before giving up. Doesn't guarantee "out of host capacity"
+  # errors get retried (that's the provider's internal classification,
+  # not something this setting controls directly) but there's no downside
+  # to raising it — retry.sh below is what actually re-attempts capacity
+  # errors specifically.
+  retry_duration_seconds = 1800
 }
 
 provider "cloudflare" {
@@ -65,6 +73,20 @@ resource "oci_core_route_table" "main" {
   }
 }
 
+resource "oci_core_default_security_list" "empty" {
+  manage_default_resource_id = oci_core_vcn.main.default_security_list_id
+  compartment_id             = var.oci_compartment_id
+  display_name               = "bggg-default-empty"
+
+  # No ingress/egress rule blocks — OCI requires every subnet to reference
+  # at least one security list, but this one is intentionally left with
+  # zero rules so it never actually permits anything. The NSG (nsg.tf)
+  # remains the ONLY thing filtering traffic. Two overlapping firewall
+  # mechanisms (security list + NSG) both actively filtering the same
+  # subnet is a classic source of "why is this port blocked, I opened it
+  # in the NSG" confusion — one mechanism, one place to look.
+}
+
 resource "oci_core_subnet" "main" {
   compartment_id = var.oci_compartment_id
   vcn_id         = oci_core_vcn.main.id
@@ -72,12 +94,7 @@ resource "oci_core_subnet" "main" {
   display_name   = "bggg-subnet"
   route_table_id = oci_core_route_table.main.id
 
-  # Decision: leave the subnet's own security_list_ids empty so the NSG
-  # (nsg.tf) is the ONLY thing filtering traffic. Two overlapping firewall
-  # mechanisms (security list + NSG) both attached to the same subnet is a
-  # classic source of "why is this port blocked, I opened it in the NSG"
-  # confusion — one mechanism, one place to look.
-  security_list_ids = []
+  security_list_ids = [oci_core_default_security_list.empty.id]
 }
 
 # --- Compute: the free-tier VM ---
@@ -109,6 +126,7 @@ resource "oci_core_instance" "app_server" {
   source_details {
     source_type = "image"
     source_id   = var.oci_image_id
+    boot_volume_size_in_gbs = var.boot_volume_size_in_gbs 
   }
 
   metadata = {

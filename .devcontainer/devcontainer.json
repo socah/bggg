@@ -13,7 +13,8 @@
   "features": {
     // set "moby" to false because image is based on Debian Trixie which does not support moby
     "ghcr.io/devcontainers/features/docker-in-docker:4": { "moby": false },
-    "ghcr.io/devcontainers/features/terraform:1": {}
+    "ghcr.io/devcontainers/features/terraform:1": {},
+    "ghcr.io/sliekens/devcontainer-features/ansible:1": {}
   },
 
   // Extensions installed inside the container, not on the host.
