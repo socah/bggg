@@ -1,6 +1,16 @@
 # Copy to terraform.tfvars (git-ignored) and fill in real values.
 # Same convention as .env.example at the repo root: this file documents
 # variable names, the real file never gets committed.
+#
+# NOT covered by this file: the R2 remote backend (backend.tf) needs three
+# environment variables, never written to any file, because backend blocks
+# can't read .tfvars at all:
+#   AWS_ENDPOINT_URL_S3   = https://<cloudflare_account_id>.r2.cloudflarestorage.com
+#   AWS_ACCESS_KEY_ID     = <R2 Access Key ID>
+#   AWS_SECRET_ACCESS_KEY = <R2 Secret Access Key>
+# The last two are an R2-scoped Access Key ID/Secret from the Cloudflare
+# dashboard (R2 -> Manage API tokens) — NOT the same credential as
+# cloudflare_api_token below.
 
 oci_tenancy_ocid        = "ocid1.tenancy.oc1..xxxxxxx"
 oci_user_ocid            = "ocid1.user.oc1..xxxxxxx"
@@ -9,7 +19,7 @@ oci_private_key_path     = "~/.oci/oci_api_key.pem"
 oci_region               = "eu-milan-1"
 oci_compartment_id       = "ocid1.compartment.oc1..xxxxxxx"
 oci_availability_domain  = "RzWg:EU-MILAN-1-AD-1"
-oci_image_id             = "ocid1.image.oc1..xxxxxxx"
+oci_image_id             = "ocid1.image.oc1.eu-milan-1.aaaaaaaaemlfjbzxgbzsgodf6rnhlkxljttw6rf7wtppp7zuv32bvvvgxxyq"
 boot_volume_size_in_gbs  = 150
 ssh_public_key           = "ssh-ed25519 AAAA... you@yourmachine"
 cloudflare_api_token     = "your-cloudflare-api-token"

@@ -1,0 +1,6 @@
+# Copy to terraform.tfvars (git-ignored) and fill in real values.
+# Reuses the same cloudflare_api_token / cloudflare_account_id you already
+# have in the main config's terraform.tfvars.
+
+cloudflare_api_token  = "your-cloudflare-api-token"
+cloudflare_account_id = ""
