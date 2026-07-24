@@ -15,6 +15,11 @@
       "resolved": "ghcr.io/devcontainers/features/terraform@sha256:c6a4ed166fb749670db856c549f8858037c0af9ab3aacaf85fcb8634fadf6b05",
       "integrity": "sha256:c6a4ed166fb749670db856c549f8858037c0af9ab3aacaf85fcb8634fadf6b05"
     },
+    "ghcr.io/skriptfabrik/devcontainer-features/infisical-cli:1": {
+      "version": "1.1.2",
+      "resolved": "ghcr.io/skriptfabrik/devcontainer-features/infisical-cli@sha256:30d903442eae96fab2e68dacafb1eeab15795b405c6790b3c2e36d336a253052",
+      "integrity": "sha256:30d903442eae96fab2e68dacafb1eeab15795b405c6790b3c2e36d336a253052"
+    },
     "ghcr.io/sliekens/devcontainer-features/ansible:1": {
       "version": "1.0.0",
       "resolved": "ghcr.io/sliekens/devcontainer-features/ansible@sha256:81cdfdddcf9238c3c6acd5974db6cb70985e21234823a3914ccea2188eeac0bc",
