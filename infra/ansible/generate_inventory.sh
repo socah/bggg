@@ -16,9 +16,19 @@ APP_SERVER_IP=$(terraform -chdir="$TERRAFORM_DIR" output -raw app_server_public_
 
 # The private key itself is never in this repo (same reasoning as
 # oci_private_key_path in infra/terraform/variables.tf) — it lives on
-# whoever's machine runs this script, so it's read from an env var rather
-# than a path guessed on their behalf.
+# whoever's machine runs this script, so it's read from an env var (set
+# alongside TF_VAR_OCI_PRIVATE_KEY_PATH in Infisical's /ENV_VARS and exported
+# by infra/scripts/import-secrets.sh) rather than a path guessed on their behalf.
 SSH_KEY_PATH="${SSH_KEY_PATH:?Set SSH_KEY_PATH to the private key matching var.ssh_public_key}"
+
+# infisical's dotenv-export quotes values, so a literal '~/...' never gets
+# shell tilde-expansion on the way in (same issue as
+# TF_VAR_OCI_PRIVATE_KEY_PATH in import-secrets.sh) — expand it here. '/bin/sh'
+# has no ${VAR/#pattern/repl}, so this uses a POSIX case match instead.
+case "$SSH_KEY_PATH" in
+  "~/"*) SSH_KEY_PATH="$HOME/${SSH_KEY_PATH#"~/"}" ;;
+  "~") SSH_KEY_PATH="$HOME" ;;
+esac
 
 # 'ubuntu' matches the default login user baked into the Ubuntu 22.04
 # image referenced by var.oci_image_id in infra/terraform/variables.tf.

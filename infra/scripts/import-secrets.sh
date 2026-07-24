@@ -9,8 +9,11 @@
 #                                (that path is itself one of the ENV_VARS secrets,
 #                                 matching infra/terraform/variables.tf's
 #                                 oci_private_key_path)
-#   /FILEABLES/SSH_PRIVATE_KEY  written to ~/.ssh/id_ed25519, chmod 600, loaded
+#   /FILEABLES/SSH_PRIVATE_KEY  written to $SSH_KEY_PATH, chmod 600, loaded
 #                                into the running ssh-agent if there is one
+#                                (that path is itself one of the ENV_VARS secrets,
+#                                 matching infra/ansible/generate_inventory.sh's
+#                                 SSH_KEY_PATH)
 #
 # Optional env vars to set before sourcing:
 #   INFISICAL_ENV                 environment slug to read from (default: dev)
@@ -85,12 +88,20 @@ bggg_import_secrets() {
     > "$TF_VAR_OCI_PRIVATE_KEY_PATH" || { echo "Failed to fetch OCI_PRIVATE_KEY" >&2; return 1; }
   chmod 600 "$TF_VAR_OCI_PRIVATE_KEY_PATH"
 
-  local ssh_key_path="$HOME/.ssh/id_ed25519"
-  mkdir -p "$HOME/.ssh"
-  chmod 700 "$HOME/.ssh"
-  # Back up rather than silently clobber: this is the fixed path ssh checks
-  # by default, so if a real key is already sitting here this script has no
-  # business overwriting it without a trace.
+  if [ -z "${SSH_KEY_PATH:-}" ]; then
+    echo "SSH_KEY_PATH was not set by /ENV_VARS — cannot place SSH_PRIVATE_KEY" >&2
+    return 1
+  fi
+  # Same infisical dotenv-export quoting issue as TF_VAR_OCI_PRIVATE_KEY_PATH
+  # above: a literal '~/...' value never gets shell tilde-expansion on eval.
+  SSH_KEY_PATH="${SSH_KEY_PATH/#\~/$HOME}"
+  export SSH_KEY_PATH
+
+  local ssh_key_path="$SSH_KEY_PATH"
+  mkdir -p "$(dirname "$ssh_key_path")"
+  chmod 700 "$(dirname "$ssh_key_path")"
+  # Back up rather than silently clobber: if a real key is already sitting at
+  # this path this script has no business overwriting it without a trace.
   if [ -f "$ssh_key_path" ]; then
     cp "$ssh_key_path" "$ssh_key_path.bak-$(date +%s)"
     echo "Existing $ssh_key_path backed up."
@@ -107,7 +118,7 @@ bggg_import_secrets() {
     ssh-add "$ssh_key_path" 2>/dev/null || true
   fi
 
-  echo "Done. TF_VAR_OCI_PRIVATE_KEY_PATH, the OCI key file, and the SSH key are ready for this shell session."
+  echo "Done. TF_VAR_OCI_PRIVATE_KEY_PATH, SSH_KEY_PATH, and both key files are ready for this shell session."
 }
 
 if bggg_import_secrets; then
