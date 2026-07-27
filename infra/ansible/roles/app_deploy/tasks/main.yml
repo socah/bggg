@@ -7,16 +7,108 @@
     name: git
     state: present
 
+- name: Ensure /root/.ssh exists
+  file:
+    path: "{{ github_deploy_key_dest | dirname }}"
+    state: directory
+    mode: "0700"
+
+# The private key itself is never in this repo — same pattern as
+# SSH_KEY_PATH/TF_VAR_oci_private_key_path: it lives in Infisical and is
+# fetched onto the operator's machine by infra/scripts/import-secrets.sh
+# (as GITHUB_DEPLOY_KEY_PATH), then 'copy' pushes that local file over the
+# same SSH connection Ansible already has open to the server — no new
+# credential needed just to get the key onto the box.
+# no_log: true keeps the key's contents out of Ansible's console/log
+# output, same reasoning as duckdns's duckdns_token template task.
+- name: Copy the GitHub deploy key to the server
+  copy:
+    src: "{{ lookup('ansible.builtin.env', 'GITHUB_DEPLOY_KEY_PATH') }}"
+    dest: "{{ github_deploy_key_dest }}"
+    mode: "0600"
+  no_log: true
+
 - name: Clone or update the application repo
   git:
     repo: "{{ app_repo }}"
     dest: "{{ deploy_dir }}"
     version: "{{ app_repo_version }}"
+    key_file: "{{ github_deploy_key_dest }}"
+    # Without this, the *first* connection from this server to
+    # github.com would hang the same way the HTTPS clone did — git
+    # stopping to ask "are you sure you want to continue connecting?"
+    # with nothing there to type "yes" into. This tells the git module
+    # to add github.com's host key automatically instead of prompting.
+    accept_hostkey: true
     # A normal 'git pull' would refuse to run if the working tree had
     # local changes — force means this deploy always ends up exactly at
     # app_repo_version, discarding anything that (should never, but
     # could) have been hand-edited directly on the server.
     force: true
+
+- name: Ensure the vault config directory exists
+  file:
+    path: "{{ vault_config_dir }}"
+    state: directory
+    mode: "0700"
+
+# Not secret — an OCID and two HTTPS endpoint URLs, not credentials (see
+# infra/terraform/vault.tf's own outputs.tf comment). Read the same way
+# generate_inventory.sh already reads app_server_public_ip: this assumes
+# 'terraform apply' has already run, exactly like that script does.
+- name: Read Vault's OCI KMS config from Terraform outputs
+  set_fact:
+    vault_kms_key_id: "{{ lookup('ansible.builtin.pipe', 'terraform -chdir=' + playbook_dir + '/../terraform output -raw vault_unseal_key_id') }}"
+    vault_kms_crypto_endpoint: "{{ lookup('ansible.builtin.pipe', 'terraform -chdir=' + playbook_dir + '/../terraform output -raw vault_kms_crypto_endpoint') }}"
+    vault_kms_management_endpoint: "{{ lookup('ansible.builtin.pipe', 'terraform -chdir=' + playbook_dir + '/../terraform output -raw vault_kms_management_endpoint') }}"
+
+- name: Render the Vault server config
+  template:
+    # Not under this role's own templates/ dir: infra/vault/ is shared,
+    # non-role-specific config (agent.hcl, the policies, the bootstrap
+    # scripts all live there too) — same 'playbook_dir'-relative pattern
+    # already used above for reading Terraform's outputs.
+    src: "{{ playbook_dir }}/../vault/vault-server-prod.hcl.j2"
+    dest: "{{ vault_config_dir }}/vault-server.hcl"
+    mode: "0600"
+
+# Conditional, not required: on a fresh server these four are still empty
+# (their defaults/main.yml default) because Vault hasn't been initialized
+# yet — see defaults/main.yml's comment on why that's expected, and
+# infra/vault/bootstrap-prod-init.sh for the one-time step that produces
+# real values. Writing empty files here would be worse than not writing
+# them at all: vault-agent/vault-bootstrap would still fail to log in
+# either way, but an empty *file* existing could be mistaken for "this was
+# already set up" on a later look.
+- name: Deliver Vault Agent's AppRole credentials
+  when: vault_agent_role_id | length > 0 and vault_agent_secret_id | length > 0
+  no_log: true
+  block:
+    - name: Write vault-agent's role_id
+      copy:
+        content: "{{ vault_agent_role_id }}"
+        dest: "{{ vault_config_dir }}/vault-agent-role_id"
+        mode: "0600"
+    - name: Write vault-agent's secret_id
+      copy:
+        content: "{{ vault_agent_secret_id }}"
+        dest: "{{ vault_config_dir }}/vault-agent-secret_id"
+        mode: "0600"
+
+- name: Deliver Vault Bootstrap's AppRole credentials
+  when: vault_bootstrap_role_id | length > 0 and vault_bootstrap_secret_id | length > 0
+  no_log: true
+  block:
+    - name: Write vault-bootstrap's role_id
+      copy:
+        content: "{{ vault_bootstrap_role_id }}"
+        dest: "{{ vault_config_dir }}/vault-bootstrap-role_id"
+        mode: "0600"
+    - name: Write vault-bootstrap's secret_id
+      copy:
+        content: "{{ vault_bootstrap_secret_id }}"
+        dest: "{{ vault_config_dir }}/vault-bootstrap-secret_id"
+        mode: "0600"
 
 # Decision: generate a fresh random password on every single deploy run
 # rather than checking first whether one's needed. Because: infra/vault/
@@ -37,7 +129,7 @@
     bootstrap_db_password: "{{ lookup('ansible.builtin.password', '/dev/null', length=32, chars=['ascii_letters', 'digits']) }}"
 
 - name: Build and start the stack
-  command: docker compose -f docker-compose.yml up -d --build
+  command: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
   args:
     chdir: "{{ deploy_dir }}"
   environment:
@@ -48,4 +140,29 @@
   # command — they're never written to a file on the server, so
   # bootstrap_db_password doesn't linger anywhere after 'docker compose
   # up' returns, whether or not bootstrap.sh actually used it.
+  no_log: true
+
+# Compose only recreates a container when its OWN declared config changes
+# (image, command, environment, mount specs) — it has no way to notice
+# that the *contents* of a bind-mounted host file changed underneath an
+# otherwise-identical service definition. Without this, delivering real
+# AppRole credentials for the first time (or rotating them later) would
+# silently have no effect: 'vault-bootstrap'/'vault-agent' would keep
+# running whatever container instance was already up, still holding
+# whatever they read at their last start. Safe to run on every deploy
+# regardless: both scripts are already idempotent (see bootstrap-prod.sh's
+# own guard), so recreating them when nothing actually changed just
+# reruns a cheap no-op.
+- name: Force vault-bootstrap and vault-agent to pick up current credential files
+  command: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --force-recreate vault-bootstrap vault-agent
+  args:
+    chdir: "{{ deploy_dir }}"
+  environment:
+    # This, not the main 'up' task above, is the invocation that actually
+    # matters for DB_PASSWORD: 'up' alone wouldn't recreate vault-bootstrap
+    # at all if its service config hasn't changed, so a freshly-generated
+    # password from the main task would never reach a running container —
+    # this --force-recreate is what actually delivers it, the first time
+    # vault-bootstrap has real AppRole credentials to act on it with.
+    DB_PASSWORD: "{{ bootstrap_db_password }}"
   no_log: true

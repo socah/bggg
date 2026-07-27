@@ -1,6 +1,6 @@
 {
   "current_phase": 4,
-  "current_topic": null,
+  "current_topic": "4_environments",
   "completed": [
     "0_repo_structure",
     "0_devcontainer",
@@ -29,7 +29,7 @@
     "4_traefik",
     "4_github_actions"
   ],
-  "in_progress": [],
+  "in_progress": ["4_environments"],
   "notes_generated": [
     "notes/0_repo_structure.md",
     "notes/0_devcontainer.md",
@@ -56,12 +56,15 @@
     "notes/4_terraform.md",
     "notes/4_ansible.md",
     "notes/4_traefik.md",
-    "notes/4_github_actions.md"
+    "notes/4_github_actions.md",
+    "notes/4_environments.md"
   ],
-  "last_session": "2026-07-18",
+  "last_session": "2026-07-26",
   "detours": [
     "During 4_ansible: added Dockerfiles for apps/api and apps/web (containerizing them wasn't done in any prior topic) and api/web service entries in docker-compose.yml, so the app_deploy role would have something real to deploy.",
     "During 4_ansible: fixed several pre-existing bugs unrelated to the roadmap, surfaced while verifying builds/containers actually work — typescript 7.x incompatibility with @nestjs/cli/ts-node/ts-jest (reverted to 6.0.3, added a Dependabot ignore for the major bump), a Turbopack/next-pwa incompatibility in apps/web, an incomplete Tailwind v3->v4 migration, and a TypeORM DataTypeNotSupportedError on nullable string columns (Invite.usedBy, PlaySessionProposal.hostId, PlaySession.proposalId) that blocked the API from ever booting against a real database.",
-    "2026-07-24, unrelated to any roadmap topic: added infra/scripts/import-secrets.sh, a personal dev-machine bootstrap script (not part of the app) that pulls secrets from the user's own Infisical account onto a fresh devcontainer/instance — exports an ENV_VARS folder as shell env vars, writes FILEABLES/OCI_PRIVATE_KEY to $TF_VAR_OCI_PRIVATE_KEY_PATH (matching infra/terraform/variables.tf's oci_private_key_path), and writes FILEABLES/SSH_PRIVATE_KEY to ~/.ssh/id_ed25519 for connecting to the OCI VM. Must be sourced, not executed, so the exported vars/SSH key persist in the caller's shell rather than a subshell. Also added the ghcr.io/skriptfabrik/devcontainer-features/infisical-cli feature to .devcontainer/devcontainer.json so the CLI is present with nothing installed by hand, and confirmed .infisical.json (from 'infisical init', holds only a non-secret project id) is fine to commit — user's call, since it isn't gitignored and nothing in it is sensitive."
+    "2026-07-24, unrelated to any roadmap topic: added infra/scripts/import-secrets.sh, a personal dev-machine bootstrap script (not part of the app) that pulls secrets from the user's own Infisical account onto a fresh devcontainer/instance — exports an ENV_VARS folder as shell env vars, writes FILEABLES/OCI_PRIVATE_KEY to $TF_VAR_OCI_PRIVATE_KEY_PATH (matching infra/terraform/variables.tf's oci_private_key_path), and writes FILEABLES/SSH_PRIVATE_KEY to ~/.ssh/id_ed25519 for connecting to the OCI VM. Must be sourced, not executed, so the exported vars/SSH key persist in the caller's shell rather than a subshell. Also added the ghcr.io/skriptfabrik/devcontainer-features/infisical-cli feature to .devcontainer/devcontainer.json so the CLI is present with nothing installed by hand, and confirmed .infisical.json (from 'infisical init', holds only a non-secret project id) is fine to commit — user's call, since it isn't gitignored and nothing in it is sensitive.",
+    "2026-07-26, unrelated to any roadmap topic: fixed infra/scripts/import-secrets.sh always triggering an interactive 'infisical login' even when a cached session was still valid — it now checks 'infisical user get token --plain' (stdin pinned to /dev/null, since that command tries to launch its own login flow on a session miss rather than just failing) and only falls through to 'infisical login' if that check fails.",
+    "2026-07-26, unrelated to any roadmap topic: fixed 'ansible-playbook' hanging at the app_deploy role's git-clone task — app_repo (https://github.com/socah/bggg.git, a private repo) had no credentials, so git blocked waiting for a username with no terminal to type into. Switched app_repo to the SSH form (git@github.com:socah/bggg.git) authenticated via a new read-only GitHub deploy key: added GITHUB_DEPLOY_KEY handling to import-secrets.sh (same FILEABLES pattern as OCI/SSH keys, written to $GITHUB_DEPLOY_KEY_PATH), added a 'Copy the GitHub deploy key to the server' task and github_deploy_key_dest default to the app_deploy role, and set key_file/accept_hostkey: true on the git task (accept_hostkey also avoids a second hang: the first SSH connection to github.com asking to confirm its host key). Named GITHUB_DEPLOY_KEY rather than the initial APP_DEPLOY_KEY per user feedback, to match the existing PROVIDER_ARTIFACT convention (OCI_PRIVATE_KEY, SSH_PRIVATE_KEY) and distinguish it from SSH_PRIVATE_KEY (a different purpose: connecting to the VM, not to GitHub). Still needs: the public half of the generated keypair added to GitHub as a read-only deploy key on socah/bggg, and the private key + GITHUB_DEPLOY_KEY_PATH stored in Infisical — both require the user's own GitHub/Infisical access, not something achievable from this environment (no gh CLI/token here)."
   ]
 }

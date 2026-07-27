@@ -1,0 +1,49 @@
+# Vault SERVER config for production — NOT Vault Agent's config (that's
+# agent-prod.hcl, a separate process this same image also runs, in a
+# separate container). Dev mode needs no file like this at all —
+# VAULT_DEV_ROOT_TOKEN_ID alone tells the image to auto-launch
+# 'vault server -dev' with everything in memory. Real 'vault server' has no
+# such shortcut: storage and how to reach it must be spelled out explicitly.
+#
+# This file is a Jinja2 template, not a static file committed as-is — see
+# infra/ansible/roles/app_deploy/tasks/main.yml's 'Render the Vault server
+# config' task. The three seal values below only exist after
+# 'terraform apply' (infra/terraform/vault.tf) has actually run, so they
+# can't be hardcoded here the way agent.hcl's static values can.
+
+storage "raft" {
+  path    = "/vault/data"
+  node_id = "bggg-vault-node-1"
+}
+
+listener "tcp" {
+  address = "0.0.0.0:8200"
+  # Decision: TLS disabled at Vault's own listener, not left as a gap by
+  # omission. Because: nothing outside this Docker network ever talks to
+  # Vault directly — no 'ports:' entry publishes 8200 anywhere (same
+  # internal-only reasoning as 'db'), so the only callers are vault-agent
+  # and vault-bootstrap, sibling containers on the same isolated bridge
+  # network. TLS between containers on a network nothing external can join
+  # adds encryption overhead without a real threat here for it to defend
+  # against.
+  tls_disable = true
+}
+
+# Raft needs to know its own address to talk to other raft peers. With a
+# single node this is purely self-referential, but the stanza is required
+# regardless of cluster size — Vault won't start without it.
+api_addr     = "http://vault:8200"
+cluster_addr = "http://vault:8201"
+
+seal "ocikms" {
+  key_id              = "{{ vault_kms_key_id }}"
+  crypto_endpoint     = "{{ vault_kms_crypto_endpoint }}"
+  management_endpoint = "{{ vault_kms_management_endpoint }}"
+  # false (the default): instance principal auth, not an OCI API key
+  # sitting in this file. infra/terraform/vault.tf's dynamic group + policy
+  # are what actually authorize this VM to use the key — nothing here
+  # needs to hold a credential at all.
+  auth_type_api_key = false
+}
+
+ui = true

@@ -3,7 +3,46 @@
 # secrets (the DB password, Keycloak client secret) never live here —
 # see tasks/main.yml for how the DB password is handled.
 deploy_dir: /opt/bggg
-app_repo: https://github.com/socah/bggg.git
+# SSH, not HTTPS: this repo is private, and an HTTPS clone with no
+# credentials on the box just sits there — git prompts for a username
+# with no terminal to type it into, so 'ansible-playbook' looks hung
+# forever instead of failing fast. A deploy key over SSH sidesteps that
+# and (unlike a personal access token) is scoped to read-only access to
+# this one repo, nothing else on the GitHub account.
+app_repo: git@github.com:socah/bggg.git
 app_repo_version: main
+# Where the deploy key (fetched from Infisical, see tasks/main.yml) lands
+# on the server. Not secret itself — just a path — so it's fine here
+# alongside the rest of the non-secret config.
+github_deploy_key_dest: /root/.ssh/bggg_deploy_key
 db_user: bggg
 db_name: bggg
+
+# Where prod Vault's config and the AppRole credential files (below) land
+# on the server. Not secret themselves — just paths — outside deploy_dir
+# on purpose: 'app_deploy's git task force-syncs the checkout on every
+# deploy, so anything meant to persist across deploys can't live inside it
+# (same reasoning as github_deploy_key_dest above).
+vault_config_dir: /etc/bggg
+
+# Deliberately no defaults for these four — same "lives in the operator's
+# shell, never in git" pattern as duckdns_token in the duckdns role's own
+# defaults/main.yml. Pass at run time once infra/vault/bootstrap-prod-init.sh
+# has been run (a one-time, human-triggered step — see that script's own
+# header comment for why it's not something Ansible does automatically):
+#   ansible-playbook -i inventory.ini playbook.yml \
+#     -e vault_agent_role_id="$VAULT_AGENT_ROLE_ID" \
+#     -e vault_agent_secret_id="$VAULT_AGENT_SECRET_ID" \
+#     -e vault_bootstrap_role_id="$VAULT_BOOTSTRAP_ROLE_ID" \
+#     -e vault_bootstrap_secret_id="$VAULT_BOOTSTRAP_SECRET_ID"
+# On the very first deploy to a fresh server, none of these exist yet —
+# Vault itself hasn't even been initialized. tasks/main.yml skips
+# delivering them when they're absent rather than failing the whole
+# playbook; vault-agent/vault-bootstrap/db simply won't come up healthy
+# until bootstrap-prod-init.sh has run and this command is re-run with
+# real values. Everything else in the stack (keycloak, api, web, traefik)
+# comes up fine in the meantime.
+vault_agent_role_id: ""
+vault_agent_secret_id: ""
+vault_bootstrap_role_id: ""
+vault_bootstrap_secret_id: ""

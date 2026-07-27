@@ -1,0 +1,76 @@
+services:
+
+  keycloak:
+    # 'start' (not 'start-dev'): production hardening — hostname/HTTPS
+    # checks that start-dev deliberately disables are enforced here.
+    # '--import-realm' is identical to dev's; only the command's dev/prod
+    # half differs, so the whole string still has to live here rather than
+    # partially in docker-compose.yml (command: doesn't merge key-by-key
+    # the way environment:/labels: do — see notes/4_environments.md).
+    command: start --import-realm
+    environment:
+      # 'start' mode refuses to boot without knowing its own public
+      # hostname — dev's 'start-dev' doesn't enforce this, which is why it
+      # isn't set in docker-compose.dev.yml at all.
+      KC_HOSTNAME: https://${DOMAIN_NAME}
+      # Traefik terminates TLS before traffic ever reaches this container
+      # (see docker-compose.yml's keycloak Traefik labels) — the hop from
+      # Traefik to keycloak inside the Docker network is plain HTTP, so
+      # Keycloak needs telling that's expected, not a sign something's
+      # misconfigured.
+      KC_HTTP_ENABLED: "true"
+      # Makes Keycloak trust Traefik's X-Forwarded-* headers when building
+      # redirect URLs — without this, 'start' mode would generate login
+      # redirects pointing at the container's own plain-HTTP view of
+      # itself instead of https://${DOMAIN_NAME}/auth/....
+      KC_PROXY_HEADERS: xforwarded
+    # No 'ports:' — nothing outside this Docker network reaches Keycloak
+    # directly in prod. The browser reaches it through Traefik's '/auth'
+    # route (docker-compose.yml's labels), which is also why no relative
+    # path config is needed here: Traefik's StripPrefix middleware already
+    # makes Keycloak invisible to the '/auth' segment entirely.
+
+  vault:
+    # Real 'vault server', not dev mode — see infra/vault/vault-server-prod.hcl.j2
+    # for the storage/listener/seal config this points at. Ansible renders
+    # that template to /etc/bggg/vault-server.hcl (outside the git
+    # checkout, since 'app_deploy's git task force-syncs the checkout on
+    # every deploy — anything meant to persist across deploys, generated
+    # or secret, lives outside it; same reasoning as the deploy key's
+    # /root/.ssh destination).
+    volumes:
+      - /etc/bggg/vault-server.hcl:/vault/config/vault-server.hcl:ro
+      - vault_data:/vault/data
+    command: ["server", "-config=/vault/config/vault-server.hcl"]
+    # No 'ports:' either — same internal-only reasoning as dev's exposed
+    # 8200 is purely a dev convenience; nothing in prod needs it published.
+
+  vault-bootstrap:
+    volumes:
+      - ./infra/vault/bootstrap-prod.sh:/bootstrap.sh:ro
+      # Delivered by Ansible from Infisical-sourced vars (see tasks/main.yml) —
+      # generated once by infra/vault/bootstrap-prod-init.sh against the
+      # 'vault-bootstrap' AppRole role (policies/vault-bootstrap.hcl).
+      - /etc/bggg/vault-bootstrap-role_id:/vault/approle/role_id:ro
+      - /etc/bggg/vault-bootstrap-secret_id:/vault/approle/secret_id:ro
+    entrypoint: ["sh", "/bootstrap.sh"]
+
+  vault-agent:
+    volumes:
+      - ./infra/vault/agent-prod.hcl:/vault/config/agent-prod.hcl:ro
+      # Delivered by Ansible the same way as vault-bootstrap's pair above,
+      # against the 'vault-agent' AppRole role (policies/vault-agent.hcl) —
+      # a different role from vault-bootstrap's, scoped read-only.
+      - /etc/bggg/vault-agent-role_id:/vault/approle/role_id:ro
+      - /etc/bggg/vault-agent-secret_id:/vault/approle/secret_id:ro
+    # Runs 'vault agent' directly — no bridging shell script needed the
+    # way dev's agent-entrypoint.sh bridges a plain env var into a token
+    # file. AppRole's 'approle' auto_auth method (agent-prod.hcl) reads
+    # role_id/secret_id straight from the files above.
+    entrypoint: ["vault", "agent", "-config=/vault/config/agent-prod.hcl"]
+
+volumes:
+  # Raft's on-disk storage — this is Vault's actual database in prod
+  # (dev mode keeps everything in memory instead, hence no equivalent
+  # volume in docker-compose.dev.yml).
+  vault_data:

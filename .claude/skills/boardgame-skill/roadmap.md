@@ -224,6 +224,12 @@ Topics:
   secops: true
   depends_on: [0_docker_compose_dev]
 
+- id: `4_environments`
+  label: Environment strategy — dev/staging/prod Docker Compose overlays, config promotion, environment parity
+  rewrite: true
+  secops: true
+  depends_on: [4_ansible, 3_vault]
+
 ---
 
 ## Phase 5 — Operations & SecOps

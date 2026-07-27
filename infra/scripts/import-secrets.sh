@@ -5,7 +5,7 @@
 #
 # Layout this script expects in Infisical (folder -> handling):
 #   /ENV_VARS/*                 exported as environment variables in this shell
-#   /FILEABLES/OCI_PRIVATE_KEY  written to $TF_VAR_OCI_PRIVATE_KEY_PATH
+#   /FILEABLES/OCI_PRIVATE_KEY  written to $TF_VAR_oci_private_key_path
 #                                (that path is itself one of the ENV_VARS secrets,
 #                                 matching infra/terraform/variables.tf's
 #                                 oci_private_key_path)
@@ -14,6 +14,14 @@
 #                                (that path is itself one of the ENV_VARS secrets,
 #                                 matching infra/ansible/generate_inventory.sh's
 #                                 SSH_KEY_PATH)
+#   /FILEABLES/GITHUB_DEPLOY_KEY   written to $GITHUB_DEPLOY_KEY_PATH, chmod 600
+#                                (that path is itself one of the ENV_VARS secrets;
+#                                 this key is a read-only GitHub deploy key, not
+#                                 loaded into ssh-agent — Ansible's app_deploy role
+#                                 copies the file itself to the server and passes
+#                                 it to the 'git' module's key_file, matching
+#                                 infra/ansible/roles/app_deploy/defaults/main.yml's
+#                                 github_deploy_key_dest)
 #
 # Optional env vars to set before sourcing:
 #   INFISICAL_ENV                 environment slug to read from (default: dev)
@@ -25,7 +33,7 @@
 #                                   browser flow
 
 # Must be sourced, not executed: everything below exports variables into the
-# calling shell (TF_VAR_OCI_PRIVATE_KEY_PATH, etc.) and loads the SSH key into
+# calling shell (TF_VAR_oci_private_key_path, etc.) and loads the SSH key into
 # that shell's ssh-agent. Run as './import-secrets.sh' instead, all of that
 # would land in a subshell that exits immediately, and none of it would stick.
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
@@ -58,6 +66,13 @@ bggg_import_secrets() {
       --client-secret="$INFISICAL_CLIENT_SECRET" \
       --silent --plain) || { echo "Universal Auth login failed" >&2; return 1; }
     export INFISICAL_TOKEN="$token"
+  # 'infisical user get token' surfaces a still-valid cached session (from a
+  # previous interactive login) without prompting. Its stdin is pinned to
+  # /dev/null because on a session miss it tries to launch its own login
+  # flow rather than just failing — with stdin already closed that attempt
+  # hits EOF and returns nonzero immediately instead of prompting twice.
+  elif infisical user get token --plain >/dev/null 2>&1 </dev/null; then
+    : # already logged in from a previous run; skip the browser flow
   else
     infisical login || { echo "infisical login failed" >&2; return 1; }
   fi
@@ -71,28 +86,28 @@ bggg_import_secrets() {
     || { echo "Failed to export /ENV_VARS from Infisical" >&2; return 1; }
   eval "$exports"
 
-  if [ -z "${TF_VAR_OCI_PRIVATE_KEY_PATH:-}" ]; then
-    echo "TF_VAR_OCI_PRIVATE_KEY_PATH was not set by /ENV_VARS — cannot place OCI_PRIVATE_KEY" >&2
+  if [ -z "${TF_VAR_oci_private_key_path:-}" ]; then
+    echo "TF_VAR_oci_private_key_path was not set by /ENV_VARS — cannot place OCI_PRIVATE_KEY" >&2
     return 1
   fi
 
   # 'infisical export' quotes the value (export KEY='~/.oci/...'), so the shell
   # never gets a chance to tilde-expand it on eval — expand it here instead, or
   # a literal '~' directory gets created in the current working directory.
-  TF_VAR_OCI_PRIVATE_KEY_PATH="${TF_VAR_OCI_PRIVATE_KEY_PATH/#\~/$HOME}"
-  export TF_VAR_OCI_PRIVATE_KEY_PATH
+  TF_VAR_oci_private_key_path="${TF_VAR_oci_private_key_path/#\~/$HOME}"
+  export TF_VAR_oci_private_key_path
 
-  echo "Writing OCI_PRIVATE_KEY to $TF_VAR_OCI_PRIVATE_KEY_PATH..."
-  mkdir -p "$(dirname "$TF_VAR_OCI_PRIVATE_KEY_PATH")"
+  echo "Writing OCI_PRIVATE_KEY to $TF_VAR_oci_private_key_path..."
+  mkdir -p "$(dirname "$TF_VAR_oci_private_key_path")"
   infisical secrets get OCI_PRIVATE_KEY --path=/FILEABLES --env="$env" --plain "${project_flag[@]}" \
-    > "$TF_VAR_OCI_PRIVATE_KEY_PATH" || { echo "Failed to fetch OCI_PRIVATE_KEY" >&2; return 1; }
-  chmod 600 "$TF_VAR_OCI_PRIVATE_KEY_PATH"
+    > "$TF_VAR_oci_private_key_path" || { echo "Failed to fetch OCI_PRIVATE_KEY" >&2; return 1; }
+  chmod 600 "$TF_VAR_oci_private_key_path"
 
   if [ -z "${SSH_KEY_PATH:-}" ]; then
     echo "SSH_KEY_PATH was not set by /ENV_VARS — cannot place SSH_PRIVATE_KEY" >&2
     return 1
   fi
-  # Same infisical dotenv-export quoting issue as TF_VAR_OCI_PRIVATE_KEY_PATH
+  # Same infisical dotenv-export quoting issue as TF_VAR_oci_private_key_path
   # above: a literal '~/...' value never gets shell tilde-expansion on eval.
   SSH_KEY_PATH="${SSH_KEY_PATH/#\~/$HOME}"
   export SSH_KEY_PATH
@@ -118,7 +133,31 @@ bggg_import_secrets() {
     ssh-add "$ssh_key_path" 2>/dev/null || true
   fi
 
-  echo "Done. TF_VAR_OCI_PRIVATE_KEY_PATH, SSH_KEY_PATH, and both key files are ready for this shell session."
+  if [ -z "${GITHUB_DEPLOY_KEY_PATH:-}" ]; then
+    echo "GITHUB_DEPLOY_KEY_PATH was not set by /ENV_VARS — cannot place GITHUB_DEPLOY_KEY" >&2
+    return 1
+  fi
+  # Same infisical dotenv-export quoting issue as the paths above: a literal
+  # '~/...' value never gets shell tilde-expansion on eval.
+  GITHUB_DEPLOY_KEY_PATH="${GITHUB_DEPLOY_KEY_PATH/#\~/$HOME}"
+  export GITHUB_DEPLOY_KEY_PATH
+
+  mkdir -p "$(dirname "$GITHUB_DEPLOY_KEY_PATH")"
+  chmod 700 "$(dirname "$GITHUB_DEPLOY_KEY_PATH")"
+  if [ -f "$GITHUB_DEPLOY_KEY_PATH" ]; then
+    cp "$GITHUB_DEPLOY_KEY_PATH" "$GITHUB_DEPLOY_KEY_PATH.bak-$(date +%s)"
+    echo "Existing $GITHUB_DEPLOY_KEY_PATH backed up."
+  fi
+  echo "Writing GITHUB_DEPLOY_KEY to $GITHUB_DEPLOY_KEY_PATH..."
+  infisical secrets get GITHUB_DEPLOY_KEY --path=/FILEABLES --env="$env" --plain "${project_flag[@]}" \
+    > "$GITHUB_DEPLOY_KEY_PATH" || { echo "Failed to fetch GITHUB_DEPLOY_KEY" >&2; return 1; }
+  chmod 600 "$GITHUB_DEPLOY_KEY_PATH"
+  # Not ssh-add'd into the agent: this key isn't for this shell's own SSH
+  # connections, it's read by 'ansible-playbook' (via lookup('env', ...) in
+  # app_deploy/tasks/main.yml) and copied over to the server, where it's
+  # what the server uses to authenticate to GitHub.
+
+  echo "Done. TF_VAR_oci_private_key_path, SSH_KEY_PATH, GITHUB_DEPLOY_KEY_PATH, and all three key files are ready for this shell session."
 }
 
 if bggg_import_secrets; then

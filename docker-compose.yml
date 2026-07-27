@@ -2,6 +2,14 @@ services:
 
   traefik:
     image: traefik:v3.1
+    # unless-stopped: restart automatically after a crash or a Docker
+    # daemon restart (e.g. the host rebooting) — but if a human explicitly
+    # runs 'docker compose stop', respect that and stay stopped rather than
+    # fighting it. Every long-running service below gets the same policy;
+    # nothing here had one at all before, which meant a VM reboot left the
+    # entire stack down until someone noticed and ran 'docker compose up'
+    # by hand.
+    restart: unless-stopped
     command:
       # Docker provider: routers/middlewares/services come from container
       # labels, discovered live — no static routing file to keep in sync
@@ -58,29 +66,134 @@ services:
 
   db:
     # Image tag lives here so Dependabot can track it via the standard filename.
-    # Dev-specific config (credentials, ports, volumes) is in docker-compose.dev.yml.
+    # Environment-specific config (ports) is in docker-compose.dev.yml —
+    # everything below is identical in every environment.
     image: postgres:16-alpine
+    restart: unless-stopped
+    # POSTGRES_PASSWORD replaced with the '_FILE' variant: the official
+    # postgres image's entrypoint checks for '<VAR>_FILE' first and, if
+    # set, reads the password from that path instead of the plain env var
+    # — this is Docker's general convention for file-based secrets, not
+    # something specific to Vault. POSTGRES_USER/POSTGRES_DB stay as plain
+    # vars: usernames and database names aren't secrets worth protecting
+    # the same way.
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+      POSTGRES_DB: ${DB_NAME}
+    # Named volume: Docker manages this directory.
+    # Data survives 'docker compose down' — only 'docker compose down -v' removes it.
+    # vault_secrets is mounted read-only: 'db' only ever needs to read the
+    # password file vault-agent rendered, never write to that volume.
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - vault_secrets:/run/secrets:ro
+    # Without this, 'db' could start before vault-agent has rendered
+    # db_password, and Postgres would fail its first-boot init with
+    # "no such file or directory" on POSTGRES_PASSWORD_FILE.
+    depends_on:
+      vault-agent:
+        condition: service_healthy
 
   keycloak:
-    # Same split as 'db': version-pinned tag here for Dependabot, dev-only
-    # config (admin bootstrap, ports, realm import) in docker-compose.dev.yml.
+    # Same split as 'db': version-pinned tag here for Dependabot,
+    # environment-specific config (start vs start-dev, ports, hostname/proxy
+    # settings) in docker-compose.dev.yml / docker-compose.prod.yml.
     image: quay.io/keycloak/keycloak:26.0
+    restart: unless-stopped
+    environment:
+      # Bootstrap admin account for the Keycloak admin console itself —
+      # unrelated to any application user. KC_BOOTSTRAP_ADMIN_* only takes
+      # effect on first boot, when there is no admin user yet, and works
+      # identically under 'start' and 'start-dev' — this isn't a dev-mode
+      # convenience, every environment needs an initial admin somehow.
+      # What differs by environment is the *value*: dev's .env ships a
+      # throwaway default, prod's real .env holds a generated secret —
+      # never this key existing at all.
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USER}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+    volumes:
+      # Realm export, read once at startup because of --import-realm
+      # (set per-environment alongside 'start'/'start-dev' below). Editing
+      # this file and redeploying re-applies it — no manual admin-console
+      # steps to reproduce on a fresh clone, in any environment.
+      - ./infra/keycloak/boardgame-realm.json:/opt/keycloak/data/import/boardgame-realm.json
+    labels:
+      # Same StripPrefix pattern as 'api's 'api-stripprefix' below: the
+      # browser's OIDC redirects hit Traefik at '/auth/...', Traefik
+      # strips '/auth' before forwarding, so Keycloak itself sees requests
+      # exactly as it already does in dev (no relative-path config needed
+      # inside Keycloak, and 'api's KEYCLOAK_URL below — a direct,
+      # Traefik-bypassing container-to-container call — is unaffected
+      # either way).
+      - traefik.enable=true
+      - traefik.http.middlewares.auth-stripprefix.stripprefix.prefixes=/auth
+      - traefik.http.routers.keycloak.rule=Host(`${DOMAIN_NAME}`) && PathPrefix(`/auth`)
+      - traefik.http.routers.keycloak.entrypoints=websecure
+      - traefik.http.routers.keycloak.tls.certresolver=le
+      - traefik.http.routers.keycloak.middlewares=ratelimit,secheaders,auth-stripprefix
+      - traefik.http.routers.keycloak.service=keycloak
+      - traefik.http.services.keycloak.loadbalancer.server.port=8080
 
   vault:
-    # Same split as 'db' and 'keycloak' again: tag here, dev-mode config
-    # (root token, listener address, port) in docker-compose.dev.yml.
+    # Same split as 'db' and 'keycloak' again: tag here, environment-specific
+    # config (unsealing, storage, listener) in docker-compose.dev.yml /
+    # docker-compose.prod.yml.
     image: hashicorp/vault:1.18
+    restart: unless-stopped
+    # IPC_LOCK lets Vault mlock() its memory pages so secrets can't be
+    # swapped to disk — Vault refuses to start without it (or without
+    # 'disable_mlock', which would defeat the point). Not a "dev thing":
+    # real Vault needs this exactly as much as dev-mode Vault does.
+    cap_add:
+      - IPC_LOCK
 
   vault-bootstrap:
     # One-shot container: writes the DB password into Vault's KV store,
     # then exits. Same image as 'vault' — it's just the Vault CLI, no
     # separate bootstrap image needed.
     image: hashicorp/vault:1.18
+    # Not 'unless-stopped' — this is a one-shot job, not a long-running
+    # service. 'unless-stopped'/'always' restart even on a clean exit 0,
+    # which would loop this forever after it successfully finishes.
+    # 'on-failure' retries if it errors (e.g. Vault unreachable at that
+    # exact moment) but leaves it alone once it exits 0.
+    restart: on-failure
+    depends_on:
+      - vault
+    environment:
+      # Identical in every environment — only *how this container
+      # authenticates* to reach that address differs (dev: a root token
+      # env var; prod: AppRole login), which is why VAULT_TOKEN itself
+      # stays out of this base block.
+      VAULT_ADDR: http://vault:8200
+      DB_PASSWORD: ${DB_PASSWORD}
 
   vault-agent:
     # Authenticates to Vault and renders secrets to files other services
-    # read — see infra/vault/agent.hcl for what it fetches.
+    # read — see infra/vault/agent.hcl (dev) / agent-prod.hcl (prod) for
+    # what it fetches and how it authenticates.
     image: hashicorp/vault:1.18
+    restart: unless-stopped
+    # Without this, 'db' could start before vault-agent has rendered
+    # db_password, and Postgres would fail its first-boot init with
+    # "no such file or directory" on POSTGRES_PASSWORD_FILE.
+    depends_on:
+      vault-bootstrap:
+        condition: service_completed_successfully
+    volumes:
+      - vault_secrets:/vault/secrets
+    # 'depends_on: service_started' (the default) only means the container
+    # process launched — not that the template has rendered yet. 'db'
+    # needs to wait for the actual file, so this healthcheck's only job is
+    # to give 'db's depends_on something real to block on. This has to
+    # live here, not in an environment-specific file: every environment's
+    # 'db' depends on it identically.
+    healthcheck:
+      test: ["CMD", "test", "-f", "/vault/secrets/db_password"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
 
   api:
     # No image tag here, unlike the services above — this is our own code,
@@ -91,6 +204,7 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
     environment:
       DB_HOST: db
       DB_USER: ${DB_USER}
@@ -153,6 +267,7 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
     environment:
       # Same-network service name, not localhost — 'web' and 'api' are
       # different containers now, so this can't fall back on sharing a
@@ -182,8 +297,11 @@ volumes:
   letsencrypt:
   # Holds vault-agent's own auth token. Only vault-agent mounts this —
   # not 'db' or any other service — so nothing besides Agent itself can
-  # read the credential it uses to talk to Vault.
+  # read the credential it uses to talk to Vault. Dev-only in practice
+  # (prod's AppRole auth needs no such token file), but declaring it here
+  # alongside the others is harmless — an environment that never mounts
+  # it simply never populates it.
   vault_token:
   # Holds secrets Agent has rendered to plain files (e.g. db_password).
-  # Shared with whichever service needs to read that specific file.
+  # Read (read-only) by 'db', written by vault-agent, in every environment.
   vault_secrets:
