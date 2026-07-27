@@ -120,6 +120,73 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Decision: fetch everything below (R2 backend creds, AppRole
+      # credentials) from Infisical, not as separate GitHub Secrets each —
+      # matching infra/scripts/import-secrets.sh's own Universal Auth
+      # branch, which this project already built specifically so "the same
+      # script run unattended (CI...)" would work. /ENV_VARS is the exact
+      # path bootstrap-prod-init.sh already tells you to store the four
+      # AppRole values in, and where AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY/
+      # AWS_ENDPOINT_URL_S3 already live for local use — one login gets all
+      # seven values as plain env vars for every step below, with only 2
+      # GitHub Secrets (the Universal Auth identity itself) instead of 7.
+      # A secret rotated in Infisical is live here on the next run with
+      # nothing to update in this file or GitHub's Secrets UI — one place
+      # to look, not two that can quietly drift apart (same reasoning as
+      # nsg.tf's single-firewall-mechanism decision).
+      #
+      # A few values under /ENV_VARS (SSH_KEY_PATH, GITHUB_DEPLOY_KEY_PATH,
+      # TF_VAR_oci_private_key_path, ...) are for a developer's own machine
+      # and go unused here — harmless, and simpler than carving this path
+      # up further.
+      - name: Fetch secrets from Infisical
+        uses: Infisical/secrets-action@v1.0.12
+        with:
+          method: universal
+          client-id: ${{ secrets.INFISICAL_CLIENT_ID }}
+          client-secret: ${{ secrets.INFISICAL_CLIENT_SECRET }}
+          project-slug: bggg-bq-ji
+          env-slug: dev
+          secret-path: /ENV_VARS
+          export-type: env
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          # Pinned to match the version this project's devcontainer runs —
+          # same reasoning as pinning image tags in docker-compose.yml.
+          terraform_version: '1.15.8'
+          # The wrapper script setup-terraform installs by default captures
+          # stdout/stderr into its own job outputs — helpful for some
+          # workflows, but it gets in the way of a plain '$(terraform output
+          # -raw ...)' capture in a 'run:' step below. Disabling it gives
+          # back a normal terraform binary that behaves exactly like it
+          # does on a developer's own machine.
+          terraform_wrapper: false
+
+      # Decision: read real Terraform state (this project's remote backend
+      # is Cloudflare R2, see infra/terraform/backend.tf) instead of the
+      # hand-maintained PROD_HOST secret this step used before. Because:
+      # 'terraform output' only needs backend credentials to read
+      # already-applied state — it doesn't refresh against OCI itself, so
+      # no OCI provider credentials are needed here, only the three R2
+      # values the s3 backend reads from the environment (already exported
+      # above). This also gets the runner the same three Vault/KMS values
+      # infra/ansible/roles/app_deploy/tasks/main.yml would otherwise try
+      # (and fail) to look up itself, since the runner has no Terraform
+      # working directory of its own until this step creates one.
+      - name: Terraform init
+        working-directory: infra/terraform
+        run: terraform init
+
+      - name: Read Terraform outputs
+        id: tf
+        working-directory: infra/terraform
+        run: |
+          echo "app_server_public_ip=$(terraform output -raw app_server_public_ip)" >> "$GITHUB_OUTPUT"
+          echo "vault_kms_key_id=$(terraform output -raw vault_unseal_key_id)" >> "$GITHUB_OUTPUT"
+          echo "vault_kms_crypto_endpoint=$(terraform output -raw vault_kms_crypto_endpoint)" >> "$GITHUB_OUTPUT"
+          echo "vault_kms_management_endpoint=$(terraform output -raw vault_kms_management_endpoint)" >> "$GITHUB_OUTPUT"
+
       # Ansible itself isn't in this repo's package.json anywhere — it's a
       # Python tool, installed fresh on the runner, same as it would be on
       # any machine that runs 'ansible-playbook' for the first time.
@@ -132,22 +199,19 @@ jobs:
       # The key text lives in GitHub's encrypted Secrets store and is
       # injected at runtime — it never appears in this file, and GitHub
       # automatically redacts any secret value it recognizes in job logs.
+      # Deliberately still its own separate GitHub Secret, not something
+      # fetched from Infisical alongside everything else above: this is a
+      # CI-specific deploy credential, not the same key any of the
+      # developer-machine secrets under /ENV_VARS represent.
       - uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      # Decision: inventory.ini is written here from a GitHub Secret
-      # (PROD_HOST), not generated with generate_inventory.sh's
-      # 'terraform output' approach. Because: that script reads Terraform
-      # state, and this repo has no remote state backend — the state file
-      # only exists on whoever's machine last ran 'terraform apply'. A
-      # GitHub-hosted runner has no way to read it, so the IP is stored as
-      # a secret instead and updated by hand if the VM is ever recreated.
       - name: Write Ansible inventory
         run: |
           cat > infra/ansible/inventory.ini <<EOF
           [web]
-          ${{ secrets.PROD_HOST }} ansible_user=ubuntu
+          ${{ steps.tf.outputs.app_server_public_ip }} ansible_user=ubuntu
           EOF
 
       - name: Run deploy playbook
@@ -161,6 +225,25 @@ jobs:
         # (docker, app_deploy) resolve from infra/ansible/roles/ relative to
         # the playbook's own directory, exactly as they do when you run this
         # by hand from your own machine.
+        #
+        # vault_kms_* come from the Terraform outputs read above — not
+        # secret, but there's no local Terraform working directory on this
+        # runner for tasks/main.yml's own lookup to fall back on, so they
+        # have to be supplied explicitly (see defaults/main.yml's comment).
+        # vault_*_role_id/secret_id ($VAULT_AGENT_ROLE_ID etc.) are plain
+        # shell env vars now, not '${{ secrets.* }}' — the "Fetch secrets
+        # from Infisical" step above already exported them, generated once
+        # by infra/vault/bootstrap-prod-init.sh. Empty on a repo where that
+        # one-time step hasn't run yet (nothing there to fetch), which
+        # tasks/main.yml handles the same way it would from any other
+        # machine (see that file's own comment).
         run: |
           cd infra/ansible
-          ansible-playbook -i inventory.ini playbook.yml
+          ansible-playbook -i inventory.ini playbook.yml \
+            -e vault_kms_key_id="${{ steps.tf.outputs.vault_kms_key_id }}" \
+            -e vault_kms_crypto_endpoint="${{ steps.tf.outputs.vault_kms_crypto_endpoint }}" \
+            -e vault_kms_management_endpoint="${{ steps.tf.outputs.vault_kms_management_endpoint }}" \
+            -e vault_agent_role_id="$VAULT_AGENT_ROLE_ID" \
+            -e vault_agent_secret_id="$VAULT_AGENT_SECRET_ID" \
+            -e vault_bootstrap_role_id="$VAULT_BOOTSTRAP_ROLE_ID" \
+            -e vault_bootstrap_secret_id="$VAULT_BOOTSTRAP_SECRET_ID"

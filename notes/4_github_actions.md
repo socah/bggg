@@ -76,14 +76,15 @@ already does. The day someone updates the Ansible role and forgets the
 inline SSH command (or the reverse), the two silently disagree about what
 "deployed" means.
 
-**A related limitation worth naming explicitly:** `generate_inventory.sh`
-gets the VM's IP with `terraform output -raw app_server_public_ip` — but
-that only works because Terraform's state file is sitting on *your*
-machine. This repo has no remote state backend (nothing in
-`infra/terraform/*.tf` configures one), so a GitHub Actions runner has no
-way to read that state. The workflow instead reads the IP from a GitHub
-Secret (`PROD_HOST`) that you set by hand once, and update by hand if the
-VM is ever recreated.
+**A related limitation, true when this topic was first built, no longer
+true today** — see the dated Update section near the end of this note for
+what changed and why: `generate_inventory.sh` gets the VM's IP with
+`terraform output -raw app_server_public_ip`, which only worked because
+Terraform's state file sat on *your* machine. This repo had no remote
+state backend, so a GitHub Actions runner had no way to read that state,
+and the workflow instead read the IP from a GitHub Secret (`PROD_HOST`)
+set and updated by hand. `infra/terraform/backend.tf` now configures a
+real remote backend (Cloudflare R2), which closed this gap entirely.
 
 ---
 
@@ -254,6 +255,65 @@ not optional and not memory-dependent.
 
 ---
 
+## Update — 2026-07-27: Retired `PROD_HOST`, CI Now Reads Real Terraform State + Infisical
+
+Three things changed in the same pass, all consequences of work done after
+this topic was originally completed.
+
+**1. `infra/terraform/backend.tf` now configures a real remote state
+backend** (Cloudflare R2, S3-compatible) — the gap Decision 2's "related
+limitation" paragraph originally described no longer exists. The `deploy`
+job now runs `hashicorp/setup-terraform`, `terraform init`, and
+`terraform output` itself. Worth being precise about *why* this is safe
+with only backend credentials and no OCI credentials at all: `terraform
+output` reads already-applied state — it never refreshes against the
+cloud provider itself, so it never needs OCI API access, only enough to
+read the R2 bucket the state file lives in. `PROD_HOST` is no longer read
+anywhere in the workflow; the hand-maintained secret can be deleted once
+you're comfortable relying on the new path.
+
+**2. The `4_environments` topic (see `notes/4_environments.md`) added a
+Vault OCI KMS auto-unseal setup and AppRole auth for
+`vault-agent`/`vault-bootstrap`,** which meant `app_deploy/tasks/main.yml`
+gained a task that shells out to `terraform output` on its own for three
+Vault/KMS values, plus four AppRole credentials with no default value. A
+GitHub-hosted runner has no pre-existing Terraform working directory for
+that task's own lookup to fall back on — so the same "Read Terraform
+outputs" step added for reason #1 above also captures those three values,
+and the workflow passes all seven (three KMS values, four AppRole
+secrets) to `ansible-playbook` via `-e`. `app_deploy`'s own local lookup
+task is now conditional (`when: vault_kms_key_id | length == 0`)
+specifically so it's skipped — not attempted and failed — whenever a
+caller (CI or otherwise) already supplied the value directly.
+
+**3. Rather than adding those seven values as seven more GitHub Secrets,
+the workflow fetches all of them from Infisical instead** — one
+`Infisical/secrets-action@v1.0.12` step (Universal Auth, matching how
+`infra/scripts/import-secrets.sh`'s own Universal Auth branch was already
+built specifically for unattended use), pulling the entire `/ENV_VARS`
+path and exporting it as plain environment variables for every later step
+in the job. That path already holds `AWS_ACCESS_KEY_ID`/
+`AWS_SECRET_ACCESS_KEY`/`AWS_ENDPOINT_URL_S3` (the R2 backend credentials)
+*and* is exactly where `bootstrap-prod-init.sh` already tells you to store
+the four AppRole values — so one login gets everything, and only 2 GitHub
+Secrets exist for this whole job (`INFISICAL_CLIENT_ID`/
+`INFISICAL_CLIENT_SECRET`, a machine identity scoped to this project) in
+place of what would otherwise have been 7. A secret rotated in Infisical
+takes effect on the next run automatically — nothing in this workflow
+file or GitHub's Secrets UI needs updating to match, the same "one place
+to look" reasoning `infra/terraform/nsg.tf` already applies to firewall
+rules.
+
+Until `infra/vault/bootstrap-prod-init.sh` has been run once and its four
+AppRole values stored in Infisical, CI deploys will keep silently skipping
+Vault/DB bring-up — the exact same graceful-degradation behavior described
+in `defaults/main.yml`, not a CI-specific failure mode.
+
+Checkpoint questions 3 and 6 below are answered differently now — see
+their updated form.
+
+---
+
 ## Checkpoint Questions
 
 1. Why does the Trivy scan job need to run *after* `docker build` — what
@@ -261,16 +321,23 @@ not optional and not memory-dependent.
 2. If the `deploy` job ran even though `lint-and-test` had failed, what
    would be misconfigured, and which YAML key is responsible for
    preventing that?
-3. Why is the production host's address stored as a GitHub Secret
-   (`PROD_HOST`) instead of being fetched dynamically with
-   `terraform output`, the way `generate_inventory.sh` does it on your own
-   machine?
+3. `terraform output` needs only backend (R2) credentials to run in CI, not
+   the OCI provider's own credentials. Why is that enough — what does
+   `terraform output` actually do (and *not* do) that makes this safe?
 4. What specifically stops the SSH private key from leaking into the
    workflow's logs, given that the deploy step's output is fully visible
    in the GitHub Actions UI?
 5. Walk through what happens end-to-end when you push a commit directly to
    `main`: which jobs run, in what order, and what would cause the
    pipeline to stop before `deploy` ever starts?
+6. Why does `app_deploy`'s own "Read Vault's OCI KMS config from Terraform
+   outputs" task need a `when:` guard now, when it didn't need one before
+   CI started passing `-e vault_kms_key_id=...`?
+7. Fetching seven values from Infisical in one step instead of defining
+   seven separate GitHub Secrets means a secret rotation only has to
+   happen in one place. What's the tradeoff going the other way — what
+   does this workflow now depend on at deploy time that it didn't before,
+   and what would happen to a deploy if that dependency were unreachable?
 
 ---
 

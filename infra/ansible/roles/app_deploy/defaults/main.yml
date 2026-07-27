@@ -46,3 +46,18 @@ vault_agent_role_id: ""
 vault_agent_secret_id: ""
 vault_bootstrap_role_id: ""
 vault_bootstrap_secret_id: ""
+
+# Also deliberately empty by default — but for a different reason than the
+# four above. These three are non-secret (an OCID and two endpoint URLs),
+# and tasks/main.yml can always compute them itself locally via
+# 'terraform output' when running from a machine that has Terraform and
+# this project's remote state backend credentials (any developer's own
+# machine). CI is the exception: the GitHub Actions runner in
+# .github/workflows/ci.yml reads them itself (it already needs Terraform
+# for app_server_public_ip) and passes them via '-e', specifically so that
+# tasks/main.yml's own 'terraform -chdir=...' lookup — which the runner
+# has no working directory state to satisfy on its own before that CI
+# step runs — never has to execute there at all.
+vault_kms_key_id: ""
+vault_kms_crypto_endpoint: ""
+vault_kms_management_endpoint: ""

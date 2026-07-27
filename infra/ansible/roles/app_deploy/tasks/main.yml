@@ -56,7 +56,15 @@
 # infra/terraform/vault.tf's own outputs.tf comment). Read the same way
 # generate_inventory.sh already reads app_server_public_ip: this assumes
 # 'terraform apply' has already run, exactly like that script does.
+#
+# Conditional: skipped when these were already supplied via '-e' (see
+# defaults/main.yml's comment on why). Without this guard, CI's
+# .github/workflows/ci.yml run would still hit this task and try to shell
+# out to a Terraform working directory the runner never initialized —
+# extra-vars already winning over whatever set_fact computed wouldn't save
+# it, since the lookup itself fails before any value is even assigned.
 - name: Read Vault's OCI KMS config from Terraform outputs
+  when: vault_kms_key_id | length == 0
   set_fact:
     vault_kms_key_id: "{{ lookup('ansible.builtin.pipe', 'terraform -chdir=' + playbook_dir + '/../terraform output -raw vault_unseal_key_id') }}"
     vault_kms_crypto_endpoint: "{{ lookup('ansible.builtin.pipe', 'terraform -chdir=' + playbook_dir + '/../terraform output -raw vault_kms_crypto_endpoint') }}"
