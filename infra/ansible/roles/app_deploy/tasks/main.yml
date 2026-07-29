@@ -78,20 +78,39 @@
     # already used above for reading Terraform's outputs.
     src: "{{ playbook_dir }}/../vault/vault-server-prod.hcl.j2"
     dest: "{{ vault_config_dir }}/vault-server.hcl"
-    mode: "0600"
+    # 0644, not 0600: the Vault image's own entrypoint drops from root to
+    # a non-root user before running 'vault server' (unlike vault-agent/
+    # vault-bootstrap, whose entrypoint is overridden directly, bypassing
+    # that — see agent-prod.hcl/bootstrap-prod.sh), so a root-owned 0600
+    # file is unreadable to the process that actually needs it. Safe to
+    # widen: this file's contents are non-secret (an OCID and two HTTPS
+    # endpoint URLs, matching infra/terraform/vault.tf's own reasoning),
+    # unlike the AppRole credential files below.
+    mode: "0644"
 
-# Conditional, not required: on a fresh server these four are still empty
-# (their defaults/main.yml default) because Vault hasn't been initialized
-# yet — see defaults/main.yml's comment on why that's expected, and
-# infra/vault/bootstrap-prod-init.sh for the one-time step that produces
-# real values. Writing empty files here would be worse than not writing
-# them at all: vault-agent/vault-bootstrap would still fail to log in
-# either way, but an empty *file* existing could be mistaken for "this was
-# already set up" on a later look.
+# Unconditional now, deliberately — this used to skip entirely when the
+# four vars were still empty (their defaults/main.yml default, before
+# infra/vault/bootstrap-prod-init.sh has ever run). That was wrong: Docker
+# auto-creates an empty *directory* at a bind-mount source path that
+# doesn't exist yet, when docker-compose.prod.yml's volumes: entries for
+# these same four paths expect a *file* — so the very first 'docker
+# compose up' silently left a directory sitting at each path, which would
+# make a later 'copy' here fail outright ("is a directory") the day real
+# credentials finally do get delivered. Writing an empty file instead
+# means the bind-mount source is always a real (if empty) file from the
+# very first deploy onward — vault-agent/vault-bootstrap still fail to log
+# in with empty credentials either way, exactly as intended until
+# bootstrap-prod-init.sh has run, just without leaving a landmine behind.
 - name: Deliver Vault Agent's AppRole credentials
-  when: vault_agent_role_id | length > 0 and vault_agent_secret_id | length > 0
   no_log: true
   block:
+    - name: Remove any phantom directory Docker left at these paths
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ vault_config_dir }}/vault-agent-role_id"
+        - "{{ vault_config_dir }}/vault-agent-secret_id"
     - name: Write vault-agent's role_id
       copy:
         content: "{{ vault_agent_role_id }}"
@@ -104,9 +123,15 @@
         mode: "0600"
 
 - name: Deliver Vault Bootstrap's AppRole credentials
-  when: vault_bootstrap_role_id | length > 0 and vault_bootstrap_secret_id | length > 0
   no_log: true
   block:
+    - name: Remove any phantom directory Docker left at these paths
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ vault_config_dir }}/vault-bootstrap-role_id"
+        - "{{ vault_config_dir }}/vault-bootstrap-secret_id"
     - name: Write vault-bootstrap's role_id
       copy:
         content: "{{ vault_bootstrap_role_id }}"
@@ -135,6 +160,24 @@
   # anywhere outside Vault itself.
   set_fact:
     bootstrap_db_password: "{{ lookup('ansible.builtin.password', '/dev/null', length=32, chars=['ascii_letters', 'digits']) }}"
+
+# Not a failure suppression — the task below is allowed to genuinely fail
+# when this is the case (bootstrap-prod.sh's own bounded wait, see its
+# comment, makes 'docker compose up' fail fast rather than hang, but it
+# still fails). This just makes sure that failure's *reason* is visible
+# up front, since the underlying container's own log line explaining why
+# isn't something 'docker compose up's own error surfaces on its own.
+- name: Warn if this deploy will only partially succeed
+  debug:
+    msg: >-
+      vault_agent_role_id/vault_bootstrap_role_id are still unset — Vault
+      hasn't been through its one-time init yet. The next task is expected
+      to fail its vault-bootstrap -> vault-agent -> db/api dependency
+      chain; keycloak/web/traefik still come up fine regardless. Run
+      infra/vault/bootstrap-prod-init.sh once (see its own header for how),
+      store its four values, then re-run this playbook with them supplied
+      via '-e'.
+  when: vault_agent_role_id | length == 0 or vault_bootstrap_role_id | length == 0
 
 - name: Build and start the stack
   command: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build

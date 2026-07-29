@@ -156,9 +156,19 @@ services:
     # Not 'unless-stopped' — this is a one-shot job, not a long-running
     # service. 'unless-stopped'/'always' restart even on a clean exit 0,
     # which would loop this forever after it successfully finishes.
-    # 'on-failure' retries if it errors (e.g. Vault unreachable at that
-    # exact moment) but leaves it alone once it exits 0.
-    restart: on-failure
+    #
+    # Not 'on-failure' either, despite that sounding like the obvious
+    # choice — verified empirically, not assumed: with 'on-failure',
+    # 'docker compose up' hung indefinitely (25s+, still running) when this
+    # container kept exiting 1 and Docker kept silently restarting it,
+    # because 'vault-agent's depends_on: condition:
+    # service_completed_successfully has no timeout of its own — it just
+    # watches for an exit that Docker's own restart policy kept preventing
+    # from being final. With 'no', the same failing-forever scenario (Vault
+    # never initialized, see bootstrap-prod.sh's own bounded retry) makes
+    # 'docker compose up' fail in ~1.5s with a clear
+    # "didn't complete successfully" error instead.
+    restart: "no"
     depends_on:
       - vault
     environment:

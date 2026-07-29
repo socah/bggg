@@ -9,8 +9,27 @@ set -eu
 # means it isn't up yet at all. Looping on exit code 0 specifically avoids
 # racing a login attempt against a Vault that's technically listening but
 # not yet able to authenticate anyone.
+#
+# Bounded, not infinite: on a server where 'vault operator init' has never
+# run (see bootstrap-prod-init.sh), Vault will never unseal on its own —
+# nothing here can make that happen — and an infinite loop would mean this
+# container never exits. 'vault-agent's depends_on: condition:
+# service_completed_successfully has no timeout of its own; it just waits
+# for this container to exit, however long that takes. An unbounded loop
+# here means 'docker compose up' (and therefore 'ansible-playbook') hangs
+# forever instead of failing fast with a clear reason — exactly the
+# failure mode this project already fixed once, for the git-clone hang
+# that started this whole line of work.
+attempt=0
+max_attempts=30
 until vault status >/dev/null 2>&1; do
-  echo "waiting for vault to unseal..."
+  attempt=$((attempt + 1))
+  if [ "$attempt" -ge "$max_attempts" ]; then
+    echo "Vault did not unseal within ${max_attempts}s — is it initialized yet?" >&2
+    echo "Run infra/vault/bootstrap-prod-init.sh once, by hand, then redeploy." >&2
+    exit 1
+  fi
+  echo "waiting for vault to unseal... ($attempt/$max_attempts)"
   sleep 1
 done
 
