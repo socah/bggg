@@ -30,6 +30,23 @@
     mode: "0600"
   no_log: true
 
+# '/opt/bggg' itself (deploy_dir) is owned by a different user than the
+# one running this task (root, via 'become') — first noticed as git
+# itself refusing to operate at all: "detected dubious ownership in
+# repository at '/opt/bggg'". This is git's own CVE-2022-24765 mitigation,
+# not a real compromise here — the fix it recommends is exactly this,
+# telling git this one directory is trusted regardless of who owns it.
+# Idempotent (checks the current value before writing), unlike a bare
+# 'git config --global --add safe.directory ...' shell command, which
+# would append a fresh duplicate line to root's ~/.gitconfig on every
+# single deploy.
+- name: Trust deploy_dir for git's ownership check
+  when: app_deploy_source == 'git'
+  community.general.git_config:
+    name: safe.directory
+    scope: global
+    value: "{{ deploy_dir }}"
+
 - name: Clone or update the application repo
   when: app_deploy_source == 'git'
   git:
