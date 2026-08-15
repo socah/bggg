@@ -96,7 +96,13 @@ jobs:
           load: true
 
       - name: Trivy scan
-        uses: aquasecurity/trivy-action@v0.28.0
+        # Was v0.28.0 — that release's own internal pin on
+        # aquasecurity/setup-trivy@v0.2.1 has since been deleted upstream
+        # (confirmed via the GitHub API: only v0.2.6+ exist now), so the
+        # old tag can no longer resolve at all regardless of anything in
+        # this file. Bumped to the current release, which isn't pinned to
+        # an already-vanished dependency.
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: bggg-${{ matrix.workspace }}:ci
           # Same Dockerfile the production VM will build from — a CRITICAL
