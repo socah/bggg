@@ -38,6 +38,18 @@ COPY --from=build /workspace/apps/web/.next/standalone ./
 COPY --from=build /workspace/apps/web/.next/static ./apps/web/.next/static
 COPY --from=build /workspace/apps/web/public ./apps/web/public
 
+# The base image bundles npm (and npx) for its own sake — this stage never
+# runs either; CMD below calls 'node' directly, and the standalone output
+# above already carries its own traced node_modules. That globally
+# installed npm carries its own vendored 'tar' dependency, versioned
+# independently of anything in this project's own package-lock.json
+# (hence invisible to 'npm audit' and to the override in the root
+# package.json), and it's the exact version Trivy flags as CRITICAL
+# (CVE-2026-59873). Removing npm/npx here removes that CVE's only
+# presence in this image, and costs nothing since nothing downstream of
+# this line needs them.
+RUN rm -rf /usr/local/lib/node_modules/npm && rm -f /usr/local/bin/npm /usr/local/bin/npx
+
 RUN addgroup -S app && adduser -S app -G app
 USER app
 

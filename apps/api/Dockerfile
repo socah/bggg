@@ -40,6 +40,16 @@ COPY --from=build /workspace/node_modules ./node_modules
 COPY --from=build /workspace/apps/api/dist ./apps/api/dist
 COPY --from=build /workspace/apps/api/package.json apps/api/package.json
 
+# The base image bundles npm (and npx) for its own sake — this stage never
+# runs either; CMD below calls 'node' directly. That bundled npm carries
+# its own vendored 'tar' dependency, versioned independently of anything
+# in this project's own package-lock.json (hence invisible to 'npm audit'
+# and to the override in the root package.json), and it's the exact
+# version Trivy flags as CRITICAL (CVE-2026-59873). Removing npm/npx here
+# removes that CVE's only presence in this image, and costs nothing since
+# nothing downstream of this line needs them.
+RUN rm -rf /usr/local/lib/node_modules/npm && rm -f /usr/local/bin/npm /usr/local/bin/npx
+
 # Decision: create a non-root user now rather than leaving this as root
 # and letting the 4_container_security topic retrofit it later — costs
 # nothing to get right from the start, and that topic's job is to verify
