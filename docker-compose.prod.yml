@@ -30,18 +30,70 @@ services:
     # path config is needed here: Traefik's StripPrefix middleware already
     # makes Keycloak invisible to the '/auth' segment entirely.
 
-  vault:
-    # Real 'vault server', not dev mode — see infra/vault/vault-server-prod.hcl.j2
-    # for the storage/listener/seal config this points at. Ansible renders
-    # that template to /etc/bggg/vault-server.hcl (outside the git
-    # checkout, since 'app_deploy's git task force-syncs the checkout on
-    # every deploy — anything meant to persist across deploys, generated
-    # or secret, lives outside it; same reasoning as the deploy key's
-    # /root/.ssh destination).
+  # One-shot: fixes ownership of the raft storage volume for Vault's own
+  # non-root 'vault' user (uid 100, gid 1000 — confirmed via the official
+  # image's /etc/passwd) before 'vault' itself ever touches it. Unlike
+  # /vault/config — which docker-entrypoint.sh's own logic auto-chowns
+  # when it detects foreign ownership — /vault/data (raft storage) isn't
+  # one of the paths that same script knows to fix at all, so nothing else
+  # does this. A fresh named volume defaults to root ownership; Vault's
+  # entrypoint drops to the non-root 'vault' user before running 'server',
+  # which then can't write to a root-owned directory at all.
+  vault-data-permissions:
+    image: alpine:3.20
+    command: ["chown", "-R", "100:1000", "/vault/data"]
     volumes:
-      - /etc/bggg/vault-server.hcl:/vault/config/vault-server.hcl:ro
       - vault_data:/vault/data
-    command: ["server", "-config=/vault/config/vault-server.hcl"]
+    restart: "no"
+
+  vault:
+    # Real 'vault server', not dev mode — see infra/vault/vault-server-prod.hcl
+    # for the storage/listener config this points at. A plain static file,
+    # bind-mounted straight from the git checkout (like agent-prod.hcl) —
+    # no Ansible rendering step needed, unlike an earlier version of this
+    # setup.
+    depends_on:
+      vault-data-permissions:
+        condition: service_completed_successfully
+    environment:
+      # OCI KMS auto-unseal config lives here as env vars, not in the HCL
+      # file's 'seal "ocikms" { ... }' block — HashiCorp's own support docs
+      # document a parsing bug for 'key_id' specifically in that block,
+      # reproduced here as a "more than one enabled seal found" error on
+      # every startup, even against a freshly wiped raft volume. These
+      # three env var names are HashiCorp's own documented alternative.
+      # vault_kms_key_id/crypto_endpoint/management_endpoint themselves
+      # come from Terraform's outputs — see
+      # infra/ansible/roles/app_deploy/tasks/main.yml's own comment on
+      # where these three ${...} values are populated from.
+      VAULT_SEAL_TYPE: ocikms
+      VAULT_OCIKMS_SEAL_KEY_ID: ${VAULT_KMS_KEY_ID}
+      VAULT_OCIKMS_CRYPTO_ENDPOINT: ${VAULT_KMS_CRYPTO_ENDPOINT}
+      VAULT_OCIKMS_MANAGEMENT_ENDPOINT: ${VAULT_KMS_MANAGEMENT_ENDPOINT}
+    volumes:
+      - ./infra/vault/vault-server-prod.hcl:/vault/config/vault-server.hcl:ro
+      - vault_data:/vault/data
+      # Read-only, only for infra/vault/bootstrap-prod-init.sh's Step 3
+      # ('vault policy write') — this container never gets the rest of
+      # the git checkout (unlike /opt/bggg on the host itself), so
+      # without this mount that script's 'vault policy write' has no way
+      # to reach these two files from inside 'vault's own filesystem.
+      - ./infra/vault/policies:/vault/policies:ro
+    # No explicit '-config' flag here, deliberately: the official image's
+    # docker-entrypoint.sh, whenever the first arg is literally 'server',
+    # already prepends '-config=/vault/config' (the whole directory)
+    # before appending this command's own args — so an explicit
+    # '-config=/vault/config/vault-server.hcl' here doesn't add a second
+    # source, it makes Vault load the exact same file via two separate
+    # '-config' flags in one process, registering the same 'listener
+    # "tcp" { address = "0.0.0.0:8200" }' stanza twice. Result: the first
+    # listener binds fine, the second identical one crashes with "address
+    # already in use" — a deterministic crash loop, once per restart,
+    # reproduced here on every single attempt. '/vault/config' already
+    # only contains vault-server.hcl (this file's own bind mount above),
+    # so entrypoint's automatic directory-level '-config' already loads
+    # it; nothing else needs to ask for it explicitly.
+    command: ["server"]
     # No 'ports:' either — same internal-only reasoning as dev's exposed
     # 8200 is purely a dev convenience; nothing in prod needs it published.
 

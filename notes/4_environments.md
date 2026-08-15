@@ -107,15 +107,17 @@ Ansible uses Jinja2 in two capacities that are easy to conflate:
    the *result* — plain text, no `{{ }}` left in it — is written to the
    destination.
 
-`vault-server-prod.hcl.j2` is the second kind. It's an ordinary Vault HCL
-config file, except three lines hold `{{ vault_kms_key_id }}` and friends
-instead of a literal value — because those three values don't exist until
-`terraform apply` has actually run, so they can't be hardcoded the way
-`agent.hcl` (dev, no `.j2`, no per-deploy values, committed as-is) can be.
-The rendering happens once, at deploy time, in `tasks/main.yml`'s "Render
-the Vault server config" task; the *destination* file
-(`/etc/bggg/vault-server.hcl`) is what Vault itself actually reads, and it
-has no `{{ }}` in it at all by the time Vault sees it.
+`infra/vault/vault-server-prod.hcl` used to be the second kind —
+`vault-server-prod.hcl.j2`, an ordinary Vault HCL config file except three
+lines held `{{ vault_kms_key_id }}` and friends instead of a literal value,
+rendered once at deploy time the same way `bootstrap_db_password` gets
+computed. See the dated Update section near the end of this note for why
+that stopped being true: those three values now flow in as environment
+variables instead, not through a rendered file at all. The concept above
+is still exactly how Ansible's `template:` module works elsewhere in this
+project (and worth knowing for the next time a config value genuinely
+does need per-deploy rendering) — this just isn't a live example of it
+anymore.
 
 ---
 
@@ -376,6 +378,130 @@ delivers one today. That's a separate, still-open piece of this same
 
 ---
 
+## Update — 2026-07-29: What Actually Broke on the Real Deploy, and Why
+
+Everything above was designed and validated with `terraform validate`,
+`docker compose config`, and Ansible syntax-checks — all necessary, none
+sufficient. Running the real playbook against the real server surfaced
+four more bugs, each a genuine root cause, not a symptom of the same one
+thing:
+
+**1. `vault-server.hcl` was unreadable to the process reading it.**
+`mode: "0600"`, root-owned — but the Vault image's own
+`docker-entrypoint.sh` drops from root to a non-root `vault` user (uid
+100, gid 1000, confirmed via the image's own `/etc/passwd`) before running
+`vault server`. `0644` fixed it; the content was never secret in the
+first place (an OCID and two URLs).
+
+**2. The raft storage volume had the identical problem, one level
+deeper.** `docker-entrypoint.sh` auto-`chown`s `/vault/config`,
+`/vault/logs`, and `/vault/file` when it detects they're bind-mounted with
+foreign ownership — but not `/vault/data`, which is what this project's
+`storage "raft"` stanza actually uses. A fresh named volume defaults to
+root ownership; the non-root `vault` user couldn't write to it at all.
+Fixed with a small one-shot `vault-data-permissions` service (plain
+`alpine` image, `chown -R 100:1000 /vault/data`, `restart: "no"`) that
+`vault` now depends on via `condition: service_completed_successfully`.
+
+**3. A genuine Vault bug, not a permissions problem at all: "more than one
+enabled seal found."** Reproduced even against a completely fresh raft
+volume (ruling out stale state from earlier failed attempts) — confirmed
+via HashiCorp's own support documentation, which describes a known
+parsing issue for `key_id` specifically inside a `seal "ocikms" { ... }`
+config-file block. The documented workaround: supply
+`VAULT_OCIKMS_SEAL_KEY_ID`/`VAULT_OCIKMS_CRYPTO_ENDPOINT`/
+`VAULT_OCIKMS_MANAGEMENT_ENDPOINT` as environment variables instead of
+config-file values. `vault-server-prod.hcl` no longer has a `seal` block
+at all — `docker-compose.prod.yml`'s `vault` service supplies those three
+via `environment:` now, and `vault_kms_key_id`/etc. flow straight from
+Ansible's `set_fact` into that same `docker compose up` invocation's own
+environment, the same way `bootstrap_db_password` already did — no
+rendered file needed for this at all anymore.
+
+**4. The hang itself, isolated and verified empirically, not assumed.**
+`bootstrap-prod.sh`'s wait loop (`until vault status; do sleep 1; done`)
+had no bound — on a server where Vault has never been initialized, that
+condition can never become true, so `vault-agent`'s `depends_on:
+condition: service_completed_successfully` waits on an exit that will
+never come. Two synthetic Compose tests (a fake "dep" service that always
+exits 1, a "waiter" depending on it) confirmed precisely what fixes this:
+with `restart: on-failure` on the failing dependency, `docker compose up`
+hung past 25 seconds; with `restart: "no"`, it failed in ~1.5 seconds with
+a clear `"didn't complete successfully"` error. Both changes were needed
+together — `bootstrap-prod.sh` now gives up after 30 attempts with an
+actionable error message, and `vault-bootstrap`'s restart policy is now
+`"no"`, not `on-failure`. A third synthetic test confirmed a failed
+dependency chain doesn't block *unrelated* services in the same `up`
+invocation — `traefik`/`keycloak` still start fine even while
+`vault-bootstrap` → `vault-agent` → `db`/`api` is stuck.
+
+**Still open, hit in this same debugging session but not fixed here:**
+Keycloak crash-looping with `bootstrap-admin-username available only when
+bootstrap admin password is set` — traced to there being no real `.env`
+file on the server at all (`docker compose config` shows every
+`${DOMAIN_NAME}`/`${KEYCLOAK_ADMIN_*}` reference resolving to an empty
+string). This is exactly the "known gap" flagged earlier in this note:
+nothing yet delivers a real `.env` to the server. Worth its own pass.
+
+---
+
+## Update — 2026-08-14: A Fifth Bug, and Why "docker compose up" Was Hanging Again
+
+The OCI KMS seal fix above (moving `seal "ocikms"` out of the HCL file and
+into `VAULT_OCIKMS_*` environment variables) introduced a new bug of its
+own, with the same symptom as bug #4 above: `docker compose up -d --build`
+hanging indefinitely on the real server, this time even though
+`vault-bootstrap`'s own bounded retry (bug #4's fix) was working exactly
+as designed.
+
+**Root cause: `vault`'s own `command:` was passing `-config` twice.** The
+official Vault image's `docker-entrypoint.sh` has a special case —
+whenever the first argument is literally `server`, it unconditionally
+prepends `-config="$VAULT_CONFIG_DIR"` (the whole `/vault/config`
+directory) before appending whatever args the container's own `command:`
+supplies. `docker-compose.prod.yml`'s `vault` service had
+`command: ["server", "-config=/vault/config/vault-server.hcl"]` — combined
+with entrypoint's own prepended flag, Vault actually launched as:
+
+```
+vault server -config=/vault/config -config=/vault/config/vault-server.hcl
+```
+
+Since `vault-server.hcl` is the *only* file in `/vault/config`, both flags
+load the identical `listener "tcp" { address = "0.0.0.0:8200" }` stanza —
+in the same process. The first listener binds fine; the second, identical
+one fails with `address already in use`, and Vault exits. Found by reading
+the entrypoint script itself (`docker run --rm --entrypoint cat
+hashicorp/vault:1.18 /usr/local/bin/docker-entrypoint.sh`), not by
+guessing from the error message, since "address already in use" reads like
+a stale-container/networking problem and isn't one here. Fix: drop the
+explicit `-config` flag entirely — `command: ["server"]` — and let
+entrypoint's own automatic directory-level `-config` do the one and only
+load.
+
+**Why this reproduced a hang, not just a crash-loop:** `vault` has
+`restart: unless-stopped`, which (unlike `vault-bootstrap`'s deliberate
+`restart: "no"`, bug #4's fix) has no terminal failure state — it retries
+forever. `docker compose up` waiting on a container stuck in an endless
+restart loop is exactly the same underlying failure mode as bug #4, just
+one level higher in the dependency chain (`vault-bootstrap` depends on
+`vault` merely having *started* once, which a crash-looping container
+technically satisfies — but Compose's own reconciliation still doesn't
+seem to reach a terminal state while the container it's watching keeps
+dying and restarting). The fix for bug #4 only ever addressed
+`vault-bootstrap` specifically; it was never a general guarantee that
+*any* crash-looping service in this stack won't reproduce the same hang.
+
+Verified directly against the real server (not assumed): recreating just
+`vault` with the fixed `command:` left it in a stable `Up` state, logging
+the expected `failed to unseal core: stored unseal keys are supported, but
+none were found` (correct — this server has never been through `vault
+operator init`). Re-running the full `docker compose up -d --build` then
+returned in about 35 seconds with a clean `service "vault-bootstrap"
+didn't complete successfully: exit 1`, instead of hanging.
+
+---
+
 ## Checkpoint Questions
 
 1. Compose merges `environment:`/`labels:` key-by-key across `-f` files, but
@@ -404,6 +530,19 @@ delivers one today. That's a separate, still-open piece of this same
 9. On a brand new server's very first deploy, `vault-agent` and `db` won't
    come up healthy. Why not, and what specifically has to happen before a
    second `ansible-playbook` run fixes that?
+10. `terraform validate`, `docker compose config`, and an Ansible
+    syntax-check all passed before this was ever deployed for real — none
+    of them caught any of the four bugs in the Update section above. What
+    class of bug do each of those tools actually check for, and why was
+    that never going to be enough here?
+11. Why does `docker-entrypoint.sh` auto-fix ownership of `/vault/config`
+    but not `/vault/data`? What would you check first if a *different*
+    bind-mounted or volume-mounted path started throwing a permission
+    error like this in the future?
+12. Walk through why `restart: on-failure` made `docker compose up` hang
+    but `restart: "no"` made it fail in under 2 seconds — both on a
+    dependency that fails every single time. What is Compose actually
+    waiting for in the `on-failure` case that never resolves?
 
 ---
 

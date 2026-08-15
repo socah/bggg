@@ -5,11 +5,17 @@
 # 'vault server -dev' with everything in memory. Real 'vault server' has no
 # such shortcut: storage and how to reach it must be spelled out explicitly.
 #
-# This file is a Jinja2 template, not a static file committed as-is — see
-# infra/ansible/roles/app_deploy/tasks/main.yml's 'Render the Vault server
-# config' task. The three seal values below only exist after
-# 'terraform apply' (infra/terraform/vault.tf) has actually run, so they
-# can't be hardcoded here the way agent.hcl's static values can.
+# A plain static file (not a Jinja2 .j2 template, unlike an earlier version
+# of this file) — bind-mounted directly from the git checkout, same as
+# agent-prod.hcl. The seal config that used to live here as
+# '{{ vault_kms_key_id }}'-style placeholders moved to environment
+# variables on docker-compose.prod.yml's 'vault' service instead (see that
+# file's comment for why): HashiCorp's own support docs document a parsing
+# bug for 'key_id' specifically inside a 'seal "ocikms" { ... }' config-file
+# block, observed here as a reproducible "more than one enabled seal found"
+# error on every single startup attempt, even against a freshly wiped raft
+# volume. The env-var path (VAULT_OCIKMS_SEAL_KEY_ID and friends) sidesteps
+# that parser entirely.
 
 storage "raft" {
   path    = "/vault/data"
@@ -35,15 +41,12 @@ listener "tcp" {
 api_addr     = "http://vault:8200"
 cluster_addr = "http://vault:8201"
 
-seal "ocikms" {
-  key_id              = "{{ vault_kms_key_id }}"
-  crypto_endpoint     = "{{ vault_kms_crypto_endpoint }}"
-  management_endpoint = "{{ vault_kms_management_endpoint }}"
-  # false (the default): instance principal auth, not an OCI API key
-  # sitting in this file. infra/terraform/vault.tf's dynamic group + policy
-  # are what actually authorize this VM to use the key — nothing here
-  # needs to hold a credential at all.
-  auth_type_api_key = false
-}
+# No 'seal "ocikms" { ... }' block here — see the file header comment and
+# docker-compose.prod.yml's 'vault' service for where that config actually
+# lives now (VAULT_SEAL_TYPE/VAULT_OCIKMS_* environment variables).
+# auth_type_api_key has no documented env var equivalent, but its default
+# (false — instance principal auth, not an OCI API key credential) is
+# already what this project wants; infra/terraform/vault.tf's dynamic
+# group + policy are what actually authorize this VM to use the key.
 
 ui = true

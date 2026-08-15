@@ -8,6 +8,7 @@
     state: present
 
 - name: Ensure /root/.ssh exists
+  when: app_deploy_source == 'git'
   file:
     path: "{{ github_deploy_key_dest | dirname }}"
     state: directory
@@ -22,6 +23,7 @@
 # no_log: true keeps the key's contents out of Ansible's console/log
 # output, same reasoning as duckdns's duckdns_token template task.
 - name: Copy the GitHub deploy key to the server
+  when: app_deploy_source == 'git'
   copy:
     src: "{{ lookup('ansible.builtin.env', 'GITHUB_DEPLOY_KEY_PATH') }}"
     dest: "{{ github_deploy_key_dest }}"
@@ -29,6 +31,7 @@
   no_log: true
 
 - name: Clone or update the application repo
+  when: app_deploy_source == 'git'
   git:
     repo: "{{ app_repo }}"
     dest: "{{ deploy_dir }}"
@@ -45,6 +48,58 @@
     # app_repo_version, discarding anything that (should never, but
     # could) have been hand-edited directly on the server.
     force: true
+
+# 'ansible.posix.synchronize' shells out to the local 'rsync' binary
+# itself rather than going through a normal Ansible module connection, so
+# the remote side still needs a matching 'rsync' binary of its own to
+# talk to — apt installs it here, same reasoning as 'Install git' above,
+# only when it's actually going to be used.
+- name: Install rsync
+  when: app_deploy_source == 'local'
+  apt:
+    name: rsync
+    state: present
+
+# Debug-only alternative to the git clone above: rsyncs this checkout's
+# own working tree (uncommitted changes included) straight to deploy_dir,
+# so a fix can be tried on the real server without first committing and
+# pushing it to GitHub. '--filter=:- .gitignore' makes rsync honor every
+# .gitignore in the tree the same way git itself would (node_modules/,
+# .env, Terraform state, etc. never get synced); '--exclude=.git' drops
+# the local repo's own git metadata, which the server has no use for and
+# 'app_deploy_source: git' deploys never create there in the first place.
+# 'delete: true' mirrors the git task's own 'force: true' above — the
+# server ends up exactly matching this working tree, not a superset of it.
+#
+# 'become: false' on the task itself is deliberate, not an oversight:
+# 'synchronize' runs rsync as a *local* process on the controller that
+# then opens its own ssh connection to the remote side — Ansible's normal
+# per-task become (which affects module *execution* on the remote host)
+# has no effect on that separate process, so privilege on the remote side
+# has to be requested from rsync itself instead, via '--rsync-path=sudo
+# rsync' (relies on the same passwordless sudo for ansible_user that every
+# other 'become: true' task in this playbook already assumes).
+- name: Sync the local working tree to the server (debug only)
+  when: app_deploy_source == 'local'
+  become: false
+  ansible.posix.synchronize:
+    src: "{{ playbook_dir }}/../../"
+    dest: "{{ deploy_dir }}"
+    delete: true
+    # Dedicated module param, not another rsync_opts entry: the module
+    # builds its rsync command by joining every arg into one shell string
+    # (see its own source), so an rsync_opts value containing a bare space
+    # — like 'sudo rsync' — would get split into two separate shell words
+    # instead of staying one argument. rsync_path is shlex-quoted by the
+    # module itself before being joined in, which sidesteps that entirely.
+    rsync_path: "sudo rsync"
+    rsync_opts:
+      # Same space-splitting hazard as above, hence the embedded single
+      # quotes here: without them, '.gitignore' would land as its own
+      # shell word (a bogus extra source path) instead of staying part of
+      # this one filter argument.
+      - "--filter=':- .gitignore'"
+      - "--exclude=.git"
 
 - name: Ensure the vault config directory exists
   file:
@@ -63,30 +118,20 @@
 # out to a Terraform working directory the runner never initialized —
 # extra-vars already winning over whatever set_fact computed wouldn't save
 # it, since the lookup itself fails before any value is even assigned.
+#
+# No longer rendered into a file (an earlier version of this role
+# templated these three into infra/vault/vault-server-prod.hcl.j2) — they
+# now flow straight into "Build and start the stack"'s own environment:
+# block below, matching docker-compose.prod.yml's 'vault' service reading
+# them as VAULT_OCIKMS_SEAL_KEY_ID/etc. env vars instead of HCL config,
+# which sidesteps a documented Vault parsing bug for 'key_id' in the
+# config-file form (see vault-server-prod.hcl's own header comment).
 - name: Read Vault's OCI KMS config from Terraform outputs
   when: vault_kms_key_id | length == 0
   set_fact:
     vault_kms_key_id: "{{ lookup('ansible.builtin.pipe', 'terraform -chdir=' + playbook_dir + '/../terraform output -raw vault_unseal_key_id') }}"
     vault_kms_crypto_endpoint: "{{ lookup('ansible.builtin.pipe', 'terraform -chdir=' + playbook_dir + '/../terraform output -raw vault_kms_crypto_endpoint') }}"
     vault_kms_management_endpoint: "{{ lookup('ansible.builtin.pipe', 'terraform -chdir=' + playbook_dir + '/../terraform output -raw vault_kms_management_endpoint') }}"
-
-- name: Render the Vault server config
-  template:
-    # Not under this role's own templates/ dir: infra/vault/ is shared,
-    # non-role-specific config (agent.hcl, the policies, the bootstrap
-    # scripts all live there too) — same 'playbook_dir'-relative pattern
-    # already used above for reading Terraform's outputs.
-    src: "{{ playbook_dir }}/../vault/vault-server-prod.hcl.j2"
-    dest: "{{ vault_config_dir }}/vault-server.hcl"
-    # 0644, not 0600: the Vault image's own entrypoint drops from root to
-    # a non-root user before running 'vault server' (unlike vault-agent/
-    # vault-bootstrap, whose entrypoint is overridden directly, bypassing
-    # that — see agent-prod.hcl/bootstrap-prod.sh), so a root-owned 0600
-    # file is unreadable to the process that actually needs it. Safe to
-    # widen: this file's contents are non-secret (an OCID and two HTTPS
-    # endpoint URLs, matching infra/terraform/vault.tf's own reasoning),
-    # unlike the AppRole credential files below.
-    mode: "0644"
 
 # Unconditional now, deliberately — this used to skip entirely when the
 # four vars were still empty (their defaults/main.yml default, before
@@ -187,6 +232,13 @@
     DB_USER: "{{ db_user }}"
     DB_NAME: "{{ db_name }}"
     DB_PASSWORD: "{{ bootstrap_db_password }}"
+    # Read compose-side by docker-compose.prod.yml's 'vault' service as
+    # ${VAULT_KMS_KEY_ID}/etc. — see that file's own comment for why these
+    # are environment variables on the container rather than values baked
+    # into infra/vault/vault-server-prod.hcl.
+    VAULT_KMS_KEY_ID: "{{ vault_kms_key_id }}"
+    VAULT_KMS_CRYPTO_ENDPOINT: "{{ vault_kms_crypto_endpoint }}"
+    VAULT_KMS_MANAGEMENT_ENDPOINT: "{{ vault_kms_management_endpoint }}"
   # This task's own env vars exist only for the lifetime of this one SSH
   # command — they're never written to a file on the server, so
   # bootstrap_db_password doesn't linger anywhere after 'docker compose
@@ -216,4 +268,17 @@
     # this --force-recreate is what actually delivers it, the first time
     # vault-bootstrap has real AppRole credentials to act on it with.
     DB_PASSWORD: "{{ bootstrap_db_password }}"
+    # Needed here too, even though this task never names 'vault' itself:
+    # 'docker compose up' re-interpolates every service's ${...} variables
+    # from *this* command's own environment, not just the two services
+    # named on the command line — without these three, 'vault's own
+    # VAULT_OCIKMS_SEAL_KEY_ID/etc. (docker-compose.prod.yml) would
+    # interpolate to empty strings here, which Compose sees as a config
+    # change and recreates 'vault' to match — even though it was never
+    # asked to — crash-looping it on the same "'key_id' not found" error
+    # this project has already hit (and fixed) once before, in "Build and
+    # start the stack" above.
+    VAULT_KMS_KEY_ID: "{{ vault_kms_key_id }}"
+    VAULT_KMS_CRYPTO_ENDPOINT: "{{ vault_kms_crypto_endpoint }}"
+    VAULT_KMS_MANAGEMENT_ENDPOINT: "{{ vault_kms_management_endpoint }}"
   no_log: true

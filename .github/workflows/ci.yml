@@ -221,29 +221,22 @@ jobs:
         # never come on a non-interactive runner.
         env:
           ANSIBLE_HOST_KEY_CHECKING: 'False'
-        # Run from infra/ansible/ (not repo root) — playbook.yml's roles
-        # (docker, app_deploy) resolve from infra/ansible/roles/ relative to
-        # the playbook's own directory, exactly as they do when you run this
-        # by hand from your own machine.
-        #
-        # vault_kms_* come from the Terraform outputs read above — not
-        # secret, but there's no local Terraform working directory on this
-        # runner for tasks/main.yml's own lookup to fall back on, so they
-        # have to be supplied explicitly (see defaults/main.yml's comment).
-        # vault_*_role_id/secret_id ($VAULT_AGENT_ROLE_ID etc.) are plain
-        # shell env vars now, not '${{ secrets.* }}' — the "Fetch secrets
-        # from Infisical" step above already exported them, generated once
-        # by infra/vault/bootstrap-prod-init.sh. Empty on a repo where that
-        # one-time step hasn't run yet (nothing there to fetch), which
-        # tasks/main.yml handles the same way it would from any other
-        # machine (see that file's own comment).
+        # infra/ansible/deploy.sh (same script a developer runs by hand)
+        # owns the actual '-e vault_agent_role_id=...' etc. list now — one
+        # place to keep in sync with roles/app_deploy and roles/duckdns'
+        # own required vars, not this file and a local script quietly
+        # drifting apart (exactly what happened once already: this step
+        # shipped without '-e duckdns_token', and only broke on the next
+        # real deploy). $VAULT_AGENT_ROLE_ID/$DUCKDNS_TOKEN/etc. are
+        # already exported by "Fetch secrets from Infisical" above — since
+        # every one of deploy.sh's required vars is already set, it skips
+        # sourcing import-secrets.sh entirely (that script assumes an
+        # interactive 'infisical' CLI login this runner has no use for).
+        # vault_kms_* are passed here as extra args instead: Terraform
+        # outputs read as a separate step above, not something a Vault
+        # AppRole/DuckDNS credential model fits alongside the rest.
         run: |
-          cd infra/ansible
-          ansible-playbook -i inventory.ini playbook.yml \
+          infra/ansible/deploy.sh \
             -e vault_kms_key_id="${{ steps.tf.outputs.vault_kms_key_id }}" \
             -e vault_kms_crypto_endpoint="${{ steps.tf.outputs.vault_kms_crypto_endpoint }}" \
-            -e vault_kms_management_endpoint="${{ steps.tf.outputs.vault_kms_management_endpoint }}" \
-            -e vault_agent_role_id="$VAULT_AGENT_ROLE_ID" \
-            -e vault_agent_secret_id="$VAULT_AGENT_SECRET_ID" \
-            -e vault_bootstrap_role_id="$VAULT_BOOTSTRAP_ROLE_ID" \
-            -e vault_bootstrap_secret_id="$VAULT_BOOTSTRAP_SECRET_ID"
+            -e vault_kms_management_endpoint="${{ steps.tf.outputs.vault_kms_management_endpoint }}"

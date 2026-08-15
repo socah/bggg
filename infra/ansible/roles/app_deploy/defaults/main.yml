@@ -3,6 +3,15 @@
 # secrets (the DB password, Keycloak client secret) never live here —
 # see tasks/main.yml for how the DB password is handled.
 deploy_dir: /opt/bggg
+# 'git' (default) clones app_repo/app_repo_version the normal way — the
+# only path CI/a real deploy should ever use, since it's the only one that
+# guarantees the server ends up running something that's actually been
+# committed. 'local' rsyncs this checkout's own working tree instead
+# (uncommitted changes included) straight over the same SSH connection —
+# for debugging a fix on the real server without pushing broken commits
+# to GitHub just to iterate. See tasks/main.yml for both paths; switch
+# with '-e app_deploy_source=local'.
+app_deploy_source: git
 # SSH, not HTTPS: this repo is private, and an HTTPS clone with no
 # credentials on the box just sits there — git prompts for a username
 # with no terminal to type it into, so 'ansible-playbook' looks hung
