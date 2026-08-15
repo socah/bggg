@@ -242,6 +242,14 @@ jobs:
           mkdir -p "$(dirname "$key_path")"
           umask 077
           printf '%s' "$GITHUB_DEPLOY_KEY" > "$key_path"
+          # OpenSSH's newer key format is strict about ending in a real
+          # newline after '-----END OPENSSH PRIVATE KEY-----' — GitHub's
+          # own env-var export trims it off, and without it git fails
+          # with a misleadingly generic "error in libcrypto" while
+          # loading the key, not an obviously-about-newlines message.
+          # Confirmed by inspecting the actual file this step wrote on
+          # the server (tail -c: last 4 bytes were '----', no '\n').
+          [ -n "$(tail -c1 "$key_path")" ] && echo >> "$key_path"
           chmod 600 "$key_path"
 
       - uses: hashicorp/setup-terraform@v3
