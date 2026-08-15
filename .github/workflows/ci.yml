@@ -156,6 +156,45 @@ jobs:
           secret-path: /ENV_VARS
           export-type: env
 
+      # Same Infisical login, second call scoped to /FILEABLES — this is
+      # where SSH_PRIVATE_KEY and GITHUB_DEPLOY_KEY actually live (plus
+      # OCI_PRIVATE_KEY, unused here), per import-secrets.sh's own layout
+      # comment. Kept as its own step (not folded into the one above)
+      # since secret-path is a single value per call. The action calls
+      # core.setSecret() on every value before exporting it, so this is
+      # masked in logs the same way '${{ secrets.* }}' values are — safe
+      # to reference below as a plain env var, and safe for multi-line
+      # PEM values specifically (core.exportVariable handles that).
+      - name: Fetch SSH key from Infisical
+        uses: Infisical/secrets-action@v1.0.12
+        with:
+          method: universal
+          client-id: ${{ secrets.INFISICAL_CLIENT_ID }}
+          client-secret: ${{ secrets.INFISICAL_CLIENT_SECRET }}
+          project-slug: bggg-bq-ji
+          env-slug: dev
+          secret-path: /FILEABLES
+          export-type: env
+
+      # app_deploy/tasks/main.yml's 'Copy the GitHub deploy key to the
+      # server' task reads GITHUB_DEPLOY_KEY_PATH as a *local* file on
+      # whatever machine runs Ansible, and copies it to the server — on a
+      # developer's machine, infra/scripts/import-secrets.sh writes that
+      # file before Ansible ever runs; this runner has no equivalent step,
+      # so without this the git-clone task would fail with a missing
+      # source file. Writes GITHUB_DEPLOY_KEY (fetched above) to exactly
+      # the path GITHUB_DEPLOY_KEY_PATH names, mirroring what
+      # import-secrets.sh does locally. The '~'-expansion mirrors that
+      # script's own handling of the same issue: Infisical values come
+      # back literal, so a leading '~' is never shell-expanded on its own.
+      - name: Write GitHub deploy key to disk
+        run: |
+          key_path="${GITHUB_DEPLOY_KEY_PATH/#\~/$HOME}"
+          mkdir -p "$(dirname "$key_path")"
+          umask 077
+          printf '%s' "$GITHUB_DEPLOY_KEY" > "$key_path"
+          chmod 600 "$key_path"
+
       - uses: hashicorp/setup-terraform@v3
         with:
           # Pinned to match the version this project's devcontainer runs —
@@ -202,16 +241,15 @@ jobs:
       - run: pip install --user ansible
 
       # Loads the private key into an in-memory ssh-agent for this job only.
-      # The key text lives in GitHub's encrypted Secrets store and is
-      # injected at runtime — it never appears in this file, and GitHub
-      # automatically redacts any secret value it recognizes in job logs.
-      # Deliberately still its own separate GitHub Secret, not something
-      # fetched from Infisical alongside everything else above: this is a
-      # CI-specific deploy credential, not the same key any of the
-      # developer-machine secrets under /ENV_VARS represent.
+      # SSH_PRIVATE_KEY comes from the "Fetch SSH key from Infisical" step
+      # above (/FILEABLES, same key infra/scripts/import-secrets.sh writes
+      # to $SSH_KEY_PATH on a developer's own machine) — not a separate
+      # GitHub Secret. One fewer place for this credential to live and
+      # rotate independently; masked in logs the same way regardless of
+      # source (see that step's own comment).
       - uses: webfactory/ssh-agent@v0.9.0
         with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          ssh-private-key: ${{ env.SSH_PRIVATE_KEY }}
 
       - name: Write Ansible inventory
         run: |
