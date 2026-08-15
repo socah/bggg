@@ -1,0 +1,56 @@
+name: Weekly Image Scan
+
+# ci.yml's 'build-and-scan' only runs when files relevant to a given image
+# actually change (see its 'changes' job) — which means an unchanged
+# image's vulnerability status never gets rechecked on its own. A CVE
+# disclosed today against a dependency version this project has been
+# running unmodified for months would go unnoticed until the next real
+# code change happens to touch that workspace. This workflow closes that
+# gap: it rebuilds both images fresh from whatever's on 'main' and
+# Trivy-scans them, independent of whether anything changed.
+#
+# Weekly, not daily: Trivy's own vulnerability database doesn't turn over
+# fast enough for daily rescans of unchanged code to be meaningfully more
+# useful, and this rebuilds full images from scratch every run — not free.
+on:
+  schedule:
+    # 03:00 UTC every Monday.
+    - cron: '0 3 * * 1'
+  # Lets you trigger a rescan by hand right after a CVE disclosure you
+  # want to check immediately, instead of waiting for Monday.
+  workflow_dispatch: {}
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - workspace: api
+            dockerfile: apps/api/Dockerfile
+          - workspace: web
+            dockerfile: apps/web/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          tags: bggg-${{ matrix.workspace }}:scheduled-scan
+          load: true
+
+      # Same gate as ci.yml's 'build-and-scan' job, kept in sync by hand —
+      # not shared via a reusable workflow, which would add more moving
+      # parts than this ~15-line job is worth. If you change one, check
+      # the other (image tag, Trivy version, severity/exit-code).
+      - name: Trivy scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: bggg-${{ matrix.workspace }}:scheduled-scan
+          severity: CRITICAL
+          exit-code: '1'

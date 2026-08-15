@@ -11,12 +11,51 @@ on:
     branches: [main]
 
 jobs:
+  # Cheap, fast job every other one keys off of — decides whether a given
+  # push/PR touched anything apps/api, apps/web, or shared config actually
+  # cares about, so 'verify'/'build-and-scan' below can skip their genuinely
+  # expensive steps (npm ci, a multi-stage Docker build, a Trivy scan) for
+  # infra-only changes (Ansible, Terraform, Vault, notes/...) that could
+  # never affect either app's image. Gated at the STEP level inside those
+  # jobs, not via a job-level 'if:' — a job-level skip changes that job's
+  # own reported conclusion to "skipped", and 'deploy' below depends on both
+  # via 'needs:', which by default treats a skipped dependency as not
+  # satisfying success() — exactly the ansible/vault/docker-compose-only
+  # deploys this project runs constantly, which must still reach 'deploy'.
+  # Step-level skips keep the job itself reporting "success" regardless.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      api: ${{ steps.filter.outputs.api }}
+      web: ${{ steps.filter.outputs.web }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            api:
+              - 'apps/api/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'tsconfig.json'
+              - '.dockerignore'
+              - '.github/workflows/**'
+            web:
+              - 'apps/web/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'tsconfig.json'
+              - '.dockerignore'
+              - '.github/workflows/**'
+
   # Decision: lint + test + npm audit share ONE job (matrixed per workspace)
   # rather than three separate jobs. Because: all three need the exact same
   # 'npm ci' first — splitting them into separate jobs would mean paying for
   # that install twice (or three times) per workspace for no benefit, since
   # none of the three depend on each other's output.
   verify:
+    needs: changes
     runs-on: ubuntu-latest
     strategy:
       # fail-fast: false means api's lint failing doesn't cancel web's job
@@ -26,8 +65,10 @@ jobs:
         workspace: [api, web]
     steps:
       - uses: actions/checkout@v4
+        if: needs.changes.outputs[matrix.workspace] == 'true'
 
       - uses: actions/setup-node@v4
+        if: needs.changes.outputs[matrix.workspace] == 'true'
         with:
           node-version: '20'
           # Caches ~/.npm keyed on package-lock.json's hash (root-level lockfile,
@@ -37,26 +78,29 @@ jobs:
       # Same install shape as apps/api/Dockerfile and apps/web/Dockerfile use
       # ('--workspace=X --include-workspace-root') — one workspace's deps only,
       # plus the root package.json workspaces needs to resolve at all.
-      - run: npm ci --workspace=apps/${{ matrix.workspace }} --include-workspace-root
+      - if: needs.changes.outputs[matrix.workspace] == 'true'
+        run: npm ci --workspace=apps/${{ matrix.workspace }} --include-workspace-root
 
-      - run: npm run lint --workspace=apps/${{ matrix.workspace }}
+      - if: needs.changes.outputs[matrix.workspace] == 'true'
+        run: npm run lint --workspace=apps/${{ matrix.workspace }}
 
       # apps/web has no "test" script (only "lint") — Next.js's own build is
       # its type/compile check, and no unit tests exist for it yet. Running
       # 'npm run test' unconditionally here would fail on web with
       # "missing script: test", not a real test failure.
       - name: Unit tests
-        if: matrix.workspace == 'api'
+        if: matrix.workspace == 'api' && needs.changes.outputs.api == 'true'
         run: npm run test --workspace=apps/api
 
       - name: E2E tests
-        if: matrix.workspace == 'api'
+        if: matrix.workspace == 'api' && needs.changes.outputs.api == 'true'
         run: npm run test:e2e --workspace=apps/api
 
       # audit-level=high per references/secops.md's Dependency Scanning
       # checklist — fails the job (non-zero exit) on any high or critical
       # advisory in this workspace's resolved dependency tree.
       - name: npm audit (high+critical)
+        if: needs.changes.outputs[matrix.workspace] == 'true'
         run: npm audit --workspace=apps/${{ matrix.workspace }} --audit-level=high
 
   # Decision: a separate job from 'verify', not extra steps tacked onto it.
@@ -65,6 +109,7 @@ jobs:
   # with 'verify' instead of queuing behind it, so a fast lint failure still
   # surfaces immediately rather than waiting on a slow image build.
   build-and-scan:
+    needs: changes
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -76,10 +121,13 @@ jobs:
             dockerfile: apps/web/Dockerfile
     steps:
       - uses: actions/checkout@v4
+        if: needs.changes.outputs[matrix.workspace] == 'true'
 
       - uses: docker/setup-buildx-action@v3
+        if: needs.changes.outputs[matrix.workspace] == 'true'
 
       - name: Build image
+        if: needs.changes.outputs[matrix.workspace] == 'true'
         uses: docker/build-push-action@v6
         with:
           # Root context, same as docker-compose.yml's 'build.context: .' for
@@ -96,6 +144,7 @@ jobs:
           load: true
 
       - name: Trivy scan
+        if: needs.changes.outputs[matrix.workspace] == 'true'
         # Was v0.28.0 — that release's own internal pin on
         # aquasecurity/setup-trivy@v0.2.1 has since been deleted upstream
         # (confirmed via the GitHub API: only v0.2.6+ exist now), so the
