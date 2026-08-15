@@ -1,10 +1,18 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { ExecutionContext, INestApplication, ValidationPipe } from '@nestjs/common';
 import request, { Response } from 'supertest';
 import { GroupsController } from '../src/groups/groups.controller';
 import { GroupsService } from '../src/groups/groups.service';
 import { AuthGuard } from '../src/auth/auth.guard';
 import { Group } from '../src/groups/group.entity';
+
+// Fixed, valid-format UUIDs — GroupsController's :id param goes through
+// ParseUUIDPipe now (not ParseIntPipe, despite what this file's tests used
+// to assume), so route params below have to be UUID-shaped even though the
+// mocked service never actually looks them up.
+const TEST_USER_ID = 'a1111111-1111-4111-8111-111111111111';
+const GROUP_ID = 'b2222222-2222-4222-8222-222222222222';
+const OTHER_GROUP_ID = 'c3333333-3333-4333-8333-333333333333';
 
 describe('Groups (e2e)', () => {
   let app: INestApplication;
@@ -33,8 +41,18 @@ describe('Groups (e2e)', () => {
     })
       // .overrideGuard replaces AuthGuard wherever @UseGuards(AuthGuard)
       // appears, without needing to import or register it as a provider.
+      // Unlike a bare '() => true', this also stamps req.user the same way
+      // the real AuthGuard does after verifying a JWT — every handler below
+      // reads req.user.sub as the requesting user, so without this they'd
+      // throw on a real request, not just return the wrong thing.
       .overrideGuard(AuthGuard)
-      .useValue({ canActivate: () => true })
+      .useValue({
+        canActivate: (context: ExecutionContext) => {
+          const request = context.switchToHttp().getRequest();
+          request.user = { sub: TEST_USER_ID };
+          return true;
+        },
+      })
       .compile();
 
     app = module.createNestApplication();
@@ -61,7 +79,7 @@ describe('Groups (e2e)', () => {
 
   it('GET /groups → 200 with array', async () => {
     const groups: Group[] = [
-      { id: 1, name: 'Chess Club', createdAt: new Date() },
+      { id: GROUP_ID, name: 'Chess Club', ownerId: TEST_USER_ID, createdAt: new Date() },
     ];
     mockGroupsService.findAll.mockResolvedValue(groups);
 
@@ -80,11 +98,11 @@ describe('Groups (e2e)', () => {
   // ── GET /groups/:id ───────────────────────────────────────────────────────
 
   it('GET /groups/:id → 200 with group', async () => {
-    const group: Group = { id: 1, name: 'Chess Club', createdAt: new Date() };
+    const group: Group = { id: GROUP_ID, name: 'Chess Club', ownerId: TEST_USER_ID, createdAt: new Date() };
     mockGroupsService.findOne.mockResolvedValue(group);
 
     await request(app.getHttpServer())
-      .get('/groups/1')
+      .get(`/groups/${GROUP_ID}`)
       .expect(200)
       .expect((res: Response) => {
         expect(res.body.name).toBe('Chess Club');
@@ -97,20 +115,20 @@ describe('Groups (e2e)', () => {
     const { NotFoundException } = await import('@nestjs/common');
     mockGroupsService.findOne.mockRejectedValue(new NotFoundException());
 
-    await request(app.getHttpServer()).get('/groups/99').expect(404);
+    await request(app.getHttpServer()).get(`/groups/${OTHER_GROUP_ID}`).expect(404);
   });
 
-  it('GET /groups/:id → 400 when id is not a number', async () => {
-    // ParseIntPipe rejects non-numeric route params with 400 Bad Request.
+  it('GET /groups/:id → 400 when id is not a UUID', async () => {
+    // ParseUUIDPipe rejects malformed route params with 400 Bad Request.
     // This test verifies the pipe is wired correctly — it would pass even
     // without any service mock because the pipe runs before the service.
-    await request(app.getHttpServer()).get('/groups/abc').expect(400);
+    await request(app.getHttpServer()).get('/groups/not-a-uuid').expect(400);
   });
 
   // ── POST /groups ──────────────────────────────────────────────────────────
 
   it('POST /groups → 201 with created group', async () => {
-    const created: Group = { id: 3, name: 'Go Club', createdAt: new Date() };
+    const created: Group = { id: GROUP_ID, name: 'Go Club', ownerId: TEST_USER_ID, createdAt: new Date() };
     mockGroupsService.create.mockResolvedValue(created);
 
     await request(app.getHttpServer())
@@ -118,7 +136,7 @@ describe('Groups (e2e)', () => {
       .send({ name: 'Go Club' })
       .expect(201)
       .expect((res: Response) => {
-        expect(res.body.id).toBe(3);
+        expect(res.body.id).toBe(GROUP_ID);
         expect(res.body.name).toBe('Go Club');
       });
   });
@@ -128,6 +146,6 @@ describe('Groups (e2e)', () => {
   it('DELETE /groups/:id → 204 no content', async () => {
     mockGroupsService.remove.mockResolvedValue(undefined);
 
-    await request(app.getHttpServer()).delete('/groups/1').expect(204);
+    await request(app.getHttpServer()).delete(`/groups/${GROUP_ID}`).expect(204);
   });
 });
