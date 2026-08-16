@@ -21,8 +21,9 @@ progress are visible to non-git stakeholders.
 ## Step 0 — Check Active Mode
 
 Before anything else, read `.claude/skills/active-mode.txt` (relative to the
-repo root). If the file is missing or its content is anything other than
-`feature-dev`, stop here: tell the user "boardgame-skill is active
+repo root). Compare its content, trimmed of surrounding whitespace, to
+`feature-dev`. If the file is missing or its (trimmed) content is anything
+other than `feature-dev`, stop here: tell the user "boardgame-skill is active
 (active-mode.txt is set to learning, or the file is missing) — use that
 skill instead, or run `make mode-feature-dev` to switch to feature-dev
 mode." Do not proceed with the rest of this skill while in learning mode.
@@ -40,7 +41,7 @@ If the file says `feature-dev`, continue below.
 | New feature | `workitem create`, `page create`, `page attach_to_workitem` | Work item + linked spec Page |
 | Plan | `workitem create` (`parent=<feature id>`) per task | Leave `state` unset (default Todo) |
 | Implement | `state list` once, then `workitem update` (`state=<id>`) | Resolve state ids by `group`, not by name |
-| Close | `workitem update` parent `state` to `completed` | Only after every subtask is `completed` |
+| Close | `workitem update` parent `state` to `completed` | Only after every subtask is `completed` or `cancelled` |
 
 ---
 
@@ -102,9 +103,10 @@ As each subtask starts and finishes:
    (`unstarted`, `started`, `completed`).
 2. `mcp__plane__workitem update` the subtask's `state` to the matching id
    as it moves Todo → In Progress → Done.
-3. Add a short comment on the subtask (`mcp__plane__workitem_comment`)
-   describing what was done — this comment trail is the running progress
-   record, not a local file.
+3. Add a short comment on the subtask describing what was done via
+   `mcp__plane__workitem_comment` with action `create`, `project_id`,
+   `workitem_id=<subtask id>`, and `comment_html=<progress note as HTML>` —
+   this comment trail is the running progress record, not a local file.
 
 ### Step 5 — Recommend quality gates (do not force)
 
@@ -116,9 +118,11 @@ At the right moments, point the user to (but do not block on):
 
 ### Step 6 — Close the feature
 
-Once every subtask work item is in a `completed` state, update the parent
-feature work item's state to `completed` and add a closing comment
-summarizing what shipped.
+Once every subtask work item is in a `completed` or `cancelled` state,
+update the parent feature work item's state to `completed` and add a
+closing comment summarizing what shipped, via `mcp__plane__workitem_comment`
+with action `create`, `project_id`, `workitem_id=<feature id>`, and
+`comment_html=<closing summary as HTML>`.
 
 ---
 

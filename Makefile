@@ -1,5 +1,12 @@
 MODE_FILE := .claude/skills/active-mode.txt
 
+# Three targets: mode-learning / mode-feature-dev write the mode file,
+# mode-status reports the current mode (repairing it to "learning" if
+# missing/invalid). $(MODE_FILE) is git-tracked, so switching modes is a
+# working-tree change that is per-checkout/per-worktree — flipping the mode
+# in one git worktree does not affect any other worktree or clone.
+.DEFAULT_GOAL := mode-status
+
 .PHONY: mode-learning mode-feature-dev mode-status
 
 mode-learning:

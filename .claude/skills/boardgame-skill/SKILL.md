@@ -23,9 +23,10 @@ code and every infrastructure decision — not just that things work.
 ## Step 0 — Check Active Mode
 
 Before anything else, read `.claude/skills/active-mode.txt` (relative to the
-repo root). If the file is missing or its content is anything other than
-`feature-dev`, treat it as `learning` mode and proceed normally below. If it
-is `feature-dev`, stop here: tell the user "feature-dev-skill is active
+repo root). Compare its content, trimmed of surrounding whitespace, to
+`feature-dev`. If the file is missing or its (trimmed) content is anything
+other than `feature-dev`, treat it as `learning` mode and proceed normally
+below. If it is `feature-dev`, stop here: tell the user "feature-dev-skill is active
 (active-mode.txt is set to feature-dev) — use that skill instead, or run
 `make mode-learning` to switch back to learning mode." Do not proceed with
 the learning loop while in feature-dev mode.
