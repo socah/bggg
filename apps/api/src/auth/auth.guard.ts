@@ -26,7 +26,20 @@ const JWKS = createRemoteJWKSet(
 // token signed by a *different* realm on the same Keycloak instance (or a
 // different Keycloak entirely) is rejected even if it were somehow otherwise
 // well-formed.
-const ISSUER = `${KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}`;
+//
+// KEYCLOAK_ISSUER (when set) takes priority over deriving the issuer from
+// KEYCLOAK_URL: in prod, KEYCLOAK_URL is the container-internal
+// http://keycloak:8080 address (used for the JWKS fetch above, which is
+// fine staying internal), but real tokens carry Keycloak's public-facing
+// issuer (https://<domain>/auth/realms/<realm> — see docker-compose.yml's
+// KC_HOSTNAME/KEYCLOAK_ISSUER, which must stay in lockstep with this).
+// Those two are never the same value in prod, so deriving from
+// KEYCLOAK_URL there would reject every real token. Dev leaves
+// KEYCLOAK_ISSUER unset and keeps today's KEYCLOAK_URL-derived behavior,
+// which is already correct there (no reverse-proxy hostname pinning).
+export const ISSUER =
+  process.env.KEYCLOAK_ISSUER ??
+  `${KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}`;
 
 @Injectable()
 export class AuthGuard implements CanActivate {

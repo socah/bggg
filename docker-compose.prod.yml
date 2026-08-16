@@ -12,7 +12,7 @@ services:
       # 'start' mode refuses to boot without knowing its own public
       # hostname — dev's 'start-dev' doesn't enforce this, which is why it
       # isn't set in docker-compose.dev.yml at all.
-      KC_HOSTNAME: https://${DOMAIN_NAME}
+      KC_HOSTNAME: https://${DOMAIN_NAME}/auth
       # Traefik terminates TLS before traffic ever reaches this container
       # (see docker-compose.yml's keycloak Traefik labels) — the hop from
       # Traefik to keycloak inside the Docker network is plain HTTP, so

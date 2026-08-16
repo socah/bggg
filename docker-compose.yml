@@ -239,6 +239,12 @@ services:
       DB_PASSWORD_FILE: /run/secrets/db_password
       KEYCLOAK_URL: http://keycloak:8080
       KEYCLOAK_REALM: ${KEYCLOAK_REALM}
+      # Public-facing issuer AuthGuard validates real tokens against — see
+      # auth.guard.ts's ISSUER comment. Must stay in lockstep with
+      # docker-compose.prod.yml's keycloak KC_HOSTNAME (same
+      # https://<domain>/auth base) and mirrors the identical pattern
+      # already used for 'web's AUTH_KEYCLOAK_ISSUER below.
+      KEYCLOAK_ISSUER: https://${DOMAIN_NAME}/auth/realms/${KEYCLOAK_REALM}
       KEYCLOAK_API_SERVICE_ID: ${KEYCLOAK_API_SERVICE_ID}
       KEYCLOAK_API_SERVICE_SECRET: ${KEYCLOAK_API_SERVICE_SECRET}
       # Cloudflare R2 — read by apps/api/src/uploads/r2.service.ts for
