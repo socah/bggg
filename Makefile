@@ -11,4 +11,10 @@ mode-feature-dev:
 	@echo "Active mode set to: feature-dev"
 
 mode-status:
-	@echo "Active mode: $$(cat $(MODE_FILE) 2>/dev/null || echo 'learning (default, no mode file present)')"
+	@MODE=$$(cat $(MODE_FILE) 2>/dev/null); \
+	if [ "$$MODE" = "learning" ] || [ "$$MODE" = "feature-dev" ]; then \
+		echo "Active mode: $$MODE"; \
+	else \
+		echo learning > $(MODE_FILE); \
+		echo "Active mode: learning (default, mode file was missing or invalid)"; \
+	fi
