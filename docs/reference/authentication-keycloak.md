@@ -12,6 +12,14 @@ drives the OAuth Authorization Code + PKCE flow. `apps/api`'s `AuthGuard`
 independently verifies the resulting JWTs via Keycloak's JWKS — it never
 talks to Auth.js.
 
+`apps/web/auth.ts` sets `trustHost: true` — required in production or
+Auth.js rejects every request with `UntrustedHost` (reproduced directly:
+prod logs showed this for every single request before it was added). Safe
+here because Traefik's `Host(`${DOMAIN_NAME}`) router rule
+(`docker-compose.yml`) already only ever forwards requests for the real
+domain to `web` — there's no arbitrary/spoofed Host header this could
+blindly trust from the open internet.
+
 ## `/api` is always the backend; Auth.js lives under `/web`
 
 Both Traefik (`docker-compose.yml`'s `api` router, `PathPrefix('/api')`)
