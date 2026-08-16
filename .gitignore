@@ -60,3 +60,7 @@ infra/ansible/inventory.ini
 # Logs
 *.log
 logs/
+
+# Per-checkout skill mode toggle (make mode-feature-dev / mode-learning) —
+# local working-state, not something to sync across clones via git.
+.claude/skills/active-mode.txt
