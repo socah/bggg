@@ -69,8 +69,22 @@ services:
       - traefik.http.middlewares.ratelimit.ratelimit.average=10
       - traefik.http.middlewares.ratelimit.ratelimit.burst=20
       - traefik.http.middlewares.secheaders.headers.stsSeconds=31536000
-      - traefik.http.middlewares.secheaders.headers.frameDeny=true
       - traefik.http.middlewares.secheaders.headers.contentTypeNosniff=true
+      # Split out from 'secheaders' (not merged into it): 'keycloak's router
+      # below uses 'secheaders' too but must NOT get this one. X-Frame-Options:
+      # DENY blocks framing unconditionally, including same-origin — but
+      # Keycloak frames itself on purpose, for its own login-status-iframe.html
+      # (silent check-sso, used by keycloak-js's checkLoginIframe AND by the
+      # admin console's own session-status checks). DENY on that endpoint broke
+      # the admin console outright (uncaught error in its iframe postMessage
+      # handshake, surfaced as its own untranslated "somethingWentWrong" error
+      # boundary — reproduced directly: 'curl -I' on login-status-iframe.html
+      # showed 'x-frame-options: DENY' coming from Traefik). 'web'/'api' never
+      # frame themselves, so they keep the stricter DENY via this middleware;
+      # 'keycloak' keeps only 'secheaders' above, falling back to Keycloak's
+      # own default (X-Frame-Options: SAMEORIGIN) instead of Traefik
+      # overriding it.
+      - traefik.http.middlewares.frame-deny.headers.frameDeny=true
       # Strips '/api' before the request reaches the 'api' service —
       # matches apps/web/next.config.ts's rewrite exactly (that rewrite
       # forwards '/api/:path*' to the backend's ':path*', same stripping,
@@ -287,7 +301,7 @@ services:
       # else runs; api-stripprefix runs last, right before the request
       # reaches the 'api' container, so NestJS sees '/groups/42' not
       # '/api/groups/42' — same contract as next.config.ts's rewrite.
-      - traefik.http.routers.api.middlewares=ratelimit,secheaders,api-stripprefix
+      - traefik.http.routers.api.middlewares=ratelimit,secheaders,frame-deny,api-stripprefix
       - traefik.http.routers.api.service=api
       # Explicit even though EXPOSE 3000 is the only port apps/api/Dockerfile
       # exposes — Traefik would auto-detect it, but relying on that breaks
@@ -305,7 +319,7 @@ services:
       - traefik.http.routers.chat.rule=Host(`${DOMAIN_NAME}`) && PathPrefix(`/socket.io`)
       - traefik.http.routers.chat.entrypoints=websecure
       - traefik.http.routers.chat.tls.certresolver=le
-      - traefik.http.routers.chat.middlewares=ratelimit,secheaders
+      - traefik.http.routers.chat.middlewares=ratelimit,secheaders,frame-deny
       - traefik.http.routers.chat.service=api
 
   web:
@@ -347,7 +361,7 @@ services:
       - traefik.http.routers.web.rule=Host(`${DOMAIN_NAME}`)
       - traefik.http.routers.web.entrypoints=websecure
       - traefik.http.routers.web.tls.certresolver=le
-      - traefik.http.routers.web.middlewares=ratelimit,secheaders
+      - traefik.http.routers.web.middlewares=ratelimit,secheaders,frame-deny
       - traefik.http.routers.web.service=web
       - traefik.http.services.web.loadbalancer.server.port=3000
       # Auth.js's own routes (app/api/auth/[...nextauth]/route.ts) and the
@@ -366,12 +380,12 @@ services:
       - traefik.http.routers.web-auth.rule=Host(`${DOMAIN_NAME}`) && PathPrefix(`/api/auth`)
       - traefik.http.routers.web-auth.entrypoints=websecure
       - traefik.http.routers.web-auth.tls.certresolver=le
-      - traefik.http.routers.web-auth.middlewares=ratelimit,secheaders
+      - traefik.http.routers.web-auth.middlewares=ratelimit,secheaders,frame-deny
       - traefik.http.routers.web-auth.service=web
       - traefik.http.routers.web-login.rule=Host(`${DOMAIN_NAME}`) && PathPrefix(`/api/login`)
       - traefik.http.routers.web-login.entrypoints=websecure
       - traefik.http.routers.web-login.tls.certresolver=le
-      - traefik.http.routers.web-login.middlewares=ratelimit,secheaders
+      - traefik.http.routers.web-login.middlewares=ratelimit,secheaders,frame-deny
       - traefik.http.routers.web-login.service=web
 
 volumes:
