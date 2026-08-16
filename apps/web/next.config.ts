@@ -33,14 +33,18 @@ const withPWA = withPWAInit({
   // caching, no rewriting — checked before the extended defaults below
   // (custom entries are prepended ahead of them, see resolveRuntimeCaching
   // in @ducanh2912/next-pwa's own source), so it always wins for this prefix
-  // regardless of extension.
-  runtimeCaching: [
-    {
-      urlPattern: ({ url }) => url.pathname.startsWith('/auth/'),
-      handler: 'NetworkOnly',
-    },
-  ],
+  // regardless of extension. Nested under 'workboxOptions': that's where
+  // this library's own type (PluginOptions) actually declares
+  // 'runtimeCaching', not at the top level.
   extendDefaultRuntimeCaching: true,
+  workboxOptions: {
+    runtimeCaching: [
+      {
+        urlPattern: ({ url }: { url: URL }) => url.pathname.startsWith('/auth/'),
+        handler: 'NetworkOnly',
+      },
+    ],
+  },
 });
 
 const nextConfig: NextConfig = {
@@ -65,20 +69,17 @@ const nextConfig: NextConfig = {
   //   3. In production, Traefik will do this routing instead — same contract,
   //      different implementation.
   //
-  // Array-form rewrites run as "afterFiles" — after static/page files are
-  // checked, but before Next's own dynamic app routes (like the catch-all
-  // app/api/auth/[...nextauth]/route.ts). Without the negative lookahead
-  // below, '/api/auth/*' matches this rewrite first and gets proxied to
-  // the NestJS backend, so Auth.js's own routes (signin, callback,
-  // session, csrf) never run at all.
+  // Unconditional now: Auth.js's own routes live under '/web/auth' (see
+  // auth.ts's basePath), not '/api', so nothing under '/api' needs excluding
+  // from this rewrite anymore — every '/api/*' request is the backend, full
+  // stop, matching Traefik's identical, equally unconditional '/api' rule
+  // (docker-compose.yml's 'api' router).
   async rewrites() {
     return [
       {
         // ':path*' is a wildcard that captures everything after /api/
         // e.g. '/api/groups/42/members' → 'http://localhost:3001/groups/42/members'
-        // The '(?!auth/|auth$)' lookahead excludes '/api/auth' and
-        // '/api/auth/*' so those fall through to Auth.js's own route.
-        source: '/api/:path((?!auth/|auth$).*)',
+        source: '/api/:path*',
         destination: `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/:path*`,
       },
     ];

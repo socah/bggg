@@ -17,8 +17,8 @@
       "implicitFlowEnabled": false,
       "serviceAccountsEnabled": false,
 
-      "redirectUris": ["http://localhost:3000/*"],
-      "webOrigins": ["http://localhost:3000"],
+      "redirectUris": ["http://localhost:3000/*", "https://bggg.duckdns.org/*"],
+      "webOrigins": ["http://localhost:3000", "https://bggg.duckdns.org"],
 
       "attributes": {
         "pkce.code.challenge.method": "S256"
