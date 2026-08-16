@@ -349,6 +349,12 @@ services:
       AUTH_KEYCLOAK_ID: web
       AUTH_KEYCLOAK_SECRET: ${AUTH_KEYCLOAK_SECRET}
       AUTH_KEYCLOAK_ISSUER: https://${DOMAIN_NAME}/auth/realms/${KEYCLOAK_REALM}
+      # Required in production or Auth.js rejects every request with
+      # 'UntrustedHost' (see apps/web/auth.ts's own comment) — bare origin,
+      # no path: auth.ts already sets basePath explicitly, and a path here
+      # would just get discarded (with a logged warning) by @auth/core's own
+      # createActionURL.
+      AUTH_URL: https://${DOMAIN_NAME}
     depends_on:
       - api
     expose:

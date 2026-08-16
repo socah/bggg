@@ -16,15 +16,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   // ('.../web/auth/callback/keycloak').
   basePath: '/web/auth',
   providers: [Keycloak],
-  // Auth.js refuses every request in production unless it knows which host
-  // to trust — either a fixed AUTH_URL, or this. Reproduced directly: prod
-  // logs showed '[auth][error] UntrustedHost: Host must be trusted' for
-  // every request, which is what was actually causing signIn() to fall
-  // back to redirecting at its own (unsupported-for-GET) URL, not a
-  // Keycloak/discovery problem. Safe here specifically because Traefik's
-  // Host(`${DOMAIN_NAME}`) router rule (docker-compose.yml) already only
-  // ever forwards requests for the real domain to this container — 'web'
-  // never sees an arbitrary/spoofed Host header from the open internet for
-  // this to blindly trust.
-  trustHost: true,
+  // No explicit trustHost here — AUTH_URL (see .env) being set makes
+  // @auth/core default config.trustHost to true on its own (its own
+  // env.js: 'config.trustHost ?? (config.trustHost = !!(envObject.AUTH_URL
+  // ?? ...))'). Without either, Auth.js rejects every request in production
+  // with 'UntrustedHost' (reproduced directly: prod logs showed this for
+  // every single request before AUTH_URL was set) — that was what was
+  // actually causing signIn() to fall back to redirecting at its own
+  // (unsupported-for-GET) URL, not a Keycloak/discovery problem.
 });
