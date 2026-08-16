@@ -1,7 +1,20 @@
 services:
 
   traefik:
-    image: traefik:v3.1
+    # Was v3.1 — that release's bundled Docker client defaults to
+    # negotiating API version 1.24 against the daemon, and fails outright
+    # ("client version 1.24 is too old. Minimum supported API version is
+    # 1.40") against this host's actual Docker Engine (29.6.2, API 1.55),
+    # which has dropped support for API versions that old. Confirmed
+    # directly on the server: v3.1.7 never got past that error (zero
+    # routers ever loaded, hence every request hitting Traefik's own
+    # fallback 404, and no cert request ever going out either); v3.7.10
+    # connects cleanly and picks up all the real 'docker' labels
+    # immediately. Setting DOCKER_API_VERSION on the container did NOT fix
+    # v3.1 — Traefik's Docker provider doesn't respect that env var the
+    # way a plain Docker CLI/SDK client does; the actual fix is a Traefik
+    # release with an updated bundled client.
+    image: traefik:v3.7.10
     # unless-stopped: restart automatically after a crash or a Docker
     # daemon restart (e.g. the host rebooting) — but if a human explicitly
     # runs 'docker compose stop', respect that and stay stopped rather than
