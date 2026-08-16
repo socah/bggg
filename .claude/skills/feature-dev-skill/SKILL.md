@@ -1,14 +1,11 @@
 ---
 name: feature-dev-skill
 description: >
-  Production feature development workflow with a Plane paper trail, active
-  only when .claude/skills/active-mode.txt is set to "feature-dev". Drives a
-  feature from spec through implementation to done, creating a Plane work
-  item (project BGGG) and linked spec Page, breaking the plan into Plane
-  subtasks, and updating their state/comments as work progresses. When
-  active-mode.txt is set to "learning" (the default), defer to
-  boardgame-skill instead. Trigger whenever the user asks to build or ship a
-  production feature in this repository while in feature-dev mode.
+  Use when the user asks to build or ship a production feature in this
+  repository while .claude/skills/active-mode.txt is set to "feature-dev" —
+  keeps a Plane paper trail (project BGGG) instead of the learning workflow.
+  When active-mode.txt is set to "learning" (the default) or is missing,
+  defer to boardgame-skill instead.
 ---
 
 # Production Feature Development — Plane Paper Trail Skill
@@ -31,6 +28,19 @@ skill instead, or run `make mode-feature-dev` to switch to feature-dev
 mode." Do not proceed with the rest of this skill while in learning mode.
 
 If the file says `feature-dev`, continue below.
+
+---
+
+## Quick Reference
+
+| Stage | Key MCP call(s) | Notes |
+|---|---|---|
+| Gate | read `active-mode.txt` | Must equal `feature-dev`, else defer |
+| Session start | `workitem list` (`pql='stateGroup IN openStates()'`) | Plane is the progress record, not a local file |
+| New feature | `workitem create`, `page create`, `page attach_to_workitem` | Work item + linked spec Page |
+| Plan | `workitem create` (`parent=<feature id>`) per task | Leave `state` unset (default Todo) |
+| Implement | `state list` once, then `workitem update` (`state=<id>`) | Resolve state ids by `group`, not by name |
+| Close | `workitem update` parent `state` to `completed` | Only after every subtask is `completed` |
 
 ---
 
@@ -117,6 +127,22 @@ summarizing what shipped.
 Trivial one-line changes don't need a Plane work item at all — use
 judgment. Paper-trail ceremony is for things that qualify as a "feature,"
 matching this skill's purpose.
+
+---
+
+## Common Mistakes
+
+- **Forgetting to close the parent.** Completing every subtask does not
+  close the feature — Step 6 requires a separate `workitem update` on the
+  parent work item's `state`.
+- **Passing a state name instead of a state id.** `workitem update`'s
+  `state` field takes the UUID from `state list`, matched by `group`
+  (`unstarted`/`started`/`completed`) — never a display name like "Done".
+- **Not re-checking the gate mid-feature.** The user can switch back to
+  `learning` mode between sessions; re-read `active-mode.txt` at the start
+  of each session, not just once per feature.
+- **Opening a full paper trail for trivial fixes.** See "Small Fixes" above
+  — use judgment before creating a work item for a one-line change.
 
 ---
 
