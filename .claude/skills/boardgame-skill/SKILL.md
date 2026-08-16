@@ -1,13 +1,15 @@
 ---
 name: boardgame-learning
 description: >
-  Learning-first development workflow for the board game group platform project.
-  Use this skill for ALL tasks in this repository — code generation, feature
-  implementation, infrastructure setup, and debugging. It enforces a
-  understand-before-generate discipline, tracks progress through the learning
-  roadmap, and generates learning notes alongside every piece of code built.
-  Trigger whenever the user asks to build, implement, configure, or learn
-  anything related to this project.
+  Learning-first development workflow for the board game group platform project,
+  active only when .claude/skills/active-mode.txt is set to "learning" (the
+  default). Use this skill for tasks in this repository when in learning mode —
+  code generation, feature implementation, infrastructure setup, and debugging.
+  It enforces a understand-before-generate discipline, tracks progress through
+  the learning roadmap, and generates learning notes alongside every piece of
+  code built. When active-mode.txt is set to "feature-dev", defer to
+  feature-dev-skill instead. Trigger whenever the user asks to build, implement,
+  configure, or learn anything related to this project while in learning mode.
 ---
 
 # Board Game Platform — Learning Workflow Skill
@@ -15,6 +17,18 @@ description: >
 This skill enforces a structured learning workflow on top of normal development.
 The goal is that by the end of the project, the user understands every line of
 code and every infrastructure decision — not just that things work.
+
+---
+
+## Step 0 — Check Active Mode
+
+Before anything else, read `.claude/skills/active-mode.txt` (relative to the
+repo root). If the file is missing or its content is anything other than
+`feature-dev`, treat it as `learning` mode and proceed normally below. If it
+is `feature-dev`, stop here: tell the user "feature-dev-skill is active
+(active-mode.txt is set to feature-dev) — use that skill instead, or run
+`make mode-learning` to switch back to learning mode." Do not proceed with
+the learning loop while in feature-dev mode.
 
 ---
 
