@@ -277,7 +277,9 @@ services:
       # PathPrefix makes this rule more specific than 'web's plain Host()
       # rule below — Traefik computes router priority from rule length by
       # default, so '/api/*' requests match this router, not 'web's, with
-      # no explicit priority needed.
+      # no explicit priority needed. Exception: 'web's own web-auth/web-login
+      # routers below are more specific still ('/api/auth', '/api/login'
+      # are longer prefixes than '/api'), so those two paths win instead.
       - traefik.http.routers.api.rule=Host(`${DOMAIN_NAME}`) && PathPrefix(`/api`)
       - traefik.http.routers.api.entrypoints=websecure
       - traefik.http.routers.api.tls.certresolver=le
@@ -340,13 +342,37 @@ services:
     labels:
       - traefik.enable=true
       # No PathPrefix: this is the catch-all for the domain. Any request
-      # that doesn't match 'api's more specific rule above lands here.
+      # that doesn't match 'api's or these auth routers' more specific
+      # rules lands here.
       - traefik.http.routers.web.rule=Host(`${DOMAIN_NAME}`)
       - traefik.http.routers.web.entrypoints=websecure
       - traefik.http.routers.web.tls.certresolver=le
       - traefik.http.routers.web.middlewares=ratelimit,secheaders
       - traefik.http.routers.web.service=web
       - traefik.http.services.web.loadbalancer.server.port=3000
+      # Auth.js's own routes (app/api/auth/[...nextauth]/route.ts) and the
+      # custom login redirect (app/api/login/route.ts) live under '/api'
+      # but must reach 'web', not 'api' — otherwise 'api's PathPrefix('/api')
+      # router above (more specific than this router's plain Host()) claims
+      # them first and NestJS 404s on a path it has no controller for. Same
+      # exclusion next.config.ts's rewrite already does via negative
+      # lookahead for its own (Next.js-internal) rewrite; Traefik needs its
+      # own copy since it dispatches to a different container entirely and
+      # never sees that rewrite. PathPrefix('/api/auth')/('/api/login') are
+      # longer than 'api's PathPrefix('/api'), so by the same rule-length
+      # priority these win with no explicit priority number needed. No
+      # StripPrefix: forwarded to 'web' unstripped, matching its real
+      # filesystem routes.
+      - traefik.http.routers.web-auth.rule=Host(`${DOMAIN_NAME}`) && PathPrefix(`/api/auth`)
+      - traefik.http.routers.web-auth.entrypoints=websecure
+      - traefik.http.routers.web-auth.tls.certresolver=le
+      - traefik.http.routers.web-auth.middlewares=ratelimit,secheaders
+      - traefik.http.routers.web-auth.service=web
+      - traefik.http.routers.web-login.rule=Host(`${DOMAIN_NAME}`) && PathPrefix(`/api/login`)
+      - traefik.http.routers.web-login.entrypoints=websecure
+      - traefik.http.routers.web-login.tls.certresolver=le
+      - traefik.http.routers.web-login.middlewares=ratelimit,secheaders
+      - traefik.http.routers.web-login.service=web
 
 volumes:
   db_data:
