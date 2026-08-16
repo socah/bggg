@@ -242,7 +242,15 @@
   when: vault_agent_role_id | length == 0 or vault_bootstrap_role_id | length == 0
 
 - name: Build and start the stack
-  command: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+  # '--env-file .env.prod' (relative to chdir, resolved against deploy_dir):
+  # Compose would otherwise only auto-load a plain '.env', which doesn't
+  # exist on the server at all — DOMAIN_NAME/LETSENCRYPT_EMAIL/etc. would
+  # silently interpolate to empty strings, which is exactly the bug that
+  # sent Traefik's Host() routers to match nothing and Keycloak crash-
+  # looping on a blank admin password. '.env.prod' carries the non-secret
+  # half of that config, committed (see its own header comment); the
+  # secret half comes in below instead.
+  command: docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.prod up -d --build
   args:
     chdir: "{{ deploy_dir }}"
   environment:
@@ -256,6 +264,16 @@
     VAULT_KMS_KEY_ID: "{{ vault_kms_key_id }}"
     VAULT_KMS_CRYPTO_ENDPOINT: "{{ vault_kms_crypto_endpoint }}"
     VAULT_KMS_MANAGEMENT_ENDPOINT: "{{ vault_kms_management_endpoint }}"
+    # Secrets/PII, never in .env.prod — see defaults/main.yml's own comment
+    # on these for where they actually come from (Infisical, via '-e').
+    KEYCLOAK_ADMIN_PASSWORD: "{{ keycloak_admin_password }}"
+    KEYCLOAK_API_SERVICE_SECRET: "{{ keycloak_api_service_secret }}"
+    LETSENCRYPT_EMAIL: "{{ letsencrypt_email }}"
+    AUTH_SECRET: "{{ auth_secret }}"
+    AUTH_KEYCLOAK_SECRET: "{{ auth_keycloak_secret }}"
+    R2_ENDPOINT: "{{ r2_endpoint }}"
+    R2_ACCESS_KEY_ID: "{{ r2_access_key_id }}"
+    R2_SECRET_ACCESS_KEY: "{{ r2_secret_access_key }}"
   # This task's own env vars exist only for the lifetime of this one SSH
   # command — they're never written to a file on the server, so
   # bootstrap_db_password doesn't linger anywhere after 'docker compose
@@ -274,7 +292,13 @@
 # own guard), so recreating them when nothing actually changed just
 # reruns a cheap no-op.
 - name: Force vault-bootstrap and vault-agent to pick up current credential files
-  command: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --force-recreate vault-bootstrap vault-agent
+  # Same '--env-file .env.prod' as "Build and start the stack" above, for
+  # the identical reason spelled out in the VAULT_KMS_* comment just below:
+  # this invocation re-interpolates every service's config, not just the
+  # two named here, so DOMAIN_NAME/KEYCLOAK_* have to resolve to their real
+  # values here too or Traefik/Keycloak/api/web risk an unwanted recreate
+  # down to blank.
+  command: docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.prod up -d --force-recreate vault-bootstrap vault-agent
   args:
     chdir: "{{ deploy_dir }}"
   environment:
@@ -298,4 +322,13 @@
     VAULT_KMS_KEY_ID: "{{ vault_kms_key_id }}"
     VAULT_KMS_CRYPTO_ENDPOINT: "{{ vault_kms_crypto_endpoint }}"
     VAULT_KMS_MANAGEMENT_ENDPOINT: "{{ vault_kms_management_endpoint }}"
+    # Same reasoning, same secrets/PII, as the main 'up' task above.
+    KEYCLOAK_ADMIN_PASSWORD: "{{ keycloak_admin_password }}"
+    KEYCLOAK_API_SERVICE_SECRET: "{{ keycloak_api_service_secret }}"
+    LETSENCRYPT_EMAIL: "{{ letsencrypt_email }}"
+    AUTH_SECRET: "{{ auth_secret }}"
+    AUTH_KEYCLOAK_SECRET: "{{ auth_keycloak_secret }}"
+    R2_ENDPOINT: "{{ r2_endpoint }}"
+    R2_ACCESS_KEY_ID: "{{ r2_access_key_id }}"
+    R2_SECRET_ACCESS_KEY: "{{ r2_secret_access_key }}"
   no_log: true

@@ -1,15 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# One command for a normal deploy: pulls the four Vault AppRole values and
-# the DuckDNS token (and everything else under Infisical's /ENV_VARS) into
-# this shell, then runs ansible-playbook with them already filled in via
-# '-e'. Without this, every deploy meant manually re-typing (or
-# copy-pasting) those values by hand — see roles/app_deploy/defaults/main.yml
-# and roles/duckdns/defaults/main.yml's own comments for why each has no
-# default and must come from '-e' every time: the four Vault values only
-# exist after infra/vault/bootstrap-prod-init.sh has been run once, by
-# hand; duckdns_token is a long-lived credential that can't live in git.
+# One command for a normal deploy: pulls the four Vault AppRole values, the
+# DuckDNS token, the Keycloak/Auth.js/R2 secrets, and the Let's Encrypt
+# contact email (and everything else under Infisical's /ENV_VARS) into this
+# shell, then runs ansible-playbook with them already filled in via '-e'.
+# Without this, every deploy meant manually re-typing (or copy-pasting)
+# those values by hand — see roles/app_deploy/defaults/main.yml and
+# roles/duckdns/defaults/main.yml's own comments for why each has no default
+# and must come from '-e' every time: the four Vault values only exist after
+# infra/vault/bootstrap-prod-init.sh has been run once, by hand; the rest
+# are long-lived credentials that can't live in git, except letsencrypt_email
+# and r2_endpoint, which aren't secrets but are still PII/account-identifying
+# — .env.prod (committed on purpose) has no business holding either.
 #
 # Also used by .github/workflows/ci.yml's 'deploy' job — same required
 # values, same '-e' flags, so that list only needs maintaining in one
@@ -68,10 +71,32 @@ if [ -z "${DUCKDNS_TOKEN:-}" ]; then
   exit 1
 fi
 
+# keycloak_api_service_secret/auth_keycloak_secret have the same
+# chicken-and-egg gap defaults/main.yml documents: empty until Keycloak has
+# booted once and an operator has copied its generated value into
+# Infisical by hand. r2_* are similarly expected to be blank until an R2
+# bucket actually exists for this deploy. Warn instead of exit 1 like the
+# checks above — unlike the Vault/DuckDNS values, a first-ever deploy is
+# *expected* to run with these still blank.
+for var in KEYCLOAK_ADMIN_PASSWORD KEYCLOAK_API_SERVICE_SECRET LETSENCRYPT_EMAIL \
+           AUTH_SECRET AUTH_KEYCLOAK_SECRET R2_ENDPOINT R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY; do
+  if [ -z "${!var:-}" ]; then
+    echo "Warning: $var isn't set in Infisical's /ENV_VARS — see roles/app_deploy/defaults/main.yml." >&2
+  fi
+done
+
 ansible-playbook -i "$SCRIPT_DIR/inventory.ini" "$SCRIPT_DIR/playbook.yml" \
   -e vault_agent_role_id="$VAULT_AGENT_ROLE_ID" \
   -e vault_agent_secret_id="$VAULT_AGENT_SECRET_ID" \
   -e vault_bootstrap_role_id="$VAULT_BOOTSTRAP_ROLE_ID" \
   -e vault_bootstrap_secret_id="$VAULT_BOOTSTRAP_SECRET_ID" \
   -e duckdns_token="$DUCKDNS_TOKEN" \
+  -e keycloak_admin_password="${KEYCLOAK_ADMIN_PASSWORD:-}" \
+  -e keycloak_api_service_secret="${KEYCLOAK_API_SERVICE_SECRET:-}" \
+  -e letsencrypt_email="${LETSENCRYPT_EMAIL:-}" \
+  -e auth_secret="${AUTH_SECRET:-}" \
+  -e auth_keycloak_secret="${AUTH_KEYCLOAK_SECRET:-}" \
+  -e r2_endpoint="${R2_ENDPOINT:-}" \
+  -e r2_access_key_id="${R2_ACCESS_KEY_ID:-}" \
+  -e r2_secret_access_key="${R2_SECRET_ACCESS_KEY:-}" \
   "$@"

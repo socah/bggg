@@ -312,7 +312,15 @@ CREATE TABLE IF NOT EXISTS play_session_players (
 --   (topic 3_scheduling) — this column originally had no constraint since
 --   play_sessions didn't exist as an entity yet. UUID, matching
 --   play_sessions.id's corrected type — see the comment on that table.
--- key: UNIQUE — the R2 object key, one row per uploaded object.
+-- key: UNIQUE — the R2 object key, one row per uploaded object. No `url`
+--   column: this bucket is private (photos are only meant to be visible to
+--   a session's group, not to anyone with a link), so there is no
+--   permanent URL to store — R2Service.createPresignedGetUrl(key) signs a
+--   short-lived one on demand, after checking the requester is actually
+--   authorized to see this specific photo. A stored URL would either have
+--   to be a public one (defeats the point of a private bucket) or a
+--   presigned one (which expires — storing it would just mean serving a
+--   dead link once it does). See notes/3_r2_uploads.md's Update section.
 -- uploaded_by: the Keycloak JWT `sub` claim, not an int FK to users(id) —
 --   same "plain column holding the JWT subject, no relation" pattern as
 --   Group.ownerId and Message.senderId elsewhere in this schema.
@@ -325,7 +333,6 @@ CREATE TABLE IF NOT EXISTS play_photos (
   session_id  UUID         NOT NULL REFERENCES play_sessions(id) ON DELETE CASCADE,
   uploaded_by TEXT         NOT NULL,
   key         TEXT         NOT NULL UNIQUE,
-  url         TEXT         NOT NULL,
   size_bytes  INT          NOT NULL,
   created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );

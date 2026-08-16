@@ -23,17 +23,18 @@ export class PlayPhoto {
   @Column({ name: 'uploaded_by' })
   uploadedBy!: string;
 
-  // The R2 object key (e.g. "play-photos/<userId>/<uuid>") — the source of
-  // truth for locating the file in the bucket. Kept even though `url` is
-  // also stored, so the public URL can be rebuilt if R2_PUBLIC_URL_BASE
-  // ever changes (custom domain migration, etc.) without losing the photo.
+  // The R2 object key (e.g. "play-photos/<userId>/<uuid>") — the ONLY
+  // thing persisted to locate the file; there is deliberately no stored
+  // `url` column anymore. This bucket is private (see R2Service's own
+  // comment on createPresignedGetUrl) — a permanently stored URL would
+  // either have to be a public one (defeats the point of a private
+  // bucket) or a presigned one (which expires, so storing it would just
+  // mean serving a dead link once GET_PRESIGN_EXPIRY_SECONDS passes).
+  // Any code that needs to display this photo calls
+  // R2Service.createPresignedGetUrl(key) fresh, after checking the
+  // requester is actually a member of the group this photo belongs to.
   @Column({ unique: true })
   key!: string;
-
-  // Public URL, derived from `key` at confirm time via R2Service.buildPublicUrl
-  // and stored so reads never need to reconstruct it.
-  @Column()
-  url!: string;
 
   // Read from R2's own HeadObject response at confirm time — NOT trusted
   // from client input, even though the client also declares a contentLength

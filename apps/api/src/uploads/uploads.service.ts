@@ -46,7 +46,13 @@ export class UploadsService {
     return { url, key, expiresIn };
   }
 
-  async confirm(userId: string, dto: ConfirmUploadDto): Promise<PlayPhoto> {
+  // Return type is PlayPhoto plus a runtime-only `url` — see the presigned
+  // GET comment below for why that field is never part of the entity/table
+  // itself.
+  async confirm(
+    userId: string,
+    dto: ConfirmUploadDto,
+  ): Promise<PlayPhoto & { url: string }> {
     // Defense in depth: even though buildObjectKey() only ever produces keys
     // under play-photos/<userId>/..., nothing stops a client from calling
     // /uploads/confirm with an arbitrary key string it didn't get from a
@@ -72,11 +78,18 @@ export class UploadsService {
       sessionId: dto.sessionId,
       uploadedBy: userId,
       key: dto.key,
-      url: this.r2Service.buildPublicUrl(dto.key),
       sizeBytes: head.sizeBytes,
     });
 
-    return this.playPhotoRepository.save(photo);
+    const saved = await this.playPhotoRepository.save(photo);
+
+    // A presigned GET URL, generated fresh for this response only — never
+    // persisted (see PlayPhoto.key's own comment for why). The uploader
+    // just proved they're allowed to see this exact photo by uploading it,
+    // so no separate membership check is needed here specifically; any
+    // FUTURE endpoint that lists/re-displays photos later must run that
+    // check itself before calling createPresignedGetUrl again.
+    return { ...saved, url: await this.r2Service.createPresignedGetUrl(saved.key) };
   }
 
   // SUM across every confirmed photo. Cast to bigint in SQL then parsed back

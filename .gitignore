@@ -25,6 +25,14 @@ apps/web/public/workbox-*.js
 .env.staging
 # The template is the exception: it documents variables without leaking values
 !.env.example
+# Also an exception, but for a different reason: .env.prod holds only
+# non-secret prod config (DOMAIN_NAME, LETSENCRYPT_EMAIL, etc.) — real
+# secrets (KEYCLOAK_ADMIN_PASSWORD, KEYCLOAK_API_SERVICE_SECRET) never go
+# in it, they come from Infisical via Ansible '-e' instead. See
+# notes/4_environments.md. None of the patterns above actually match this
+# filename anyway (no wildcard covers '.env.prod') — this line exists so
+# that's true on purpose, not by accident.
+!.env.prod
 
 # OS / editor noise
 .DS_Store

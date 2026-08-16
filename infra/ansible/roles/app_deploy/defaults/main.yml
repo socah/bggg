@@ -70,3 +70,56 @@ vault_bootstrap_secret_id: ""
 vault_kms_key_id: ""
 vault_kms_crypto_endpoint: ""
 vault_kms_management_endpoint: ""
+
+# Deliberately empty by default, same "lives in the operator's shell, never
+# in git" pattern as the vault AppRole vars above — these two live in
+# Infisical's /ENV_VARS, not in .env.prod (non-secret config only, see that
+# file's own header). Pass at run time:
+#   -e keycloak_admin_password="$KEYCLOAK_ADMIN_PASSWORD" \
+#   -e keycloak_api_service_secret="$KEYCLOAK_API_SERVICE_SECRET"
+#
+# keycloak_api_service_secret has an extra wrinkle: infra/keycloak/
+# boardgame-realm.json deliberately has no "secret" field for the
+# api-service client, so Keycloak generates a random one on first realm
+# import. This stays empty until an operator has copied that generated
+# value from the admin console (Clients -> api-service -> Credentials)
+# into Infisical, once, after Keycloak has booted successfully for the
+# first time — the same chicken-and-egg as the Vault AppRole credentials
+# above.
+keycloak_admin_password: ""
+keycloak_api_service_secret: ""
+
+# Deliberately empty by default too, but for a different reason than the two
+# above: this isn't a credential, it's a real person's email address —
+# .env.prod is committed on purpose (non-secret config only), which is
+# exactly why this can't live there. Lives in Infisical's /ENV_VARS instead.
+# Pass at run time:
+#   -e letsencrypt_email="$LETSENCRYPT_EMAIL"
+letsencrypt_email: ""
+
+# Auth.js (apps/web) — same "lives in Infisical, never in git" pattern as
+# the Keycloak vars above. auth_keycloak_secret has the identical
+# chicken-and-egg as keycloak_api_service_secret: infra/keycloak/
+# boardgame-realm.json's 'web' client also has no "secret" field, so
+# Keycloak generates one on first import — copy it from the admin console
+# (Clients -> web -> Credentials) into Infisical once, after first boot.
+# auth_secret has no such wrinkle — generate any long random string
+# (e.g. 'openssl rand -base64 32') and store it whenever.
+# Pass at run time:
+#   -e auth_secret="$AUTH_SECRET" \
+#   -e auth_keycloak_secret="$AUTH_KEYCLOAK_SECRET"
+auth_secret: ""
+auth_keycloak_secret: ""
+
+# Cloudflare R2 (photo uploads, apps/api/src/uploads/r2.service.ts) — same
+# pattern again. R2_BUCKET/MAX_UPLOAD_BYTES/R2_MAX_STORAGE_BYTES live in
+# .env.prod instead (non-secret config) — no R2_PUBLIC_URL_BASE at all,
+# this bucket is private (see r2.service.ts's own comment). Only the
+# endpoint (embeds a Cloudflare account id) and the two access keys need
+# to stay out of git. Pass at run time:
+#   -e r2_endpoint="$R2_ENDPOINT" \
+#   -e r2_access_key_id="$R2_ACCESS_KEY_ID" \
+#   -e r2_secret_access_key="$R2_SECRET_ACCESS_KEY"
+r2_endpoint: ""
+r2_access_key_id: ""
+r2_secret_access_key: ""

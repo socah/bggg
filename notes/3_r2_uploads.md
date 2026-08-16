@@ -298,6 +298,47 @@ browser session would hold full read/write access to the *entire* bucket.
 
 ---
 
+## Update — 2026-08-16: Presigned GET URLs Instead of a Public Bucket
+
+While wiring R2 into the actual production deploy pipeline (this note
+originally only covered the local `.env` template), a straightforward
+question exposed a real gap the original design left open: **making the
+bucket public — or mapping a custom domain to it — means anyone with a
+photo's URL can view it, forever, regardless of whether they're still (or
+ever were) a member of that group.** The original design stored a
+permanent `PlayPhoto.url`, built once at confirm time from a public bucket
+URL (`R2Service.buildPublicUrl`) — there was no "read time" check at all,
+because a public URL doesn't have one: once public, always public, to
+anyone who ever obtains the link (a shared screenshot, browser history, a
+referrer leak).
+
+Fix: extend the exact same presigned-URL pattern this note already covers
+for uploads to reads, instead of inventing a second mechanism.
+`R2Service.createPresignedGetUrl(key)` signs a short-lived GET URL for one
+exact object key — 15 minutes, not 5, since browsing a gallery takes
+longer than a single PUT — and the bucket itself stays private (R2's
+default). There is no `R2_PUBLIC_URL_BASE` anywhere anymore. `PlayPhoto.url`
+is gone entirely — dropped from the TypeORM entity and `db/schema.sql` —
+because a permanently stored URL never made sense once reads require a
+fresh signature: it would either have to be a public one (defeating the
+whole point) or a presigned one (which expires, so storing it would just
+mean serving a dead link once `GET_PRESIGN_EXPIRY_SECONDS` passes).
+
+`UploadsService.confirm` now generates a presigned GET URL fresh, for that
+one response only, and returns it alongside the saved `PlayPhoto` row — it
+is never persisted. No separate membership check was needed at that one
+call site (the uploader just proved they're allowed to see this exact
+photo, by uploading it) — but this is the *only* place doing so today: no
+"list a session's photos" read endpoint exists yet (still ahead, likely
+alongside `3_scheduling`'s own read endpoints). Whenever one is built, it
+must call `createPresignedGetUrl` fresh, per photo, per request — only
+after checking the requester is actually a member of the group that
+photo's session belongs to (the same membership check `GroupsService.findOne`
+already does elsewhere) — not read a stored URL, because there won't be
+one to read.
+
+---
+
 ## Checkpoint Questions
 
 1. Why does the object key get generated on the server instead of being sent
@@ -321,6 +362,14 @@ browser session would hold full read/write access to the *entire* bucket.
 8. The storage-quota check in `hasCapacityFor` is described as a "soft,
    approximate" guard. What specific sequence of two requests could cause
    the real total to exceed `R2_MAX_STORAGE_BYTES` despite the check?
+9. The original design stored a permanent `PlayPhoto.url`. Why doesn't a
+   permanently stored URL make sense anymore now that reads go through
+   `createPresignedGetUrl` — would this be true even if the bucket stayed
+   public, or is it specifically about the switch to a private one?
+10. If a photo's presigned GET URL leaked the same way a presigned upload
+    URL could (a shared screenshot, browser history), what could someone
+    do with it, and for how long? Compare that to what leaking a URL under
+    the original public-bucket design could do.
 
 ---
 

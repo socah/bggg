@@ -6,6 +6,7 @@ import {
 import {
   S3Client,
   PutObjectCommand,
+  GetObjectCommand,
   HeadObjectCommand,
   NotFound,
 } from '@aws-sdk/client-s3';
@@ -16,6 +17,15 @@ import { randomUUID } from 'crypto';
 // URL (browser history, a shared screenshot, a proxy log) is only useful for
 // this narrow window, not indefinitely. See notes/3_r2_uploads.md.
 const PRESIGN_EXPIRY_SECONDS = 300;
+
+// Read access gets its own, longer window — unlike a one-shot upload, a
+// user might sit on a session's photo gallery for a while, and re-signing a
+// fresh GET URL for every single render would mean an extra R2 round trip
+// (well, a local HMAC computation, but still a wasted one) each time. 15
+// minutes is still short enough that a leaked URL (shared screenshot,
+// browser history) closes itself out well before "forever" the way a
+// public bucket URL would.
+const GET_PRESIGN_EXPIRY_SECONDS = 900;
 
 // Only image types the app actually wants to serve back to users. Baking
 // this into the signed request means R2 rejects an upload whose real
@@ -166,11 +176,23 @@ export class R2Service {
     return currentTotalBytes + incomingBytes <= MAX_STORAGE_BYTES;
   }
 
-  // Builds the public-facing URL for a confirmed upload, from the public
-  // bucket domain plus the object key. Kept separate from the key itself so
-  // play_photos.key remains the source of truth if the public domain ever
-  // changes (e.g. moving from R2's default domain to a custom one).
-  buildPublicUrl(key: string): string {
-    return `${process.env.R2_PUBLIC_URL_BASE}/${key}`;
+  // Generates a presigned, time-limited GET URL for one exact object key —
+  // the read-side counterpart of createPresignedUploadUrl. This bucket is
+  // NOT public: play session photos are only meant to be visible to
+  // members of the group they belong to, and a bare public bucket/custom
+  // domain URL has no concept of "member of this group" at all — anyone
+  // who ever obtained the URL (a shared link, browser history, a referrer
+  // leak) could view it forever, membership notwithstanding. Callers of
+  // this method are responsible for having already checked that the
+  // requesting user is actually allowed to see this specific photo (same
+  // membership check GroupsService.findOne already does elsewhere) —
+  // signing an already-authorized key, not an access-control mechanism in
+  // itself. See notes/3_r2_uploads.md's Update section for the full
+  // reasoning behind this move away from a public bucket.
+  async createPresignedGetUrl(key: string): Promise<string> {
+    const command = new GetObjectCommand({ Bucket: this.bucket, Key: key });
+    return getSignedUrl(this.client, command, {
+      expiresIn: GET_PRESIGN_EXPIRY_SECONDS,
+    });
   }
 }

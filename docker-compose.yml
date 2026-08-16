@@ -228,6 +228,20 @@ services:
       KEYCLOAK_REALM: ${KEYCLOAK_REALM}
       KEYCLOAK_API_SERVICE_ID: ${KEYCLOAK_API_SERVICE_ID}
       KEYCLOAK_API_SERVICE_SECRET: ${KEYCLOAK_API_SERVICE_SECRET}
+      # Cloudflare R2 — read by apps/api/src/uploads/r2.service.ts for
+      # presigned photo upload/download URLs. No R2_PUBLIC_URL_BASE: this
+      # bucket is private (see R2Service.createPresignedGetUrl's own
+      # comment), so there's no public domain to configure at all.
+      # R2_BUCKET and the two byte-limit vars are non-secret (see
+      # .env.prod); the endpoint and access keys are Infisical-sourced,
+      # same reasoning as the Keycloak secrets above — see
+      # roles/app_deploy/defaults/main.yml.
+      R2_ENDPOINT: ${R2_ENDPOINT}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY}
+      R2_BUCKET: ${R2_BUCKET}
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES}
+      R2_MAX_STORAGE_BYTES: ${R2_MAX_STORAGE_BYTES}
     volumes:
       - vault_secrets:/run/secrets:ro
     depends_on:
@@ -283,6 +297,23 @@ services:
       # different containers now, so this can't fall back on sharing a
       # loopback interface the way two local 'npm run dev' processes do.
       NEXT_PUBLIC_API_URL: http://api:3000
+      # Auth.js (see apps/web/auth.ts) — read by name, not referenced
+      # directly in code (NextAuth's own env var convention for a
+      # provider with id "keycloak"). AUTH_KEYCLOAK_ID is fixed (matches
+      # the 'web' client id in infra/keycloak/boardgame-realm.json), never
+      # needs to be a variable. AUTH_KEYCLOAK_ISSUER's prod value is
+      # computed from two vars .env.prod already has — dev's equivalent
+      # (a direct exposed-port URL, see .env.example) only works there
+      # because the browser and Keycloak's container share a machine;
+      # here the browser has to reach Keycloak through Traefik's '/auth'
+      # StripPrefix route instead (see notes/4_environments.md's own
+      # design discussion of this exact path). AUTH_SECRET and
+      # AUTH_KEYCLOAK_SECRET are real secrets — Infisical, not .env.prod;
+      # see roles/app_deploy/defaults/main.yml.
+      AUTH_SECRET: ${AUTH_SECRET}
+      AUTH_KEYCLOAK_ID: web
+      AUTH_KEYCLOAK_SECRET: ${AUTH_KEYCLOAK_SECRET}
+      AUTH_KEYCLOAK_ISSUER: https://${DOMAIN_NAME}/auth/realms/${KEYCLOAK_REALM}
     depends_on:
       - api
     expose:
