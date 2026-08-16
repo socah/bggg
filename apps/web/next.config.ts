@@ -42,12 +42,21 @@ const nextConfig: NextConfig = {
   //   2. One place to change the backend URL (env var, not scattered fetches)
   //   3. In production, Traefik will do this routing instead — same contract,
   //      different implementation.
+  //
+  // Array-form rewrites run as "afterFiles" — after static/page files are
+  // checked, but before Next's own dynamic app routes (like the catch-all
+  // app/api/auth/[...nextauth]/route.ts). Without the negative lookahead
+  // below, '/api/auth/*' matches this rewrite first and gets proxied to
+  // the NestJS backend, so Auth.js's own routes (signin, callback,
+  // session, csrf) never run at all.
   async rewrites() {
     return [
       {
         // ':path*' is a wildcard that captures everything after /api/
         // e.g. '/api/groups/42/members' → 'http://localhost:3001/groups/42/members'
-        source: '/api/:path*',
+        // The '(?!auth/|auth$)' lookahead excludes '/api/auth' and
+        // '/api/auth/*' so those fall through to Auth.js's own route.
+        source: '/api/:path((?!auth/|auth$).*)',
         destination: `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/:path*`,
       },
     ];
