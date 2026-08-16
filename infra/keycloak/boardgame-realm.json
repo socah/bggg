@@ -33,9 +33,16 @@
       "standardFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "implicitFlowEnabled": false,
-      "serviceAccountsEnabled": true,
+      "serviceAccountsEnabled": true
+    }
+  ],
 
-      "serviceAccountClientRoles": {
+  "users": [
+    {
+      "username": "service-account-api-service",
+      "enabled": true,
+      "serviceAccountClientId": "api-service",
+      "clientRoles": {
         "realm-management": ["manage-users"]
       }
     }
