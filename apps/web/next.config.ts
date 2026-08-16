@@ -19,6 +19,28 @@ const withPWA = withPWAInit({
   // Stale-while-revalidate: serve the cached version immediately,
   // then update the cache in the background for the next visit.
   aggressiveFrontEndNavCaching: true,
+
+  // Keycloak is reverse-proxied under this same origin at '/auth' (see
+  // docker-compose.yml's Traefik labels) — a completely separate app that
+  // happens to share a domain. The default runtimeCaching rules below match
+  // by file extension/destination only, with no path scoping (e.g. any
+  // same-origin '*.js' gets StaleWhileRevalidate, any same-origin non-'/api'
+  // page navigation gets NetworkFirst) — once this app's service worker is
+  // installed anywhere on the origin, it also intercepts Keycloak's own
+  // JS/CSS/page requests under '/auth/*'. Reproduced directly: the admin
+  // console's dynamically-imported Dashboard chunk failed to fetch after the
+  // SW activated. NetworkOnly for '/auth/*' is a plain pass-through — no
+  // caching, no rewriting — checked before the extended defaults below
+  // (custom entries are prepended ahead of them, see resolveRuntimeCaching
+  // in @ducanh2912/next-pwa's own source), so it always wins for this prefix
+  // regardless of extension.
+  runtimeCaching: [
+    {
+      urlPattern: ({ url }) => url.pathname.startsWith('/auth/'),
+      handler: 'NetworkOnly',
+    },
+  ],
+  extendDefaultRuntimeCaching: true,
 });
 
 const nextConfig: NextConfig = {
