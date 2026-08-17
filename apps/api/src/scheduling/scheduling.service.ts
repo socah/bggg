@@ -347,12 +347,21 @@ export class SchedulingService {
   async getProposal(
     proposalId: string,
     requestingUserId: string,
-  ): Promise<{ proposal: PlaySessionProposal; rsvps: PlaySessionRsvp[] }> {
+  ): Promise<{
+    proposal: PlaySessionProposal;
+    rsvps: PlaySessionRsvp[];
+    games: Array<{ game: PlaySessionProposalGame; voteCount: number }>;
+  }> {
     const proposal = await this.findProposalOrThrow(proposalId);
     await this.groupsService.findOne(proposal.groupId, requestingUserId);
 
     const rsvps = await this.rsvps.findBy({ proposalId });
-    return { proposal, rsvps };
+    // Reuses listProposalGames' own vote-counting logic rather than
+    // duplicating it — the redundant proposal/membership re-check inside it
+    // is cheap at this project's scale and keeps this a one-line call
+    // instead of extracting a shared private helper for one caller.
+    const games = await this.listProposalGames(proposalId, requestingUserId);
+    return { proposal, rsvps, games };
   }
 
   private async findProposalOrThrow(proposalId: string): Promise<PlaySessionProposal> {
