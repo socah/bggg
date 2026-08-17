@@ -15,12 +15,12 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
     throw new Error('Session expired');
   }
 
+  const headers = new Headers(init.headers);
+  headers.set('Authorization', `Bearer ${session.accessToken}`);
+
   const response = await fetch(`/api${path}`, {
     ...init,
-    headers: {
-      ...init.headers,
-      Authorization: `Bearer ${session.accessToken}`,
-    },
+    headers,
   });
 
   if (response.status === 401) {
