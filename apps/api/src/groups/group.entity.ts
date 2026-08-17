@@ -26,6 +26,12 @@ export class Group {
   @Column({ name: 'owner_id' })
   ownerId!: string;
 
+  // True for the one auto-provisioned group every user always belongs to
+  // (their own solo space) — see GroupsService.findAll. Lets the frontend
+  // label it distinctly ("Just Me") without a naming convention on `name`.
+  @Column({ name: 'is_solo', default: false })
+  isSolo!: boolean;
+
   // @CreateDateColumn sets this automatically on INSERT — you never pass it in.
   // name: 'created_at' matches the snake_case column in the DB; the property
   // stays camelCase to follow TypeScript conventions.

@@ -37,10 +37,14 @@ CREATE TABLE IF NOT EXISTS users (
 --   group.entity.ts has always had it — another drift, fixed here. Raw
 --   Keycloak sub (TEXT), not an int FK to users(id); see group_members below
 --   for why this table never actually adopted the users(id) FK pattern.
+-- is_solo: true for the one group every user is auto-provisioned on first
+--   GroupsService.findAll() call with zero memberships (see groups.service.ts)
+--   — lets the group switcher label it distinctly.
 CREATE TABLE IF NOT EXISTS groups (
   id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
   name        TEXT         NOT NULL,
   owner_id    TEXT         NOT NULL,
+  is_solo     BOOLEAN      NOT NULL DEFAULT false,
   created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 

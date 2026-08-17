@@ -56,7 +56,7 @@ describe('GroupsController', () => {
   describe('findAll', () => {
     it('should return the array from the service', async () => {
       const groups: Group[] = [
-        { id: 'group-1', name: 'Chess Club', ownerId: 'user-1', createdAt: new Date() },
+        { id: 'group-1', name: 'Chess Club', ownerId: 'user-1', isSolo: false, createdAt: new Date() },
       ];
       mockGroupsService.findAll.mockResolvedValue(groups);
 
@@ -73,7 +73,7 @@ describe('GroupsController', () => {
 
   describe('findOne', () => {
     it('should return the group from the service', async () => {
-      const group: Group = { id: 'group-1', name: 'Chess Club', ownerId: 'user-1', createdAt: new Date() };
+      const group: Group = { id: 'group-1', name: 'Chess Club', ownerId: 'user-1', isSolo: false, createdAt: new Date() };
       mockGroupsService.findOne.mockResolvedValue(group);
 
       const result = await controller.findOne('group-1', fakeRequest);
@@ -96,7 +96,7 @@ describe('GroupsController', () => {
   describe('create', () => {
     it('should return the created group from the service', async () => {
       const dto = { name: 'Go Club' };
-      const created: Group = { id: 'group-3', name: 'Go Club', ownerId: 'user-1', createdAt: new Date() };
+      const created: Group = { id: 'group-3', name: 'Go Club', ownerId: 'user-1', isSolo: false, createdAt: new Date() };
       mockGroupsService.create.mockResolvedValue(created);
 
       const result = await controller.create(dto, fakeRequest);

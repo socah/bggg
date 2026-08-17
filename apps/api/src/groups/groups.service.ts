@@ -26,7 +26,9 @@ export class GroupsService {
   // every group an invited member joined but didn't create.
   async findAll(requestingUserId: string): Promise<Group[]> {
     const memberships = await this.members.findBy({ userId: requestingUserId });
-    if (memberships.length === 0) return [];
+    if (memberships.length === 0) {
+      return [await this.provisionSoloGroup(requestingUserId)];
+    }
 
     return this.groupRepository.findBy({
       id: In(memberships.map((m) => m.groupId)),
@@ -123,5 +125,31 @@ export class GroupsService {
     if (!membership || membership.role === 'member') {
       throw new ForbiddenException('Only group owners and admins can modify this group');
     }
+  }
+
+  // Every user always belongs to at least one group. A fixed, unpersonalized
+  // name ("Just Me") is used on purpose — nothing in this backend resolves a
+  // user's own display name from their JWT, and the UI already labels this
+  // group distinctly via isSolo, so there's nothing a personalized name would
+  // add. This is a real groups row (not a special-cased in-memory object) so
+  // it can anchor solo proposals/sessions later, since group_id is NOT NULL
+  // on play_session_proposals.
+  private async provisionSoloGroup(userId: string): Promise<Group> {
+    const group = this.groupRepository.create({ name: 'Just Me', ownerId: userId, isSolo: true });
+    const saved = await this.groupRepository.save(group);
+
+    await this.members.save(
+      this.members.create({ userId, groupId: saved.id, role: 'owner' }),
+    );
+
+    await this.auditService.log({
+      actorId: userId,
+      action: 'group.created',
+      targetType: 'group',
+      targetId: String(saved.id),
+      metadata: { name: saved.name, isSolo: true },
+    });
+
+    return saved;
   }
 }
