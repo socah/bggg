@@ -32,3 +32,31 @@ export interface Proposal {
 export interface ProposalWithGroup extends Proposal {
   groupName: string;
 }
+
+export interface Rsvp {
+  id: number;
+  proposalId: string;
+  userId: string;
+  status: 'yes' | 'maybe' | 'no';
+  availableStart: string | null;
+  availableEnd: string | null;
+  confirmed: boolean;
+}
+
+// Only the fields the detail panel actually displays — apps/api/src/games/
+// game.entity.ts has several more that the UI doesn't need yet.
+export interface ProposalGameSummary {
+  game: { id: number; name: string };
+  voteCount: number;
+}
+
+export interface ProposalDetail {
+  proposal: Proposal;
+  rsvps: Rsvp[];
+  games: ProposalGameSummary[];
+}
+
+export interface GroupMemberInfo {
+  userId: string;
+  displayName: string;
+}
