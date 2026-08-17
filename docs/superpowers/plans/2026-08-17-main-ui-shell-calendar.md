@@ -18,7 +18,7 @@
 - All frontend API calls go through one shared helper (`apps/web/lib/api.ts`) — never a raw `fetch('/api/...')` scattered in a component. (Spec: "Frontend API access".)
 - Collection and profile views are static "coming soon" placeholders in both spaces — no data fetching, no backend changes for them. (Spec Non-goals.)
 - No new frontend test infrastructure. Frontend tasks are verified manually via the dev server (`npm run dev --workspace=apps/web`); backend tasks get Jest unit tests following `apps/api`'s existing patterns (mocked `Repository`/`HttpService` via `@nestjs/testing`, no real database).
-- `apps/web/AGENTS.md` warns this Next.js version has breaking changes from stable Next.js — any step below that touches dynamic-route `params` handling must be checked against `node_modules/next/dist/docs/` before writing code, not assumed from prior Next.js versions.
+- `apps/web/AGENTS.md` warns this Next.js version has breaking changes from stable Next.js. The two places this plan touches version-sensitive App Router APIs (dynamic-route `params` as a `Promise`, and the named-function `'use server'` form-action pattern) have already been verified against `node_modules/next/dist/docs/` and are written correctly below — no need to re-check those two. If a task needs any other App Router API not already verified here, check `node_modules/next/dist/docs/` before writing code rather than assuming a prior Next.js version's behavior.
 
 ---
 
@@ -1122,6 +1122,17 @@ export default async function ShellLayout({ children }: { children: React.ReactN
   // render a broken header if it's ever reached without a session.
   if (!session?.user) redirect('/web/login');
 
+  // A Server Function declared inside the Server Component, per the
+  // documented pattern in node_modules/next/dist/docs/01-app/02-guides/forms.md
+  // ("How it works") — `<form action={...}>` takes a function that runs on
+  // the server, which is how signOut() gets to run/set cookies at all (see
+  // docs/reference/authentication-keycloak.md's note on signIn() having the
+  // same constraint).
+  async function logOut() {
+    'use server';
+    await signOut({ redirectTo: '/web/login' });
+  }
+
   return (
     <div className="flex min-h-screen flex-col">
       <header className="flex flex-wrap items-center justify-between gap-4 border-b border-gray-200 bg-white px-4 py-3">
@@ -1134,12 +1145,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
           <button type="button" disabled title="Coming soon" className="text-gray-400">
             Settings
           </button>
-          <form
-            action={async () => {
-              'use server';
-              await signOut({ redirectTo: '/web/login' });
-            }}
-          >
+          <form action={logOut}>
             <button type="submit" className="text-gray-700 underline">
               Log out
             </button>
@@ -1152,7 +1158,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
 }
 ```
 
-Before writing this file, check `node_modules/next/dist/docs/` (per `apps/web/AGENTS.md`) for whether an inline `'use server'` function passed directly to a `<form action={...}>` in a Server Component is still supported as written in this installed Next.js version — adjust to a named Server Action in a separate `'use server'` file if the docs say otherwise.
+This matches the documented pattern in `node_modules/next/dist/docs/01-app/02-guides/forms.md` exactly (a named async function declared in the component body, `'use server'` as its first statement, passed by reference to `action`) — confirmed against this installed Next.js version, no further verification needed.
 
 - [ ] **Step 4: Add the stub pages**
 
@@ -1932,7 +1938,7 @@ export function GroupCalendarView({ groupId }: { groupId: string }) {
 
 - [ ] **Step 3: Replace the group calendar stub**
 
-Before writing this, check `node_modules/next/dist/docs/` (per `apps/web/AGENTS.md`) for this installed Next.js version's current convention for reading a dynamic route's `params` in a Server Component page — adjust the `await params` line below if it's changed.
+`params: Promise<{ groupId: string }>` + `await params` in an async Server Component page is the confirmed current convention for this installed Next.js version (`node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/page.md`) — no further verification needed.
 
 Replace the contents of `apps/web/app/(shell)/groups/[groupId]/calendar/page.tsx`:
 
