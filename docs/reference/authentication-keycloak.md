@@ -196,6 +196,30 @@ dev, once, after Keycloak has booted for the first time.
   including the real redirect to Keycloak's authorize endpoint is
   reliably `curl`-testable.
 
+## Frontend calls to `apps/api` need the raw access token
+
+`apps/api`'s `AuthGuard` only accepts `Authorization: Bearer <JWT>` — there
+is no cookie-based auth path (see `apps/api/src/auth/auth.guard.ts`). By
+default, Auth.js keeps OAuth tokens server-side and never exposes them to
+`useSession()` on the client, which would make it impossible for
+client-side code to call `/api/*` at all.
+
+`apps/web/auth.ts`'s `jwt`/`session` callbacks (added for the main UI
+shell — see
+`docs/superpowers/specs/2026-08-17-main-ui-shell-design.md`) persist
+`access_token`, `refresh_token`, and `expires_at` from Keycloak's `account`
+object onto the session token at sign-in, and refresh the access token via
+Keycloak's refresh-token grant whenever a session read finds it expired.
+Without this, a client-side `/api/*` call would start failing partway
+through a session the moment the (short-lived) access token expired, with
+no way to recover short of signing in again.
+
+All `/api/*` calls from client components go through one shared helper
+(`apps/web/lib/api.ts`) rather than scattering raw `fetch()` calls with a
+manually-attached header through components — see that file's own comment
+for why (it's what keeps "expose the token to browser JS" a cheaply
+reversible decision, not an architectural commitment).
+
 ## Prod admin console
 
 `https://bggg.duckdns.org/auth/admin/master/console/` — log in with
