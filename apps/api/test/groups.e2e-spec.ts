@@ -79,7 +79,7 @@ describe('Groups (e2e)', () => {
 
   it('GET /groups → 200 with array', async () => {
     const groups: Group[] = [
-      { id: GROUP_ID, name: 'Chess Club', ownerId: TEST_USER_ID, createdAt: new Date() },
+      { id: GROUP_ID, name: 'Chess Club', ownerId: TEST_USER_ID, isSolo: false, createdAt: new Date() },
     ];
     mockGroupsService.findAll.mockResolvedValue(groups);
 
@@ -98,7 +98,7 @@ describe('Groups (e2e)', () => {
   // ── GET /groups/:id ───────────────────────────────────────────────────────
 
   it('GET /groups/:id → 200 with group', async () => {
-    const group: Group = { id: GROUP_ID, name: 'Chess Club', ownerId: TEST_USER_ID, createdAt: new Date() };
+    const group: Group = { id: GROUP_ID, name: 'Chess Club', ownerId: TEST_USER_ID, isSolo: false, createdAt: new Date() };
     mockGroupsService.findOne.mockResolvedValue(group);
 
     await request(app.getHttpServer())
@@ -128,7 +128,7 @@ describe('Groups (e2e)', () => {
   // ── POST /groups ──────────────────────────────────────────────────────────
 
   it('POST /groups → 201 with created group', async () => {
-    const created: Group = { id: GROUP_ID, name: 'Go Club', ownerId: TEST_USER_ID, createdAt: new Date() };
+    const created: Group = { id: GROUP_ID, name: 'Go Club', ownerId: TEST_USER_ID, isSolo: false, createdAt: new Date() };
     mockGroupsService.create.mockResolvedValue(created);
 
     await request(app.getHttpServer())
