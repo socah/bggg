@@ -24,12 +24,18 @@ export function useProposalDetail(proposalId: string | null): UseProposalDetailR
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    if (!proposalId) {
-      setDetail(null);
-      return;
-    }
+    // No reset needed here — the consuming panel returns early on a null
+    // proposalId and never reads `detail` in that case, so clearing it would
+    // be a synchronous setState in the effect body with no observable effect.
+    if (!proposalId) return;
 
     let cancelled = false;
+    // Clearing detail here is load-bearing: without it, the previously loaded
+    // proposal's detail flashes in the panel while the newly selected one is
+    // still in flight. Like use-proposals.ts, this hook intentionally
+    // implements manual fetch-in-effect rather than pulling in a
+    // data-fetching library, so the synchronous reset is unavoidable.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- see above
     setDetail(null);
     setLoading(true);
     setNotFound(false);

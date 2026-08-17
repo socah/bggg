@@ -18,7 +18,10 @@ export function GroupSwitcher() {
   useEffect(() => {
     let cancelled = false;
     apiFetch('/groups')
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to load groups');
+        return res.json();
+      })
       .then((data: Group[]) => {
         if (!cancelled) setGroups(data);
       })

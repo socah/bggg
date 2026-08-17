@@ -12,6 +12,7 @@ function isVisible(proposal: Proposal): boolean {
 
 async function fetchGroupProposals(groupId: string): Promise<Proposal[]> {
   const response = await apiFetch(`/groups/${groupId}/proposals`);
+  if (!response.ok) throw new Error('Failed to load proposals');
   const proposals: Proposal[] = await response.json();
   return proposals.filter(isVisible);
 }
@@ -32,6 +33,7 @@ export function useGroupProposals(groupId: string): ProposalsResult<Proposal> {
 
   useEffect(() => {
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- starting a new fetch always needs to reset loading/error synchronously; this hook intentionally implements manual fetch-in-effect rather than pulling in a data-fetching library.
     setLoading(true);
     setError(null);
     fetchGroupProposals(groupId)
@@ -62,6 +64,7 @@ export function useAggregateProposals(): ProposalsResult<ProposalWithGroup> {
 
   useEffect(() => {
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- starting a new fetch always needs to reset loading/error synchronously; this hook intentionally implements manual fetch-in-effect rather than pulling in a data-fetching library.
     setLoading(true);
     setError(null);
 

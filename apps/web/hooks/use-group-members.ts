@@ -12,13 +12,18 @@ export function useGroupMembers(groupId: string | null): GroupMemberInfo[] {
   const [members, setMembers] = useState<GroupMemberInfo[]>([]);
 
   useEffect(() => {
-    if (!groupId) {
-      setMembers([]);
-      return;
-    }
+    // Nothing to fetch — the return statement below already yields [] for
+    // any null groupId, so there's no need to reset state here too (doing
+    // so would be a synchronous setState directly in the effect body,
+    // which react-hooks/set-state-in-effect correctly flags as avoidable).
+    if (!groupId) return;
+
     let cancelled = false;
     apiFetch(`/groups/${groupId}/members`)
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to load group members');
+        return res.json();
+      })
       .then((data: GroupMemberInfo[]) => {
         if (!cancelled) setMembers(data);
       })
@@ -30,5 +35,5 @@ export function useGroupMembers(groupId: string | null): GroupMemberInfo[] {
     };
   }, [groupId]);
 
-  return members;
+  return groupId ? members : [];
 }
