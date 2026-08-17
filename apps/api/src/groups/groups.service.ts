@@ -58,31 +58,7 @@ export class GroupsService {
   }
 
   async create(dto: CreateGroupDto, requestingUserId: string): Promise<Group> {
-    const group = this.groupRepository.create({ ...dto, ownerId: requestingUserId });
-    const saved = await this.groupRepository.save(group);
-
-    // Group.ownerId records who created the group (a fixed, immutable fact);
-    // this group_members row is what actually grants access going forward —
-    // findAll/findOne check membership, not ownerId. Without this row, the
-    // creator couldn't see the group they just made.
-    await this.members.save(
-      this.members.create({
-        userId: requestingUserId,
-        groupId: saved.id,
-        role: 'owner',
-      }),
-    );
-
-    // Audit after save — we need the generated ID for targetId.
-    await this.auditService.log({
-      actorId: requestingUserId,
-      action: 'group.created',
-      targetType: 'group',
-      targetId: String(saved.id),
-      metadata: { name: saved.name },
-    });
-
-    return saved;
+    return this.persistGroupWithOwner({ ...dto, ownerId: requestingUserId }, {});
   }
 
   async update(id: string, dto: UpdateGroupDto, requestingUserId: string): Promise<Group> {
@@ -127,6 +103,31 @@ export class GroupsService {
     }
   }
 
+  // Shared by create() and provisionSoloGroup(): builds a Group row, saves
+  // it, gives its creator an 'owner' membership row, and audit-logs
+  // 'group.created' — the only two ways a group ever comes into existence.
+  private async persistGroupWithOwner(
+    attrs: { name: string; ownerId: string; isSolo?: boolean },
+    auditMetadata: Record<string, unknown>,
+  ): Promise<Group> {
+    const group = this.groupRepository.create(attrs);
+    const saved = await this.groupRepository.save(group);
+
+    await this.members.save(
+      this.members.create({ userId: attrs.ownerId, groupId: saved.id, role: 'owner' }),
+    );
+
+    await this.auditService.log({
+      actorId: attrs.ownerId,
+      action: 'group.created',
+      targetType: 'group',
+      targetId: String(saved.id),
+      metadata: { name: saved.name, ...auditMetadata },
+    });
+
+    return saved;
+  }
+
   // Every user always belongs to at least one group. A fixed, unpersonalized
   // name ("Just Me") is used on purpose — nothing in this backend resolves a
   // user's own display name from their JWT, and the UI already labels this
@@ -135,21 +136,24 @@ export class GroupsService {
   // it can anchor solo proposals/sessions later, since group_id is NOT NULL
   // on play_session_proposals.
   private async provisionSoloGroup(userId: string): Promise<Group> {
-    const group = this.groupRepository.create({ name: 'Just Me', ownerId: userId, isSolo: true });
-    const saved = await this.groupRepository.save(group);
+    try {
+      return await this.persistGroupWithOwner(
+        { name: 'Just Me', ownerId: userId, isSolo: true },
+        { isSolo: true },
+      );
+    } catch (err) {
+      // Unique violation on groups_owner_solo_unique means a concurrent
+      // request already provisioned this user's solo group — re-read it
+      // instead of erroring, so a race never produces two.
+      if (this.isUniqueViolation(err)) {
+        const existing = await this.groupRepository.findOneBy({ ownerId: userId, isSolo: true });
+        if (existing) return existing;
+      }
+      throw err;
+    }
+  }
 
-    await this.members.save(
-      this.members.create({ userId, groupId: saved.id, role: 'owner' }),
-    );
-
-    await this.auditService.log({
-      actorId: userId,
-      action: 'group.created',
-      targetType: 'group',
-      targetId: String(saved.id),
-      metadata: { name: saved.name, isSolo: true },
-    });
-
-    return saved;
+  private isUniqueViolation(err: unknown): boolean {
+    return typeof err === 'object' && err !== null && (err as { code?: string }).code === '23505';
   }
 }

@@ -48,6 +48,11 @@ CREATE TABLE IF NOT EXISTS groups (
   created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
+-- Enforces "at most one solo group per user" at the database level — the last
+-- line of defense against the race provisionSoloGroup() otherwise guards
+-- against in application code.
+CREATE UNIQUE INDEX IF NOT EXISTS groups_owner_solo_unique ON groups(owner_id) WHERE is_solo;
+
 -- ── GROUP MEMBERS ─────────────────────────────────────────────────────────
 -- Join table: one user can belong to many groups; one group has many users.
 -- Added for real in Phase 3 — invite_system topic (see notes/3_invite_system.md).

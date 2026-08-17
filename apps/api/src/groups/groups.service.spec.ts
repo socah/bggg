@@ -126,6 +126,27 @@ describe('GroupsService', () => {
       expect(mockRepository.findBy).not.toHaveBeenCalled();
       expect(result).toEqual([builtGroup]);
     });
+
+    it('should return the existing solo group if a concurrent request already created one', async () => {
+      const conflictError = Object.assign(
+        new Error('duplicate key value violates unique constraint'),
+        { code: '23505' },
+      );
+      const existingGroup: Group = {
+        id: 'solo-1', name: 'Just Me', ownerId: OWNER_ID, isSolo: true, createdAt: new Date(),
+      };
+      mockMembersRepository.findBy.mockResolvedValue([]);
+      mockRepository.create.mockReturnValue({ name: 'Just Me', ownerId: OWNER_ID, isSolo: true });
+      mockRepository.save.mockRejectedValue(conflictError);
+      mockRepository.findOneBy.mockResolvedValue(existingGroup);
+
+      const result = await service.findAll(OWNER_ID);
+
+      expect(mockRepository.findOneBy).toHaveBeenCalledWith({ ownerId: OWNER_ID, isSolo: true });
+      expect(mockMembersRepository.save).not.toHaveBeenCalled();
+      expect(mockAuditService.log).not.toHaveBeenCalled();
+      expect(result).toEqual([existingGroup]);
+    });
   });
 
   // ── findOne ──────────────────────────────────────────────────────────────
