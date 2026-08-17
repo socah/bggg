@@ -47,6 +47,27 @@ carve-out.
 Keycloak's `web` client's redirect URI (`infra/keycloak/boardgame-realm.json`)
 must match: `.../web/auth/callback/keycloak`, not `.../api/auth/callback/keycloak`.
 
+### Editing `boardgame-realm.json` after the first deploy doesn't reach a running Keycloak
+
+`docker-compose.yml`'s `--import-realm` only imports a realm that doesn't
+already exist — it silently skips import when the `boardgame` realm is
+already present, which it is on every deploy after the very first one
+(Keycloak has no volume of its own here; its state is whatever's on the
+running container's disk, and `docker compose up` doesn't recreate a
+container just because a bind-mounted file changed). Editing this JSON and
+redeploying `web`/`api` therefore does **not** propagate the change to the
+live realm — reproduced directly: `redirectUris` was updated here to add
+`https://bggg.duckdns.org/*` (commit `f998624`), but the running Keycloak
+container had started *before* that commit and kept its stale
+`http://localhost:3000/*`-only client, so every login attempt in prod
+failed Keycloak's own validation with `Invalid parameter: redirect_uri`
+until the live client was patched by hand via `kcadm.sh update clients/<id>
+-r boardgame -s 'redirectUris=[...]' -s 'webOrigins=[...]'` (or the
+Keycloak container is fully recreated, e.g. after wiping its disk).
+Whenever `boardgame-realm.json` changes, check the live value actually
+matches (`kcadm.sh get clients -r boardgame -q clientId=<id>`) — don't
+assume a normal deploy applied it.
+
 ## The one-hop login redirect (`apps/web`)
 
 Visiting any gated route while unauthenticated lands the browser on
