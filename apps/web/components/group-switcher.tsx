@@ -37,15 +37,27 @@ export function GroupSwitcher() {
     event.preventDefault();
     if (!newGroupName.trim()) return;
 
-    const response = await apiFetch('/groups', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: newGroupName }),
-    });
-    const created: Group = await response.json();
-    setGroups((prev) => [...prev, created]);
-    setNewGroupName('');
-    router.push(spaceHref(created.id, tab));
+    try {
+      const response = await apiFetch('/groups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newGroupName }),
+      });
+      if (!response.ok) {
+        setError('Could not create group');
+        return;
+      }
+      const created: Group = await response.json();
+      setGroups((prev) => [...prev, created]);
+      setNewGroupName('');
+      setError(null);
+      router.push(spaceHref(created.id, tab));
+    } catch {
+      // apiFetch itself throws when the session is dead (it already
+      // triggers a sign-out redirect in that case) — nothing more to show
+      // the user here, but don't let it become an unhandled rejection.
+      setError('Could not create group');
+    }
   }
 
   return (
