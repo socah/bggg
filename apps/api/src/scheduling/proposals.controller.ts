@@ -31,7 +31,8 @@ interface AuthenticatedRequest {
 export class ProposalsController {
   constructor(private readonly schedulingService: SchedulingService) {}
 
-  // GET /proposals/:id → the proposal plus every RSVP on it.
+  // GET /proposals/:id → the proposal, every RSVP on it, and every proposed
+  // game with its derived vote count.
   @Get(':id')
   findOne(@Param('id', ParseUUIDPipe) id: string, @Request() req: AuthenticatedRequest) {
     return this.schedulingService.getProposal(id, req.user.sub);

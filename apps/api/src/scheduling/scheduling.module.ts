@@ -6,6 +6,7 @@ import { PlaySession } from './play-session.entity';
 import { PlaySessionProposalGame } from './play-session-proposal-game.entity';
 import { PlaySessionProposalGameVote } from './play-session-proposal-game-vote.entity';
 import { GroupMember } from '../groups/group-member.entity';
+import { Game } from '../games/game.entity';
 import { SchedulingService } from './scheduling.service';
 import { GroupProposalsController } from './group-proposals.controller';
 import { ProposalsController } from './proposals.controller';
@@ -19,6 +20,10 @@ import { GroupsModule } from '../groups/groups.module';
       PlaySession,
       PlaySessionProposalGame,
       PlaySessionProposalGameVote,
+      // Re-registered here so listProposalGames can resolve a proposal-game
+      // row's gameId to the real game's name — same "each module gets its own
+      // scoped repository for a shared entity" pattern as GroupMember below.
+      Game,
       // Re-registered here for SchedulingService's own role check
       // (assertCanManageProposal) — same "each module gets its own scoped
       // repository for a shared entity" pattern InvitesModule uses for the

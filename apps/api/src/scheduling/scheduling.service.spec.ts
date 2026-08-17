@@ -7,6 +7,7 @@ import { PlaySession } from './play-session.entity';
 import { PlaySessionProposalGame } from './play-session-proposal-game.entity';
 import { PlaySessionProposalGameVote } from './play-session-proposal-game-vote.entity';
 import { GroupMember } from '../groups/group-member.entity';
+import { Game } from '../games/game.entity';
 import { GroupsService } from '../groups/groups.service';
 
 const GROUP_ID = 'group-1';
@@ -21,6 +22,7 @@ describe('SchedulingService', () => {
   const mockSessions = {};
   const mockProposalGames = { findBy: jest.fn() };
   const mockGameVotes = { countBy: jest.fn() };
+  const mockGames = { findBy: jest.fn() };
   const mockMembers = {};
   const mockGroupsService = { findOne: jest.fn() };
 
@@ -33,6 +35,7 @@ describe('SchedulingService', () => {
         { provide: getRepositoryToken(PlaySession), useValue: mockSessions },
         { provide: getRepositoryToken(PlaySessionProposalGame), useValue: mockProposalGames },
         { provide: getRepositoryToken(PlaySessionProposalGameVote), useValue: mockGameVotes },
+        { provide: getRepositoryToken(Game), useValue: mockGames },
         { provide: getRepositoryToken(GroupMember), useValue: mockMembers },
         { provide: GroupsService, useValue: mockGroupsService },
       ],
@@ -55,10 +58,18 @@ describe('SchedulingService', () => {
       const proposalGame: PlaySessionProposalGame = {
         id: 'pg-1', proposalId: PROPOSAL_ID, gameId: 42, proposedBy: USER_ID, createdAt: new Date(),
       };
+      // The join row above only carries gameId — the response's game name has
+      // to come from the games table itself, which is what this fixture is.
+      const game: Game = {
+        id: 42, bggId: 174430, name: 'Gloomhaven', description: '', thumbnail: '', image: '',
+        minPlayers: 1, maxPlayers: 4, playingTime: 120, yearPublished: 2017, rating: 8.79,
+        lastFetchedAt: new Date(), createdAt: new Date(),
+      };
       mockProposals.findOneBy.mockResolvedValue(proposal);
       mockGroupsService.findOne.mockResolvedValue({ id: GROUP_ID });
       mockRsvps.findBy.mockResolvedValue(rsvps);
       mockProposalGames.findBy.mockResolvedValue([proposalGame]);
+      mockGames.findBy.mockResolvedValue([game]);
       mockGameVotes.countBy.mockResolvedValue(2);
 
       const result = await service.getProposal(PROPOSAL_ID, USER_ID);
@@ -66,7 +77,7 @@ describe('SchedulingService', () => {
       expect(result).toEqual({
         proposal,
         rsvps,
-        games: [{ game: proposalGame, voteCount: 2 }],
+        games: [{ game: { id: 42, name: 'Gloomhaven' }, voteCount: 2 }],
       });
     });
   });

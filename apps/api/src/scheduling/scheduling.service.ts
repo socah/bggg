@@ -6,13 +6,14 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { PlaySessionProposal } from './play-session-proposal.entity';
 import { PlaySessionRsvp } from './play-session-rsvp.entity';
 import { PlaySession } from './play-session.entity';
 import { PlaySessionProposalGame } from './play-session-proposal-game.entity';
 import { PlaySessionProposalGameVote } from './play-session-proposal-game-vote.entity';
 import { GroupMember } from '../groups/group-member.entity';
+import { Game } from '../games/game.entity';
 import { GroupsService } from '../groups/groups.service';
 import { CreateProposalDto } from './dto/create-proposal.dto';
 import { RsvpDto } from './dto/rsvp.dto';
@@ -33,6 +34,10 @@ export class SchedulingService {
     private readonly proposalGames: Repository<PlaySessionProposalGame>,
     @InjectRepository(PlaySessionProposalGameVote)
     private readonly gameVotes: Repository<PlaySessionProposalGameVote>,
+    // Read-only here — used purely to resolve a proposal-game row's gameId
+    // into the game's actual name for listProposalGames' response.
+    @InjectRepository(Game)
+    private readonly games: Repository<Game>,
     // Own registration of GroupMember, same "each module registers its own
     // repository for a shared entity" pattern InvitesModule already uses —
     // see the comment in groups.module.ts.
@@ -321,20 +326,33 @@ export class SchedulingService {
   async listProposalGames(
     proposalId: string,
     requestingUserId: string,
-  ): Promise<Array<{ game: PlaySessionProposalGame; voteCount: number }>> {
+  ): Promise<Array<{ game: { id: number; name: string }; voteCount: number }>> {
     const proposal = await this.findProposalOrThrow(proposalId);
     await this.groupsService.findOne(proposal.groupId, requestingUserId);
 
-    const games = await this.proposalGames.findBy({ proposalId });
+    const proposalGames = await this.proposalGames.findBy({ proposalId });
+    if (proposalGames.length === 0) return [];
+
+    // Resolve each join row's gameId to the real Game entity in one query,
+    // rather than duplicating the games table's id/name onto every
+    // proposal-game row — the join row itself only tracks who proposed
+    // which game, not the game's own data.
+    const gameEntities = await this.games.findBy({
+      id: In(proposalGames.map((pg) => pg.gameId)),
+    });
+    const gameById = new Map(gameEntities.map((g) => [g.id, g]));
 
     // Vote count is derived with COUNT(*) (Decision E) — never a stored
     // column — so there's a query per game here rather than a join. Fine
     // at this project's scale; would become a single GROUP BY if the
     // number of proposed games per proposal ever got large.
     return Promise.all(
-      games.map(async (game) => ({
-        game,
-        voteCount: await this.gameVotes.countBy({ proposalGameId: game.id }),
+      proposalGames.map(async (proposalGame) => ({
+        game: {
+          id: proposalGame.gameId,
+          name: gameById.get(proposalGame.gameId)?.name ?? 'Unknown game',
+        },
+        voteCount: await this.gameVotes.countBy({ proposalGameId: proposalGame.id }),
       })),
     );
   }
@@ -350,7 +368,7 @@ export class SchedulingService {
   ): Promise<{
     proposal: PlaySessionProposal;
     rsvps: PlaySessionRsvp[];
-    games: Array<{ game: PlaySessionProposalGame; voteCount: number }>;
+    games: Array<{ game: { id: number; name: string }; voteCount: number }>;
   }> {
     const proposal = await this.findProposalOrThrow(proposalId);
     await this.groupsService.findOne(proposal.groupId, requestingUserId);
