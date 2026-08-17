@@ -55,7 +55,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           },
         );
         const refreshed = await response.json();
-        if (!response.ok) throw refreshed;
+        // A malformed/incomplete 200 body (e.g. from a misbehaving proxy)
+        // would otherwise silently produce a NaN expiresAt, causing this
+        // branch to re-run on every single session read forever with no
+        // error ever surfacing — validate the shape before trusting it.
+        if (
+          !response.ok ||
+          typeof refreshed.access_token !== 'string' ||
+          typeof refreshed.expires_in !== 'number'
+        ) {
+          throw refreshed;
+        }
 
         return {
           ...token,
@@ -64,6 +74,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           // fall back to the existing one if it didn't.
           refreshToken: refreshed.refresh_token ?? token.refreshToken,
           expiresAt: Math.floor(Date.now() / 1000) + refreshed.expires_in,
+          // Explicitly clear a stale error from a prior failed refresh —
+          // without this, one transient failure permanently locks the
+          // session into forced-logout (lib/api.ts signs out on any
+          // truthy session.error) even after the token is valid again.
+          error: undefined,
         };
       } catch {
         // Surfaced on the session as `error` — apps/web/lib/api.ts checks
