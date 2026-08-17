@@ -30,6 +30,7 @@ export function useProposalDetail(proposalId: string | null): UseProposalDetailR
     }
 
     let cancelled = false;
+    setDetail(null);
     setLoading(true);
     setNotFound(false);
     setError(null);
@@ -39,6 +40,9 @@ export function useProposalDetail(proposalId: string | null): UseProposalDetailR
         if (response.status === 404) {
           if (!cancelled) setNotFound(true);
           return null;
+        }
+        if (!response.ok) {
+          throw new Error(`Unexpected status ${response.status}`);
         }
         return response.json();
       })

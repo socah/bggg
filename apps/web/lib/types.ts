@@ -57,6 +57,6 @@ export interface ProposalDetail {
 }
 
 export interface GroupMemberInfo {
-  userId: string;
+  id: string;
   displayName: string;
 }

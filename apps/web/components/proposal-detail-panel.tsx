@@ -15,7 +15,7 @@ export function ProposalDetailPanel({ proposalId, onClose }: ProposalDetailPanel
   if (!proposalId) return null;
 
   function nameFor(userId: string): string {
-    return members.find((m) => m.userId === userId)?.displayName ?? userId;
+    return members.find((m) => m.id === userId)?.displayName ?? userId;
   }
 
   return (
