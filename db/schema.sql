@@ -28,6 +28,17 @@ CREATE TABLE IF NOT EXISTS users (
 -- A group is the central organising unit: members, games, and sessions all
 -- belong to a group.
 -- Decision: 'groups' not 'group' — GROUP is a reserved word in SQL.
+--
+-- MANUAL DEPLOY STEP for any database that already had a `groups` table
+-- before this file added `is_solo`/`groups_owner_solo_unique` — this file
+-- is applied by hand (see the header note at the top of this file); there
+-- is no migration runner (synchronize: false in app.module.ts). Run both
+-- statements once, in order, or the app breaks two different ways: without
+-- the column, every GET /groups 500s; without the index, the concurrent-
+-- provisioning race guard in GroupsService.provisionSoloGroup is inert.
+--   ALTER TABLE groups ADD COLUMN IF NOT EXISTS is_solo BOOLEAN NOT NULL DEFAULT false;
+--   CREATE UNIQUE INDEX IF NOT EXISTS groups_owner_solo_unique ON groups(owner_id) WHERE is_solo;
+--
 -- id: UUID, not SERIAL — this table was originally written with an integer
 --   PK, but group.entity.ts already uses @PrimaryGeneratedColumn('uuid')
 --   (groups are a public-facing resource returned directly to clients, e.g.
