@@ -5,6 +5,7 @@
 
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
+import { Providers } from './providers';
 
 // Metadata exported from a Server Component is picked up by Next.js and
 // injected into <head> as <title>, <meta>, and <link> tags server-side.
@@ -34,7 +35,7 @@ export default function RootLayout({
           even on short pages. text-gray-900 sets a default text colour
           so we don't have to repeat it on every element. */}
       <body className="min-h-screen bg-gray-50 text-gray-900">
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
