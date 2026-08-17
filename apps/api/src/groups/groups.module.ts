@@ -5,6 +5,7 @@ import { GroupMember } from './group-member.entity';
 import { GroupsController } from './groups.controller';
 import { GroupsService } from './groups.service';
 import { AuditModule } from '../audit/audit.module';
+import { KeycloakModule } from '../keycloak/keycloak.module';
 
 @Module({
   // TypeOrmModule.forFeature([Group, GroupMember]) registers Repository<Group>
@@ -12,7 +13,11 @@ import { AuditModule } from '../audit/audit.module';
   // this, @InjectRepository(...) for either in GroupsService would throw at
   // startup. GroupMember is also registered in InvitesModule — see the
   // comment there for why that's fine, not a conflict.
-  imports: [TypeOrmModule.forFeature([Group, GroupMember]), AuditModule],
+  // KeycloakModule provides KeycloakAdminClient, used by getMembers() to
+  // resolve member subs to display names. No circular dependency:
+  // KeycloakModule never imports GroupsModule — same reasoning already
+  // documented in invites.module.ts.
+  imports: [TypeOrmModule.forFeature([Group, GroupMember]), AuditModule, KeycloakModule],
 
   // controllers: NestJS instantiates these and registers their routes.
   controllers: [GroupsController],

@@ -6,6 +6,7 @@ import { GroupMember } from './group-member.entity';
 import { CreateGroupDto } from './dto/create-group.dto';
 import { UpdateGroupDto } from './dto/update-group.dto';
 import { AuditService } from '../audit/audit.service';
+import { KeycloakAdminClient, KeycloakUserInfo } from '../keycloak/keycloak-admin.client';
 
 @Injectable()
 export class GroupsService {
@@ -18,6 +19,7 @@ export class GroupsService {
     // which exports AuditService. No circular dependency — AuditModule never
     // imports GroupsModule.
     private readonly auditService: AuditService,
+    private readonly keycloakAdmin: KeycloakAdminClient,
   ) {}
 
   // Scoped to groups this user is a MEMBER of (owner, admin, or member role
@@ -55,6 +57,16 @@ export class GroupsService {
     }
 
     return group;
+  }
+
+  // Reuses findOne's existing 404-vs-403 access check — same "look but
+  // don't touch" read access every role gets, no stricter check needed
+  // since this is read-only.
+  async getMembers(id: string, requestingUserId: string): Promise<KeycloakUserInfo[]> {
+    await this.findOne(id, requestingUserId);
+
+    const memberships = await this.members.findBy({ groupId: id });
+    return Promise.all(memberships.map((m) => this.keycloakAdmin.getUser(m.userId)));
   }
 
   async create(dto: CreateGroupDto, requestingUserId: string): Promise<Group> {

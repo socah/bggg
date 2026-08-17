@@ -25,6 +25,7 @@ describe('GroupsController', () => {
     create: jest.fn(),
     update: jest.fn(),
     remove: jest.fn(),
+    getMembers: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -115,6 +116,20 @@ describe('GroupsController', () => {
       await controller.remove('group-1', fakeRequest);
 
       expect(mockGroupsService.remove).toHaveBeenCalledWith('group-1', 'user-1');
+    });
+  });
+
+  // ── getMembers ───────────────────────────────────────────────────────────
+
+  describe('getMembers', () => {
+    it('should call groupsService.getMembers with the group id and requesting user', async () => {
+      const members = [{ id: 'user-a', displayName: 'Alice' }];
+      mockGroupsService.getMembers.mockResolvedValue(members);
+
+      const result = await controller.getMembers('group-1', fakeRequest);
+
+      expect(mockGroupsService.getMembers).toHaveBeenCalledWith('group-1', 'user-1');
+      expect(result).toEqual(members);
     });
   });
 });

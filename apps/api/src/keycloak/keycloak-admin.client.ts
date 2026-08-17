@@ -17,6 +17,11 @@ export interface CreateKeycloakUserInput {
   password: string;
 }
 
+export interface KeycloakUserInfo {
+  id: string;
+  displayName: string;
+}
+
 // Wraps the two Keycloak Admin API calls InvitesService needs. Uses
 // HttpService (not raw axios) for the same reason BggService does — see
 // bgg.service.spec.ts — a mockable HTTP client the test suite can swap out.
@@ -77,6 +82,33 @@ export class KeycloakAdminClient {
     }
 
     return userId;
+  }
+
+  // Resolves a Keycloak sub to a display name — nothing else in this
+  // backend does this for anyone but the logged-in user themself (their
+  // own JWT claims). Used to label proposers/hosts/RSVPs by name instead
+  // of raw subs. firstName is what createUser sets as the display name on
+  // signup, but a manually admin-created seed user (see the dev-setup docs
+  // in docs/reference/authentication-keycloak.md) may not have it set —
+  // username is always present, so it's the fallback.
+  async getUser(userId: string): Promise<KeycloakUserInfo> {
+    const token = await this.getServiceToken();
+
+    const response = await firstValueFrom(
+      this.http.get(`${KEYCLOAK_URL}/admin/realms/${REALM}/users/${userId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        validateStatus: () => true,
+      }),
+    );
+
+    if (response.status !== 200) {
+      throw new HttpException(`Keycloak user lookup failed (${response.status})`, 502);
+    }
+
+    return {
+      id: response.data.id,
+      displayName: response.data.firstName ?? response.data.username,
+    };
   }
 
   // Compensating action for InvitesService.registerAndAcceptInvite: if

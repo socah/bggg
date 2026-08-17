@@ -6,6 +6,7 @@ import { GroupsService } from './groups.service';
 import { Group } from './group.entity';
 import { GroupMember } from './group-member.entity';
 import { AuditService } from '../audit/audit.service';
+import { KeycloakAdminClient } from '../keycloak/keycloak-admin.client';
 
 // A fixed owner id reused across fixtures — every Group row needs one now
 // that ownership checks exist (2_owasp), and every service call needs a
@@ -42,6 +43,10 @@ describe('GroupsService', () => {
     log: jest.fn(),
   };
 
+  const mockKeycloakAdmin = {
+    getUser: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -62,6 +67,11 @@ describe('GroupsService', () => {
         {
           provide: AuditService,
           useValue: mockAuditService,
+        },
+        // Added alongside the mockAuditService provider, same reasoning.
+        {
+          provide: KeycloakAdminClient,
+          useValue: mockKeycloakAdmin,
         },
       ],
     }).compile();
@@ -292,6 +302,44 @@ describe('GroupsService', () => {
 
       await expect(service.remove('group-1', 'a-member')).rejects.toThrow(ForbiddenException);
       expect(mockRepository.remove).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── getMembers ───────────────────────────────────────────────────────────
+
+  describe('getMembers', () => {
+    it('should return display names for every member, after checking access', async () => {
+      const group: Group = { id: 'group-1', name: 'Chess Club', ownerId: OWNER_ID, isSolo: false, createdAt: new Date() };
+      mockRepository.findOneBy.mockResolvedValue(group);
+      mockMembersRepository.findOneBy.mockResolvedValue({
+        id: 1, userId: OWNER_ID, groupId: 'group-1', role: 'owner', joinedAt: new Date(),
+      });
+      mockMembersRepository.findBy.mockResolvedValue([
+        { id: 1, userId: 'user-a', groupId: 'group-1', role: 'owner', joinedAt: new Date() },
+        { id: 2, userId: 'user-b', groupId: 'group-1', role: 'member', joinedAt: new Date() },
+      ]);
+      mockKeycloakAdmin.getUser
+        .mockResolvedValueOnce({ id: 'user-a', displayName: 'Alice' })
+        .mockResolvedValueOnce({ id: 'user-b', displayName: 'Bob' });
+
+      const result = await service.getMembers('group-1', OWNER_ID);
+
+      // findOne's own 404/403 check runs first — reused rather than
+      // reimplemented, same pattern as update()/remove().
+      expect(mockRepository.findOneBy).toHaveBeenCalledWith({ id: 'group-1' });
+      expect(result).toEqual([
+        { id: 'user-a', displayName: 'Alice' },
+        { id: 'user-b', displayName: 'Bob' },
+      ]);
+    });
+
+    it('should throw ForbiddenException when the requester is not a member', async () => {
+      const group: Group = { id: 'group-1', name: 'Chess Club', ownerId: OWNER_ID, isSolo: false, createdAt: new Date() };
+      mockRepository.findOneBy.mockResolvedValue(group);
+      mockMembersRepository.findOneBy.mockResolvedValue(null);
+
+      await expect(service.getMembers('group-1', 'someone-else')).rejects.toThrow(ForbiddenException);
+      expect(mockKeycloakAdmin.getUser).not.toHaveBeenCalled();
     });
   });
 });

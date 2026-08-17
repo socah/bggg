@@ -47,6 +47,17 @@ export class GroupsController {
     return this.groupsService.findOne(id, req.user.sub);
   }
 
+  // GET /groups/:groupId/members → 200 OK with { id, displayName }[] for
+  // every member. Same 404 (no such group) / 403 (not a member) split as
+  // findOne, since getMembers reuses it.
+  @Get(':groupId/members')
+  getMembers(
+    @Param('groupId', ParseUUIDPipe) groupId: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.groupsService.getMembers(groupId, req.user.sub);
+  }
+
   // POST /groups → 201 Created. ownerId is set from the token — not the body.
   @Post()
   @HttpCode(201)
