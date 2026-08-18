@@ -12,6 +12,7 @@
 // inside the app from that point on.
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
+import { HttpException } from '@nestjs/common';
 import { KeycloakModule } from '../src/keycloak/keycloak.module';
 import { KeycloakAdminClient } from '../src/keycloak/keycloak-admin.client';
 
@@ -37,15 +38,27 @@ async function main() {
   try {
     const keycloakAdmin = appContext.get(KeycloakAdminClient);
 
-    const userId = await keycloakAdmin.createUser({
-      email,
-      displayName: 'Admin',
-      password,
-    });
+    try {
+      const userId = await keycloakAdmin.createUser({
+        email,
+        displayName: 'Admin',
+        password,
+      });
 
-    console.log(`Created bootstrap account for ${email} (Keycloak sub: ${userId}).`);
-    console.log('Log in at the web app and create your first group from there —');
-    console.log('every subsequent user should arrive through an invite, not this script.');
+      console.log(`Created bootstrap account for ${email} (Keycloak sub: ${userId}).`);
+      console.log('Log in at the web app and create your first group from there —');
+      console.log('every subsequent user should arrive through an invite, not this script.');
+    } catch (err) {
+      // Running this script again against an environment that already has
+      // the account (e.g. re-seeding without wiping Keycloak) is the normal
+      // case, not a failure — only createUser's own 409 means that;
+      // anything else is a real problem and still needs to fail loudly.
+      if (err instanceof HttpException && err.getStatus() === 409) {
+        console.log(`Account ${email} already exists — nothing to do.`);
+        return;
+      }
+      throw err;
+    }
   } finally {
     await appContext.close();
   }

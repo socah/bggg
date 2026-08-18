@@ -6,8 +6,8 @@
     "packages/*"
   ],
   "scripts": {
-    "dev:api": "PORT=3001 npm run start:dev --workspace=apps/api",
-    "dev:web": "npm run dev --workspace=apps/web"
+    "dev:api": "set -a && . ./.env && set +a && DB_HOST=localhost KEYCLOAK_URL=http://localhost:8080 PORT=3001 npm run start:dev --workspace=apps/api",
+    "dev:web": "set -a && . ./.env && set +a && npm run dev --workspace=apps/web"
   },
   "engines": {
     "node": ">=20.0.0"

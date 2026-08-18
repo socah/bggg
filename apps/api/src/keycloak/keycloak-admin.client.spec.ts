@@ -25,6 +25,40 @@ describe('KeycloakAdminClient', () => {
 
   afterEach(() => jest.clearAllMocks());
 
+  describe('createUser', () => {
+    it('should set both firstName and lastName, so the account never hits Keycloak\'s default "Update Account Information" prompt for a missing profile field', async () => {
+      mockHttpService.post
+        .mockReturnValueOnce(of({ data: { access_token: 'service-token', expires_in: 60 } }))
+        .mockReturnValueOnce(
+          of({
+            status: 201,
+            headers: { location: 'http://keycloak:8080/admin/realms/boardgame/users/new-user-id' },
+          }),
+        );
+
+      const userId = await client.createUser({
+        email: 'alice@example.com',
+        displayName: 'Alice',
+        password: 'hunter2',
+      });
+
+      expect(userId).toBe('new-user-id');
+      // Keycloak 26's default User Profile schema requires both firstName
+      // and lastName — omitting lastName leaves the account looking
+      // incomplete to Keycloak, which forces an "Update Account
+      // Information" prompt on first login even though this app has no
+      // first/last-name concept of its own (getUser() only ever reads
+      // firstName). Reusing displayName for both is the simplest way to
+      // satisfy that schema without inventing a UX this app doesn't need.
+      expect(mockHttpService.post).toHaveBeenNthCalledWith(
+        2,
+        expect.any(String),
+        expect.objectContaining({ firstName: 'Alice', lastName: 'Alice' }),
+        expect.any(Object),
+      );
+    });
+  });
+
   describe('getUser', () => {
     it('should return the user id and firstName as displayName', async () => {
       // getUser first needs a service-account token (same private
