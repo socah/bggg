@@ -12,8 +12,12 @@ const CLIENT_ID = process.env.KEYCLOAK_API_SERVICE_ID ?? 'api-service';
 const CLIENT_SECRET = process.env.KEYCLOAK_API_SERVICE_SECRET;
 
 export interface CreateKeycloakUserInput {
-  email: string;
-  displayName: string;
+  // At least one of these two must be set — InvitesService enforces that
+  // before this is ever called.
+  email?: string;
+  username?: string;
+  firstName?: string;
+  lastName?: string;
   password: string;
 }
 
@@ -40,15 +44,19 @@ export class KeycloakAdminClient {
   async createUser(input: CreateKeycloakUserInput): Promise<string> {
     const token = await this.getServiceToken();
 
+    // Keycloak always needs a username. If the invitee didn't pick one but
+    // did give an email, derive it from the local part (before the '@') so
+    // they're not forced to invent a second identifier just for this.
+    const username = input.username ?? input.email!.split('@')[0];
+
     const response = await firstValueFrom(
       this.http.post(
         `${KEYCLOAK_URL}/admin/realms/${REALM}/users`,
         {
-          // Using the email as the username avoids asking the invitee to
-          // pick yet another identifier — one less field on the register form.
-          username: input.email,
-          email: input.email,
-          firstName: input.displayName,
+          username,
+          ...(input.email && { email: input.email }),
+          ...(input.firstName && { firstName: input.firstName }),
+          ...(input.lastName && { lastName: input.lastName }),
           enabled: true,
           // See notes/3_invite_system.md's "Password handling for register":
           // set as a real, non-temporary credential — there is no email
@@ -67,7 +75,7 @@ export class KeycloakAdminClient {
     );
 
     if (response.status === 409) {
-      throw new HttpException('An account with this email already exists', 409);
+      throw new HttpException('An account with this username or email already exists', 409);
     }
     if (response.status !== 201) {
       throw new HttpException(`Keycloak user creation failed (${response.status})`, 502);
@@ -87,10 +95,9 @@ export class KeycloakAdminClient {
   // Resolves a Keycloak sub to a display name — nothing else in this
   // backend does this for anyone but the logged-in user themself (their
   // own JWT claims). Used to label proposers/hosts/RSVPs by name instead
-  // of raw subs. firstName is what createUser sets as the display name on
-  // signup, but a manually admin-created seed user (see the dev-setup docs
-  // in docs/reference/authentication-keycloak.md) may not have it set —
-  // username is always present, so it's the fallback.
+  // of raw subs. firstName is optional at registration (see createUser)
+  // and so is frequently unset — username is always present, so it's the
+  // fallback.
   async getUser(userId: string): Promise<KeycloakUserInfo> {
     const token = await this.getServiceToken();
 

@@ -5,6 +5,7 @@ import {
   NotFoundException,
   GoneException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, IsNull } from 'typeorm';
@@ -109,9 +110,17 @@ export class InvitesService {
     // or been redeemed by someone else in the meantime.
     const invite = await this.findValidInvite(rawToken);
 
+    // class-validator can check each field's own shape but not "at least
+    // one of these two", so that rule lives here instead.
+    if (!dto.username && !dto.email) {
+      throw new BadRequestException('Either a username or an email is required');
+    }
+
     const newUserId = await this.keycloakAdmin.createUser({
       email: dto.email,
-      displayName: dto.displayName,
+      username: dto.username,
+      firstName: dto.firstName,
+      lastName: dto.lastName,
       password: dto.password,
     });
 
