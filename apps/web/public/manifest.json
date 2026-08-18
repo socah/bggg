@@ -4,8 +4,8 @@
   "description": "Organise play sessions with your board game group",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f9fafb",
-  "theme_color": "#4f46e5",
+  "background_color": "#FFF3E0",
+  "theme_color": "#E1553A",
   "orientation": "portrait-primary",
   "icons": [
     {
