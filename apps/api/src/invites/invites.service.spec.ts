@@ -287,7 +287,7 @@ describe('InvitesService', () => {
       mockInvites.findOneBy.mockResolvedValue(validInvite);
 
       await expect(
-        service.registerAndAcceptInvite(rawToken, { password: 'hunter2222' } as any),
+        service.registerAndAcceptInvite(rawToken, { password: 'hunter2222' }),
       ).rejects.toThrow(BadRequestException);
       expect(mockKeycloakAdmin.createUser).not.toHaveBeenCalled();
     });
@@ -301,7 +301,7 @@ describe('InvitesService', () => {
       await service.registerAndAcceptInvite(rawToken, {
         username: 'newperson',
         password: 'hunter2222',
-      } as any);
+      });
 
       expect(mockKeycloakAdmin.createUser).toHaveBeenCalledWith({
         email: undefined,
