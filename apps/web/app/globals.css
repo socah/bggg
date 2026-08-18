@@ -1,4 +1,363 @@
-/* Tailwind v4 replaced the three 'base'/'components'/'utilities' @tailwind
-   directives (v3) with a single CSS @import — the engine now generates all
-   of that from one entry point. */
 @import "tailwindcss";
+
+/* ============================================================
+   Design tokens — five selectable "styles" (visual identities)
+   crossed with light/dark "theme". Two independent attributes on
+   <html>: data-style (playful [default, no attribute] | tactile |
+   clipart | mixed | comic) and data-theme (light | dark, resolved
+   by next-themes — see components/theme-provider.tsx).
+
+   Every block below sets the same fixed set of raw custom
+   properties. @theme inline (further down) is the only place that
+   maps them into real Tailwind utilities, so feature components
+   never reference --bg/--accent/etc. by their raw names directly,
+   except for the handful of "signature" values (--shadow-card,
+   --rule-border, --tab-indicator, --badge-rotate, --border-w) that
+   don't correspond to a Tailwind theme namespace and are applied
+   via inline style or arbitrary-property utilities in the small
+   number of components that need them.
+   ============================================================ */
+
+:root {
+  /* Marigold & Coral — the default style, light */
+  --bg: #FFF3E0;
+  --surface: #FFFAF0;
+  --surface-raised: #FFFFFF;
+  --text: #3B2A34;
+  --text-muted: #8C5B45;
+  --border: rgba(59, 42, 52, 0.18);
+  --border-strong: rgba(59, 42, 52, 0.4);
+  --accent: #E1553A;
+  --accent-ink: #FFFFFF;
+  --accent-2: #2E8B84;
+  --accent-2-ink: #FFFFFF;
+  --highlight: #F4B942;
+  --muted-tone: #8C5B45;
+  --shadow: rgba(59, 42, 52, 0.22);
+
+  --font-display-face: 'Fredoka', ui-rounded, sans-serif;
+  --font-body-face: 'Nunito', ui-sans-serif, system-ui, sans-serif;
+  --font-mono-face: 'Space Mono', ui-monospace, monospace;
+  --radius-token-sm: 12px;
+  --radius-token-md: 18px;
+  --border-w: 2px;
+  --shadow-card: 3px 3px 0 var(--border-strong);
+  --rule-border: 4px solid var(--accent);
+  --tab-indicator: 4px solid var(--accent);
+  --badge-rotate: -3deg;
+}
+
+[data-style="tactile"] {
+  /* Meeple & Ink — grounded, heritage-tactile */
+  --bg: #F6F0DE;
+  --surface: #FBF7EC;
+  --surface-raised: #FFFDF6;
+  --text: #2B2622;
+  --text-muted: #7A6A50;
+  --border: rgba(43, 38, 34, 0.15);
+  --border-strong: rgba(43, 38, 34, 0.28);
+  --accent: #C1443B;
+  --accent-ink: #FFFFFF;
+  --accent-2: #3F6B4E;
+  --accent-2-ink: #FFFFFF;
+  --highlight: #DFA23A;
+  --muted-tone: #6B5642;
+  --shadow: rgba(43, 38, 34, 0.10);
+
+  --font-display-face: 'Fraunces', Georgia, serif;
+  --font-body-face: 'Karla', ui-sans-serif, system-ui, sans-serif;
+  --font-mono-face: 'IBM Plex Mono', ui-monospace, monospace;
+  --radius-token-sm: 8px;
+  --radius-token-md: 10px;
+  --border-w: 1px;
+  --shadow-card: 0 1px 2px var(--shadow);
+  --rule-border: 2px dotted var(--border-strong);
+  --tab-indicator: 2px dotted var(--accent);
+  --badge-rotate: 0deg;
+}
+
+[data-style="clipart"] {
+  /* Starburst & Bevel — 90s CD-ROM chic */
+  --bg: #F3EFFB;
+  --surface: #FFFFFF;
+  --surface-raised: #FFFFFF;
+  --text: #2B2140;
+  --text-muted: #6E6091;
+  --border: rgba(43, 33, 64, 0.25);
+  --border-strong: rgba(43, 33, 64, 0.45);
+  --accent: #C2126B;
+  --accent-ink: #FFFFFF;
+  --accent-2: #1B4FCC;
+  --accent-2-ink: #FFFFFF;
+  --highlight: #F4B400;
+  --muted-tone: #8B7FB0;
+  --shadow: rgba(43, 33, 64, 0.25);
+
+  --font-display-face: 'Titan One', 'Baloo 2', cursive, sans-serif;
+  --font-body-face: 'Rubik', ui-sans-serif, system-ui, sans-serif;
+  --font-mono-face: 'Share Tech Mono', ui-monospace, monospace;
+  --radius-token-sm: 10px;
+  --radius-token-md: 14px;
+  --border-w: 2px;
+  --shadow-card: inset 1px 1px 0 rgba(255, 255, 255, 0.6), inset -1px -1px 0 rgba(0, 0, 0, 0.18), 2px 3px 4px var(--shadow);
+  --rule-border: 2px solid rgba(0, 0, 0, 0.25);
+  --tab-indicator: 3px solid var(--accent);
+  --badge-rotate: 0deg;
+}
+
+[data-style="mixed"] {
+  /* Gumdrop & Gloss — Playful x Bevel */
+  --bg: #FBEDF0;
+  --surface: #FFF8FA;
+  --surface-raised: #FFFFFF;
+  --text: #33253A;
+  --text-muted: #8B6B8A;
+  --border: rgba(51, 37, 58, 0.2);
+  --border-strong: rgba(51, 37, 58, 0.4);
+  --accent: #D93F6B;
+  --accent-ink: #FFFFFF;
+  --accent-2: #1E7FB8;
+  --accent-2-ink: #FFFFFF;
+  --highlight: #F4B942;
+  --muted-tone: #8B6B8A;
+  --shadow: rgba(51, 37, 58, 0.28);
+
+  --font-display-face: 'Baloo 2', ui-rounded, sans-serif;
+  --font-body-face: 'Quicksand', ui-sans-serif, system-ui, sans-serif;
+  --font-mono-face: 'Space Mono', ui-monospace, monospace;
+  --radius-token-sm: 12px;
+  --radius-token-md: 16px;
+  --border-w: 2px;
+  --shadow-card: 2px 3px 0 var(--border-strong), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  --rule-border: 4px solid var(--accent);
+  --tab-indicator: 4px solid var(--accent);
+  --badge-rotate: -2deg;
+}
+
+[data-style="comic"] {
+  /* Comic Sans — the joke option, kept for real as a selectable theme */
+  --bg: #FFFFFF;
+  --surface: #F2F2F2;
+  --surface-raised: #FFFFFF;
+  --text: #000000;
+  --text-muted: #555555;
+  --border: #000000;
+  --border-strong: #000000;
+  --accent: #E10600;
+  --accent-ink: #FFFFFF;
+  --accent-2: #0645AD;
+  --accent-2-ink: #FFFFFF;
+  --highlight: #FFEB3B;
+  --muted-tone: #808080;
+  --shadow: rgba(225, 6, 0, 0.35);
+
+  --font-display-face: 'Comic Neue', 'Comic Sans MS', cursive, sans-serif;
+  --font-body-face: 'Comic Neue', 'Comic Sans MS', cursive, sans-serif;
+  --font-mono-face: 'Comic Neue', 'Comic Sans MS', cursive, sans-serif;
+  --radius-token-sm: 0px;
+  --radius-token-md: 0px;
+  --border-w: 3px;
+  --shadow-card: 3px 3px 0 #000, 6px 6px 0 var(--shadow);
+  --rule-border: 5px dashed var(--border-strong);
+  --tab-indicator: 4px solid var(--accent);
+  --badge-rotate: -8deg;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-style="tactile"]):not([data-style="clipart"]):not([data-style="mixed"]):not([data-style="comic"]) {
+    --bg: #241A22;
+    --surface: #2E2129;
+    --surface-raised: #362732;
+    --text: #FBEEE0;
+    --text-muted: #CBA98F;
+    --border: rgba(251, 238, 224, 0.14);
+    --border-strong: rgba(251, 238, 224, 0.3);
+    --accent: #FF8269;
+    --accent-ink: #241A22;
+    --accent-2: #57B3AA;
+    --accent-2-ink: #241A22;
+    --highlight: #FFCB61;
+    --muted-tone: #D8BCA2;
+    --shadow: rgba(0, 0, 0, 0.5);
+  }
+  [data-style="tactile"]:not([data-theme="light"]) {
+    --bg: #1C1815;
+    --surface: #242019;
+    --surface-raised: #2B251F;
+    --text: #F0EAD9;
+    --text-muted: #B9A98A;
+    --border: rgba(240, 234, 217, 0.14);
+    --border-strong: rgba(240, 234, 217, 0.26);
+    --accent: #E06B62;
+    --accent-ink: #1C1815;
+    --accent-2: #6FA383;
+    --accent-2-ink: #1C1815;
+    --highlight: #E8B563;
+    --muted-tone: #C7B491;
+    --shadow: rgba(0, 0, 0, 0.35);
+  }
+  [data-style="clipart"]:not([data-theme="light"]) {
+    --bg: #150F24;
+    --surface: #1E1638;
+    --surface-raised: #241B40;
+    --text: #F0EAFF;
+    --text-muted: #B3A6D9;
+    --border: rgba(240, 234, 255, 0.16);
+    --border-strong: rgba(240, 234, 255, 0.3);
+    --accent: #FF4FA3;
+    --accent-ink: #150F24;
+    --accent-2: #4C8DFF;
+    --accent-2-ink: #150F24;
+    --highlight: #FFD54A;
+    --muted-tone: #7A6BA3;
+    --shadow: rgba(0, 0, 0, 0.5);
+  }
+  [data-style="mixed"]:not([data-theme="light"]) {
+    --bg: #241627;
+    --surface: #2E1D33;
+    --surface-raised: #38263D;
+    --text: #FBEAF0;
+    --text-muted: #D8A9C9;
+    --border: rgba(251, 234, 240, 0.16);
+    --border-strong: rgba(251, 234, 240, 0.32);
+    --accent: #FF6B94;
+    --accent-ink: #241627;
+    --accent-2: #4FB6E8;
+    --accent-2-ink: #241627;
+    --highlight: #FFCE5C;
+    --muted-tone: #D8A9C9;
+    --shadow: rgba(0, 0, 0, 0.5);
+  }
+  [data-style="comic"]:not([data-theme="light"]) {
+    --bg: #000000;
+    --surface: #0A0A0A;
+    --surface-raised: #111111;
+    --text: #39FF14;
+    --text-muted: #66FF99;
+    --border: #39FF14;
+    --border-strong: #39FF14;
+    --accent: #FF3355;
+    --accent-ink: #000000;
+    --accent-2: #33CCFF;
+    --accent-2-ink: #000000;
+    --highlight: #FFFF33;
+    --muted-tone: #66FF99;
+    --shadow: rgba(51, 204, 255, 0.35);
+  }
+}
+
+:root[data-theme="dark"]:not([data-style="tactile"]):not([data-style="clipart"]):not([data-style="mixed"]):not([data-style="comic"]) {
+  --bg: #241A22;
+  --surface: #2E2129;
+  --surface-raised: #362732;
+  --text: #FBEEE0;
+  --text-muted: #CBA98F;
+  --border: rgba(251, 238, 224, 0.14);
+  --border-strong: rgba(251, 238, 224, 0.3);
+  --accent: #FF8269;
+  --accent-ink: #241A22;
+  --accent-2: #57B3AA;
+  --accent-2-ink: #241A22;
+  --highlight: #FFCB61;
+  --muted-tone: #D8BCA2;
+  --shadow: rgba(0, 0, 0, 0.5);
+}
+[data-style="tactile"][data-theme="dark"] {
+  --bg: #1C1815;
+  --surface: #242019;
+  --surface-raised: #2B251F;
+  --text: #F0EAD9;
+  --text-muted: #B9A98A;
+  --border: rgba(240, 234, 217, 0.14);
+  --border-strong: rgba(240, 234, 217, 0.26);
+  --accent: #E06B62;
+  --accent-ink: #1C1815;
+  --accent-2: #6FA383;
+  --accent-2-ink: #1C1815;
+  --highlight: #E8B563;
+  --muted-tone: #C7B491;
+  --shadow: rgba(0, 0, 0, 0.35);
+}
+[data-style="clipart"][data-theme="dark"] {
+  --bg: #150F24;
+  --surface: #1E1638;
+  --surface-raised: #241B40;
+  --text: #F0EAFF;
+  --text-muted: #B3A6D9;
+  --border: rgba(240, 234, 255, 0.16);
+  --border-strong: rgba(240, 234, 255, 0.3);
+  --accent: #FF4FA3;
+  --accent-ink: #150F24;
+  --accent-2: #4C8DFF;
+  --accent-2-ink: #150F24;
+  --highlight: #FFD54A;
+  --muted-tone: #7A6BA3;
+  --shadow: rgba(0, 0, 0, 0.5);
+}
+[data-style="mixed"][data-theme="dark"] {
+  --bg: #241627;
+  --surface: #2E1D33;
+  --surface-raised: #38263D;
+  --text: #FBEAF0;
+  --text-muted: #D8A9C9;
+  --border: rgba(251, 234, 240, 0.16);
+  --border-strong: rgba(251, 234, 240, 0.32);
+  --accent: #FF6B94;
+  --accent-ink: #241627;
+  --accent-2: #4FB6E8;
+  --accent-2-ink: #241627;
+  --highlight: #FFCE5C;
+  --muted-tone: #D8A9C9;
+  --shadow: rgba(0, 0, 0, 0.5);
+}
+[data-style="comic"][data-theme="dark"] {
+  --bg: #000000;
+  --surface: #0A0A0A;
+  --surface-raised: #111111;
+  --text: #39FF14;
+  --text-muted: #66FF99;
+  --border: #39FF14;
+  --border-strong: #39FF14;
+  --accent: #FF3355;
+  --accent-ink: #000000;
+  --accent-2: #33CCFF;
+  --accent-2-ink: #000000;
+  --highlight: #FFFF33;
+  --muted-tone: #66FF99;
+  --shadow: rgba(51, 204, 255, 0.35);
+}
+
+/* Maps the raw runtime tokens above into real Tailwind utilities
+   (bg-bg, text-text, bg-accent, font-display, rounded-md, ...).
+   `inline` tells Tailwind to keep referencing these variables at
+   runtime instead of resolving them to a fixed value at build time —
+   required for them to actually change when data-style/data-theme
+   change. */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-2: var(--accent-2);
+  --color-accent-2-ink: var(--accent-2-ink);
+  --color-highlight: var(--highlight);
+  --color-muted-tone: var(--muted-tone);
+
+  --font-display: var(--font-display-face);
+  --font-body: var(--font-body-face);
+  --font-mono: var(--font-mono-face);
+
+  --radius-sm: var(--radius-token-sm);
+  --radius-md: var(--radius-token-md);
+}
+
+@layer base {
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+  }
+}

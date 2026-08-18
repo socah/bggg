@@ -19,9 +19,9 @@ export const metadata: Metadata = {
 
 // themeColor lives in viewport (not metadata) in Next.js 14+ because it
 // also affects the browser viewport meta tag, not just a <head> entry.
-// Generates: <meta name="theme-color" content="#4f46e5" />
+// Generates: <meta name="theme-color" content="#E1553A" />
 export const viewport: Viewport = {
-  themeColor: '#4f46e5',
+  themeColor: '#E1553A',
 };
 
 export default function RootLayout({
@@ -32,9 +32,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       {/* min-h-screen ensures the background colour fills the viewport
-          even on short pages. text-gray-900 sets a default text colour
-          so we don't have to repeat it on every element. */}
-      <body className="min-h-screen bg-gray-50 text-gray-900">
+          even on short pages. bg-bg/text-text/font-body come from the
+          design tokens in globals.css so we don't have to repeat them
+          on every element. */}
+      <body className="min-h-screen bg-bg text-text font-body">
         <Providers>{children}</Providers>
       </body>
     </html>
