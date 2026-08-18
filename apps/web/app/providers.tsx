@@ -1,6 +1,7 @@
 'use client';
 
 import { SessionProvider } from 'next-auth/react';
+import { StyleProvider } from '@/components/style-provider';
 
 // Auth.js's client helpers (getSession, signOut, useSession) read their
 // base path from this provider's config at mount time — auth.ts sets
@@ -8,5 +9,9 @@ import { SessionProvider } from 'next-auth/react';
 // silently target the wrong (nonexistent, since '/api' is unconditionally
 // the NestJS backend) route.
 export function Providers({ children }: { children: React.ReactNode }) {
-  return <SessionProvider basePath="/web/auth">{children}</SessionProvider>;
+  return (
+    <SessionProvider basePath="/web/auth">
+      <StyleProvider>{children}</StyleProvider>
+    </SessionProvider>
+  );
 }

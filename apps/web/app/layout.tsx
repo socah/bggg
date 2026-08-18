@@ -6,6 +6,7 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { Providers } from './providers';
+import { StyleScript } from '@/components/style-provider';
 
 // Metadata exported from a Server Component is picked up by Next.js and
 // injected into <head> as <title>, <meta>, and <link> tags server-side.
@@ -36,6 +37,7 @@ export default function RootLayout({
           design tokens in globals.css so we don't have to repeat them
           on every element. */}
       <body className="min-h-screen bg-bg text-text font-body">
+        <StyleScript />
         <Providers>{children}</Providers>
       </body>
     </html>
