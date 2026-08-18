@@ -31,7 +31,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       {/* min-h-screen ensures the background colour fills the viewport
           even on short pages. bg-bg/text-text/font-body come from the
           design tokens in globals.css so we don't have to repeat them
