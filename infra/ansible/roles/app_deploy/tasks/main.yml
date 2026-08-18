@@ -332,3 +332,40 @@
     R2_ACCESS_KEY_ID: "{{ r2_access_key_id }}"
     R2_SECRET_ACCESS_KEY: "{{ r2_secret_access_key }}"
   no_log: true
+
+# 'db' has no healthcheck of its own (same gap Makefile's own 'migrate'
+# target works around) — 'api' being up (the task above) doesn't mean
+# Postgres inside 'db' is actually accepting connections yet, so the
+# migration task below needs its own wait, not just a dependency on 'api'
+# having started.
+- name: Wait for Postgres to accept connections
+  command: docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.prod exec -T db pg_isready -U "{{ db_user }}"
+  args:
+    chdir: "{{ deploy_dir }}"
+  register: pg_ready
+  until: pg_ready.rc == 0
+  retries: 30
+  delay: 2
+  changed_when: false
+
+# This is the step that would have caught today's incident before it ever
+# reached a user: 'is_solo' shipped in the entity/schema.sql but the
+# equivalent hand-run SQL never happened against the real prod database —
+# see docs/superpowers/specs/2026-08-18-typeorm-migrations-design.md and
+# apps/api/src/migrations/'s baseline migration for the full story. Runs
+# via plain 'node' against the *compiled* data-source.js, not
+# 'typeorm-ts-node-commonjs' the way 'make migrate' runs it in dev: the
+# runtime image's build stage prunes devDependencies and removes npm/npx
+# entirely (see apps/api/Dockerfile), so neither ts-node nor an npm script
+# is available inside this container — only 'node' and whatever survived
+# 'npm prune --omit=dev' (typeorm itself is a normal dependency, so its
+# CLI entrypoint is still there). Paths are relative to the container's
+# own WORKDIR (/workspace, see the Dockerfile), matching how 'CMD ["node",
+# "apps/api/dist/main.js"]' addresses the same tree.
+- name: Run database migrations
+  command: >-
+    docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.prod
+    exec -T api node node_modules/typeorm/cli.js migration:run -d apps/api/dist/data-source.js
+  args:
+    chdir: "{{ deploy_dir }}"
+  changed_when: true

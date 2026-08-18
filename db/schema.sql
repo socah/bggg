@@ -1,12 +1,14 @@
 -- Board Game Group Platform — Reference Schema
 --
--- This file is for learning and reference only. TypeORM generates the real
--- migrations in Phase 2 from decorated entity classes. Keep this in sync
--- manually as the data model evolves.
---
--- Run against the dev database:
---   docker compose -f docker-compose.dev.yml exec db \
---     psql -U bggg -d bggg_dev -f /dev/stdin < db/schema.sql
+-- This file is human-readable reference documentation only — it is never
+-- applied directly anymore. The real, applied schema lives in
+-- apps/api/src/migrations/ (run via 'make migrate' in dev, and
+-- automatically as part of every prod deploy — see
+-- infra/ansible/roles/app_deploy/tasks/main.yml). Keep this file in sync
+-- by hand as the data model evolves, the same way it always has been; a
+-- change here with no matching migration is exactly the drift that broke
+-- production once already (see the is_solo history below, and
+-- docs/superpowers/specs/2026-08-18-typeorm-migrations-design.md).
 
 -- ── USERS ─────────────────────────────────────────────────────────────────
 -- We do not store passwords. Authentication is handled by Keycloak.
@@ -29,15 +31,13 @@ CREATE TABLE IF NOT EXISTS users (
 -- belong to a group.
 -- Decision: 'groups' not 'group' — GROUP is a reserved word in SQL.
 --
--- MANUAL DEPLOY STEP for any database that already had a `groups` table
--- before this file added `is_solo`/`groups_owner_solo_unique` — this file
--- is applied by hand (see the header note at the top of this file); there
--- is no migration runner (synchronize: false in app.module.ts). Run both
--- statements once, in order, or the app breaks two different ways: without
--- the column, every GET /groups 500s; without the index, the concurrent-
--- provisioning race guard in GroupsService.provisionSoloGroup is inert.
---   ALTER TABLE groups ADD COLUMN IF NOT EXISTS is_solo BOOLEAN NOT NULL DEFAULT false;
---   CREATE UNIQUE INDEX IF NOT EXISTS groups_owner_solo_unique ON groups(owner_id) WHERE is_solo;
+-- is_solo/groups_owner_solo_unique were added after some databases already
+-- had a `groups` table without them — for a while this file only
+-- documented the two statements needed to catch such a database up
+-- (a manual, easy-to-forget step; production ran without them for a
+-- while, and every GET /groups 500'd as a result). That reconciliation is
+-- now real, executable SQL in apps/api/src/migrations/'s baseline
+-- migration instead of a comment here — see this file's own header.
 --
 -- id: UUID, not SERIAL — this table was originally written with an integer
 --   PK, but group.entity.ts already uses @PrimaryGeneratedColumn('uuid')

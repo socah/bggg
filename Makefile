@@ -7,7 +7,7 @@ MODE_FILE := .claude/skills/active-mode.txt
 # in one git worktree does not affect any other worktree or clone.
 .DEFAULT_GOAL := mode-status
 
-.PHONY: mode-learning mode-feature-dev mode-status deploy-dev deploy-prod seed-dev reset-dev apply-schema
+.PHONY: mode-learning mode-feature-dev mode-status deploy-dev deploy-prod seed-dev reset-dev migrate
 
 mode-learning:
 	@echo learning > $(MODE_FILE)
@@ -53,17 +53,21 @@ deploy-dev:
 seed-dev:
 	@set -a && . ./.env && set +a && KEYCLOAK_URL=http://localhost:8080 npm run seed:admin --workspace=apps/api
 
-# Applies db/schema.sql — this file is a hand-maintained reference, not a
-# real migration (see its own header: synchronize is false in
-# app.module.ts and there is no migrations directory yet), so nothing
-# creates these tables automatically. 'CREATE TABLE IF NOT EXISTS'
-# throughout that file makes this safe to run against an already-schema'd
-# database, so it runs on every reset-dev, not just a first-ever one.
+# Runs apps/api's TypeORM migrations (src/migrations/, via data-source.ts)
+# against the dev database — real, versioned migrations now, not a
+# hand-maintained SQL file (see db/schema.sql's header for why that file
+# is reference documentation only these days). The baseline migration is
+# written the same 'IF NOT EXISTS' idempotent way schema.sql always was,
+# so this is safe to run against an already-migrated database too, which
+# is why it runs on every reset-dev, not just a first-ever one.
 # Waits on Postgres directly (pg_isready) rather than 'docker compose up
 # --wait', since 'db' has no healthcheck of its own to wait on — its
 # depends_on only waits for vault-agent to render the password file, not
 # for Postgres itself to finish starting up and accept connections.
-apply-schema:
+# DB_HOST is overridden to localhost: migration:run runs on the host via
+# ts-node, never inside a container, same reasoning as seed-dev's own
+# KEYCLOAK_URL override above.
+migrate:
 	@set -a && . ./.env && set +a && n=0; until docker compose exec -T db pg_isready -U "$$DB_USER" >/dev/null 2>&1; do \
 		n=$$((n+1)); \
 		if [ $$n -ge 30 ]; then \
@@ -72,7 +76,7 @@ apply-schema:
 		fi; \
 		sleep 2; \
 	done
-	@set -a && . ./.env && set +a && docker compose exec -T db psql -U "$$DB_USER" -d "$$DB_NAME" -f /dev/stdin < db/schema.sql
+	@set -a && . ./.env && set +a && DB_HOST=localhost npm run migration:run --workspace=apps/api
 
 # Full reset for local dev: tears down whatever's currently running, brings
 # the stack back up from scratch, then seeds the bootstrap login. Separate
@@ -111,7 +115,7 @@ apply-schema:
 reset-dev:
 	docker compose down
 	$(MAKE) deploy-dev
-	$(MAKE) apply-schema
+	$(MAKE) migrate
 	@echo "Waiting for Keycloak to be ready..."
 	@n=0; until curl -sf http://localhost:8080/realms/boardgame/.well-known/openid-configuration >/dev/null 2>&1; do \
 		n=$$((n+1)); \
