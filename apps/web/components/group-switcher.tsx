@@ -5,6 +5,15 @@ import { usePathname, useRouter } from 'next/navigation';
 import { apiFetch } from '@/lib/api';
 import { parseSpacePath, spaceHref } from '@/lib/space';
 import type { Group } from '@/lib/types';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 export function GroupSwitcher() {
   const pathname = usePathname();
@@ -14,6 +23,7 @@ export function GroupSwitcher() {
   const [groups, setGroups] = useState<Group[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [newGroupName, setNewGroupName] = useState('');
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -27,8 +37,8 @@ export function GroupSwitcher() {
       })
       .catch(() => {
         // Keep whatever list was already loaded (possibly empty on first
-        // load) rather than clearing it — see the design spec's error
-        // handling: group-switcher failures shouldn't block navigation.
+        // load) rather than clearing it — group-switcher failures
+        // shouldn't block navigation.
         if (!cancelled) setError('Could not load groups');
       });
     return () => {
@@ -53,6 +63,7 @@ export function GroupSwitcher() {
       const created: Group = await response.json();
       setGroups((prev) => [...prev, created]);
       setNewGroupName('');
+      setCreating(false);
       setError(null);
       router.push(spaceHref(created.id, tab));
     } catch {
@@ -63,34 +74,51 @@ export function GroupSwitcher() {
     }
   }
 
+  const activeGroup = groups.find((g) => g.id === activeGroupId);
+  const activeLabel = activeGroup ? (activeGroup.isSolo ? 'Just Me' : activeGroup.name) : 'Personal (all groups)';
+
   return (
-    <div>
-      <select
-        aria-label="Select group"
-        className="rounded border border-gray-300 px-2 py-1 text-sm"
-        value={activeGroupId ?? ''}
-        onChange={(event) => router.push(spaceHref(event.target.value || null, tab))}
-      >
-        <option value="">Personal (all groups)</option>
+    <DropdownMenu onOpenChange={(open) => !open && setCreating(false)}>
+      <DropdownMenuTrigger asChild>
+        <Button variant="secondary" aria-label="Select group">
+          {activeLabel}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        <DropdownMenuItem onSelect={() => router.push(spaceHref(null, tab))}>
+          Personal (all groups)
+        </DropdownMenuItem>
         {groups.map((group) => (
-          <option key={group.id} value={group.id}>
+          <DropdownMenuItem key={group.id} onSelect={() => router.push(spaceHref(group.id, tab))}>
             {group.isSolo ? 'Just Me' : group.name}
-          </option>
+          </DropdownMenuItem>
         ))}
-      </select>
-      {error && <p className="text-xs text-red-600">{error}</p>}
-      <form onSubmit={handleCreateGroup} className="mt-1 flex gap-1">
-        <input
-          type="text"
-          value={newGroupName}
-          onChange={(event) => setNewGroupName(event.target.value)}
-          placeholder="New group name"
-          className="w-32 rounded border border-gray-300 px-1 text-xs"
-        />
-        <button type="submit" className="text-xs text-blue-600">
-          + Add
-        </button>
-      </form>
-    </div>
+        <DropdownMenuSeparator />
+        {creating ? (
+          <form onSubmit={handleCreateGroup} className="flex gap-1 p-1" onClick={(event) => event.stopPropagation()}>
+            <Input
+              autoFocus
+              value={newGroupName}
+              onChange={(event) => setNewGroupName(event.target.value)}
+              placeholder="New group name"
+              className="w-32 text-xs"
+            />
+            <Button type="submit" variant="ghost" className="px-2 text-xs">
+              Add
+            </Button>
+          </form>
+        ) : (
+          <DropdownMenuItem
+            onSelect={(event) => {
+              event.preventDefault();
+              setCreating(true);
+            }}
+          >
+            + New group
+          </DropdownMenuItem>
+        )}
+        {error && <p className="px-2 py-1 text-xs text-accent">{error}</p>}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
