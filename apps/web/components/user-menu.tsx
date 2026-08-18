@@ -22,7 +22,13 @@ function initialsFor(name: string): string {
 export function UserMenu({ name }: { name: string }) {
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger aria-label={`Account menu for ${name}`}>
+      {/* The visible avatar stays 36px, but the tappable trigger is padded
+          out to the 44px minimum touch target — on mobile this is the only
+          route to "Log out". */}
+      <DropdownMenuTrigger
+        aria-label={`Account menu for ${name}`}
+        className="flex min-h-11 min-w-11 items-center justify-center"
+      >
         <Avatar>
           <AvatarFallback>{initialsFor(name)}</AvatarFallback>
         </Avatar>
@@ -32,13 +38,14 @@ export function UserMenu({ name }: { name: string }) {
         <DropdownMenuSeparator />
         <DropdownMenuItem disabled>Settings</DropdownMenuItem>
         <DropdownMenuSeparator />
-        <form action={logOut}>
-          <DropdownMenuItem asChild>
-            <button type="submit" className="w-full text-left">
-              Log out
-            </button>
-          </DropdownMenuItem>
-        </form>
+        {/* No <form> here on purpose. Radix's MenuItem closes (and unmounts)
+            the portal synchronously on click, which races a native form
+            submit — the form can be gone before the submit event lands, so
+            the action never runs. Calling the server action directly from
+            onSelect is a plain async function call: it is already in flight
+            before the menu unmounts, and nothing about it depends on the DOM
+            still being there. */}
+        <DropdownMenuItem onSelect={() => void logOut()}>Log out</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

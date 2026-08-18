@@ -69,8 +69,8 @@ export function CalendarMonthGrid({ proposals, onSelectProposal }: CalendarMonth
           return (
             <div
               key={key}
-              className={`min-h-20 rounded border p-1 text-xs ${
-                inMonth ? 'bg-white' : 'bg-gray-100 text-gray-400'
+              className={`min-h-20 rounded border border-border p-1 text-xs ${
+                inMonth ? 'bg-surface-raised' : 'bg-surface text-text-muted'
               }`}
             >
               <div className="font-medium">{date.getDate()}</div>
@@ -79,12 +79,12 @@ export function CalendarMonthGrid({ proposals, onSelectProposal }: CalendarMonth
                   key={item.id}
                   type="button"
                   onClick={() => onSelectProposal(item)}
-                  className="mt-1 block w-full truncate rounded bg-blue-100 px-1 text-left text-blue-800"
+                  className="mt-1 block w-full truncate rounded bg-highlight px-1 text-left text-text"
                 >
                   {badgeLabel(item)}
                 </button>
               ))}
-              {overflow > 0 && <div className="mt-1 text-gray-500">+{overflow} more</div>}
+              {overflow > 0 && <div className="mt-1 text-text-muted">+{overflow} more</div>}
             </div>
           );
         })}

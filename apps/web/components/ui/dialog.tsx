@@ -23,13 +23,17 @@ DialogOverlay.displayName = 'DialogOverlay';
 export const DialogSheetContent = forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, ...props }, ref) => (
+>(({ className, children, style, ...props }, ref) => (
   <DialogPrimitive.Portal>
     <DialogOverlay />
     <DialogPrimitive.Content
       ref={ref}
       className={cn('fixed inset-y-0 right-0 z-50 w-80 overflow-y-auto bg-surface-raised p-4', className)}
-      style={{ borderLeft: 'var(--border-w) solid var(--border)', boxShadow: 'var(--shadow-card)' }}
+      style={{
+        borderLeft: 'var(--border-w) solid var(--border)',
+        boxShadow: 'var(--shadow-card)',
+        ...style,
+      }}
       {...props}
     >
       {children}
