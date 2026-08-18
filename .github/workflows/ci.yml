@@ -1,5 +1,16 @@
 name: CI
 
+# GITHUB_TOKEN's default permissions are set by the repo/org's "Workflow
+# permissions" setting, not by this file — under a restrictive default that
+# can be read-only on 'contents' alone (or even less), which starves steps
+# like dorny/paths-filter (needs 'contents: read' to diff against the base
+# ref) and anything that inspects the PR itself (needs 'pull-requests: read').
+# Declaring the minimum explicitly here means this workflow behaves the same
+# regardless of that org-level setting.
+permissions:
+  contents: read
+  pull-requests: read
+
 # Push to main is what actually deploys (see the 'deploy' job's 'if:' below).
 # The pull_request trigger is what actually blocks bad code from merging —
 # it runs the same gates against the PR's branch *before* it can reach main,
