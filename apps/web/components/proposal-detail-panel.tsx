@@ -2,6 +2,8 @@
 
 import { useProposalDetail } from '@/hooks/use-proposal-detail';
 import { useGroupMembers } from '@/hooks/use-group-members';
+import { Dialog, DialogSheetContent, DialogClose, DialogTitle } from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
 
 interface ProposalDetailPanelProps {
   proposalId: string | null;
@@ -12,63 +14,65 @@ export function ProposalDetailPanel({ proposalId, onClose }: ProposalDetailPanel
   const { detail, loading, notFound, error, retry } = useProposalDetail(proposalId);
   const members = useGroupMembers(detail?.proposal.groupId ?? null);
 
-  if (!proposalId) return null;
-
   function nameFor(userId: string): string {
     return members.find((m) => m.id === userId)?.displayName ?? userId;
   }
 
   return (
-    <div className="fixed inset-y-0 right-0 w-80 overflow-y-auto border-l border-gray-200 bg-white p-4 shadow-lg">
-      <button type="button" onClick={onClose} className="mb-2 text-sm text-gray-500">
-        Close ✕
-      </button>
+    <Dialog open={proposalId !== null} onOpenChange={(open) => !open && onClose()}>
+      <DialogSheetContent aria-describedby={undefined}>
+        <DialogTitle className="sr-only">Proposal details</DialogTitle>
+        <DialogClose className="mb-2 text-sm text-text-muted">Close ✕</DialogClose>
 
-      {loading && <p>Loading…</p>}
-      {notFound && <p>This item is no longer available.</p>}
-      {error && (
-        <p className="text-red-600">
-          {error}{' '}
-          <button type="button" onClick={retry} className="underline">
-            Retry
-          </button>
-        </p>
-      )}
+        {loading && <p>Loading…</p>}
+        {notFound && <p>This item is no longer available.</p>}
+        {error && (
+          <p className="text-accent">
+            {error}{' '}
+            <button type="button" onClick={retry} className="underline">
+              Retry
+            </button>
+          </p>
+        )}
 
-      {detail && (
-        <div className="space-y-3 text-sm">
-          <div>
-            <div className="font-semibold">{detail.proposal.proposedDate}</div>
-            <div className="text-gray-600">Status: {detail.proposal.status}</div>
-            <div className="text-gray-600">Proposed by: {nameFor(detail.proposal.createdBy)}</div>
-            {detail.proposal.hostId && (
-              <div className="text-gray-600">Host: {nameFor(detail.proposal.hostId)}</div>
-            )}
+        {detail && (
+          <div className="space-y-3 font-body text-sm">
+            <div>
+              <div className="font-display text-base">{detail.proposal.proposedDate}</div>
+              <div className="text-text-muted">Status: {detail.proposal.status}</div>
+              <div className="text-text-muted">Proposed by: {nameFor(detail.proposal.createdBy)}</div>
+              {detail.proposal.hostId && (
+                <div className="text-text-muted">Host: {nameFor(detail.proposal.hostId)}</div>
+              )}
+            </div>
+
+            <div>
+              <div className="font-medium">RSVPs</div>
+              <ul>
+                {detail.rsvps.map((rsvp) => (
+                  <li key={rsvp.userId}>
+                    {nameFor(rsvp.userId)} — {rsvp.status}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div>
+              <div className="font-medium">Suggested games</div>
+              <ul className="flex flex-col gap-1">
+                {detail.games.map(({ game, voteCount }) => (
+                  <li key={game.id} className="flex items-center gap-2">
+                    {game.name}
+                    <Badge>
+                      {voteCount} vote{voteCount === 1 ? '' : 's'}
+                    </Badge>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
-
-          <div>
-            <div className="font-medium">RSVPs</div>
-            <ul>
-              {detail.rsvps.map((rsvp) => (
-                <li key={rsvp.userId}>
-                  {nameFor(rsvp.userId)} — {rsvp.status}
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div>
-            <div className="font-medium">Suggested games</div>
-            <ul>
-              {detail.games.map(({ game, voteCount }) => (
-                <li key={game.id}>
-                  {game.name} ({voteCount} vote{voteCount === 1 ? '' : 's'})
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      )}
-    </div>
+        )}
+      </DialogSheetContent>
+    </Dialog>
   );
 }
