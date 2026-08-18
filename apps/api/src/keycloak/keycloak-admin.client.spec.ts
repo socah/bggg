@@ -26,36 +26,100 @@ describe('KeycloakAdminClient', () => {
   afterEach(() => jest.clearAllMocks());
 
   describe('createUser', () => {
-    it('should set both firstName and lastName, so the account never hits Keycloak\'s default "Update Account Information" prompt for a missing profile field', async () => {
+    const mockCreated = (locationId = 'new-user-id') =>
       mockHttpService.post
         .mockReturnValueOnce(of({ data: { access_token: 'service-token', expires_in: 60 } }))
         .mockReturnValueOnce(
           of({
             status: 201,
-            headers: { location: 'http://keycloak:8080/admin/realms/boardgame/users/new-user-id' },
+            headers: {
+              location: `http://keycloak:8080/admin/realms/boardgame/users/${locationId}`,
+            },
           }),
         );
 
+    it('should derive the username from the email local part when no username is given', async () => {
+      mockCreated();
+
       const userId = await client.createUser({
         email: 'alice@example.com',
-        displayName: 'Alice',
         password: 'hunter2',
       });
 
       expect(userId).toBe('new-user-id');
-      // Keycloak 26's default User Profile schema requires both firstName
-      // and lastName — omitting lastName leaves the account looking
-      // incomplete to Keycloak, which forces an "Update Account
-      // Information" prompt on first login even though this app has no
-      // first/last-name concept of its own (getUser() only ever reads
-      // firstName). Reusing displayName for both is the simplest way to
-      // satisfy that schema without inventing a UX this app doesn't need.
       expect(mockHttpService.post).toHaveBeenNthCalledWith(
         2,
         expect.any(String),
-        expect.objectContaining({ firstName: 'Alice', lastName: 'Alice' }),
+        expect.objectContaining({ username: 'alice', email: 'alice@example.com' }),
         expect.any(Object),
       );
+    });
+
+    it('should use an explicit username as-is, even when an email is also given', async () => {
+      mockCreated();
+
+      await client.createUser({
+        email: 'alice@example.com',
+        username: 'alice-the-great',
+        password: 'hunter2',
+      });
+
+      expect(mockHttpService.post).toHaveBeenNthCalledWith(
+        2,
+        expect.any(String),
+        expect.objectContaining({ username: 'alice-the-great', email: 'alice@example.com' }),
+        expect.any(Object),
+      );
+    });
+
+    it('should register with a username alone, sending no email at all', async () => {
+      mockCreated();
+
+      await client.createUser({ username: 'alice', password: 'hunter2' });
+
+      const [, body] = mockHttpService.post.mock.calls[1];
+      expect(body).toEqual(
+        expect.objectContaining({ username: 'alice', enabled: true }),
+      );
+      expect(body).not.toHaveProperty('email');
+    });
+
+    it('should omit firstName and lastName when neither is given — names are optional', async () => {
+      mockCreated();
+
+      await client.createUser({ email: 'alice@example.com', password: 'hunter2' });
+
+      const [, body] = mockHttpService.post.mock.calls[1];
+      expect(body).not.toHaveProperty('firstName');
+      expect(body).not.toHaveProperty('lastName');
+    });
+
+    it('should include firstName and lastName when they are given', async () => {
+      mockCreated();
+
+      await client.createUser({
+        email: 'alice@example.com',
+        firstName: 'Alice',
+        lastName: 'Anderson',
+        password: 'hunter2',
+      });
+
+      expect(mockHttpService.post).toHaveBeenNthCalledWith(
+        2,
+        expect.any(String),
+        expect.objectContaining({ firstName: 'Alice', lastName: 'Anderson' }),
+        expect.any(Object),
+      );
+    });
+
+    it('should throw a 409 mentioning both username and email when either is already taken', async () => {
+      mockHttpService.post
+        .mockReturnValueOnce(of({ data: { access_token: 'service-token', expires_in: 60 } }))
+        .mockReturnValueOnce(of({ status: 409, headers: {} }));
+
+      await expect(
+        client.createUser({ email: 'alice@example.com', password: 'hunter2' }),
+      ).rejects.toMatchObject({ message: 'An account with this username or email already exists' });
     });
   });
 

@@ -41,7 +41,6 @@ async function main() {
     try {
       const userId = await keycloakAdmin.createUser({
         email,
-        displayName: 'Admin',
         password,
       });
 

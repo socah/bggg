@@ -13,7 +13,7 @@ export default function PersonalCalendarPage() {
     <div>
       {loading && <p>Loading your schedule…</p>}
       {error && (
-        <p className="text-red-600">
+        <p className="text-accent">
           {error}{' '}
           <button type="button" onClick={retry} className="underline">
             Retry

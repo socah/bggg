@@ -13,7 +13,7 @@ export function GroupCalendarView({ groupId }: { groupId: string }) {
     <div>
       {loading && <p>Loading this group&apos;s schedule…</p>}
       {error && (
-        <p className="text-red-600">
+        <p className="text-accent">
           {error}{' '}
           <button type="button" onClick={retry} className="underline">
             Retry

@@ -1,6 +1,11 @@
 import { createHash } from 'crypto';
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, GoneException, ForbiddenException } from '@nestjs/common';
+import {
+  NotFoundException,
+  GoneException,
+  ForbiddenException,
+  BadRequestException,
+} from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { InvitesService } from './invites.service';
 import { Invite } from './invite.entity';
@@ -205,7 +210,7 @@ describe('InvitesService', () => {
 
   describe('registerAndAcceptInvite', () => {
     const rawToken = 'register-token';
-    const dto = { email: 'new@example.com', displayName: 'New Person', password: 'hunter2222' };
+    const dto = { email: 'new@example.com', password: 'hunter2222' };
     const validInvite = {
       tokenHash: hash(rawToken),
       groupId: GROUP_ID,
@@ -224,7 +229,9 @@ describe('InvitesService', () => {
 
       expect(mockKeycloakAdmin.createUser).toHaveBeenCalledWith({
         email: dto.email,
-        displayName: dto.displayName,
+        username: undefined,
+        firstName: undefined,
+        lastName: undefined,
         password: dto.password,
       });
       expect(mockMembers.create).toHaveBeenCalledWith({
@@ -274,6 +281,35 @@ describe('InvitesService', () => {
 
       await expect(service.registerAndAcceptInvite(rawToken, dto)).rejects.toThrow(GoneException);
       expect(mockKeycloakAdmin.createUser).not.toHaveBeenCalled();
+    });
+
+    it('should reject registration with neither a username nor an email', async () => {
+      mockInvites.findOneBy.mockResolvedValue(validInvite);
+
+      await expect(
+        service.registerAndAcceptInvite(rawToken, { password: 'hunter2222' }),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockKeycloakAdmin.createUser).not.toHaveBeenCalled();
+    });
+
+    it('should accept registration with a username alone, no email', async () => {
+      mockInvites.findOneBy.mockResolvedValue(validInvite);
+      mockKeycloakAdmin.createUser.mockResolvedValue('new-keycloak-sub');
+      mockInvites.update.mockResolvedValue({ affected: 1 });
+      mockMembers.create.mockImplementation((entity) => entity);
+
+      await service.registerAndAcceptInvite(rawToken, {
+        username: 'newperson',
+        password: 'hunter2222',
+      });
+
+      expect(mockKeycloakAdmin.createUser).toHaveBeenCalledWith({
+        email: undefined,
+        username: 'newperson',
+        firstName: undefined,
+        lastName: undefined,
+        password: 'hunter2222',
+      });
     });
   });
 });
