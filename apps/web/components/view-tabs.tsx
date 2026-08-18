@@ -1,7 +1,7 @@
 'use client';
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { parseSpacePath, spaceHref, type ViewTab } from '@/lib/space';
 
 const TABS: Array<{ tab: ViewTab; label: string }> = [
@@ -12,19 +12,18 @@ const TABS: Array<{ tab: ViewTab; label: string }> = [
 
 export function ViewTabs() {
   const pathname = usePathname();
+  const router = useRouter();
   const { groupId, tab: activeTab } = parseSpacePath(pathname);
 
   return (
-    <nav className="flex gap-3 text-sm font-medium">
-      {TABS.map(({ tab, label }) => (
-        <Link
-          key={tab}
-          href={spaceHref(groupId, tab)}
-          className={tab === activeTab ? 'text-blue-600 underline' : 'text-gray-600'}
-        >
-          {label}
-        </Link>
-      ))}
-    </nav>
+    <Tabs value={activeTab} onValueChange={(next) => router.push(spaceHref(groupId, next as ViewTab))}>
+      <TabsList aria-label="Sections">
+        {TABS.map(({ tab, label }) => (
+          <TabsTrigger key={tab} value={tab}>
+            {label}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+    </Tabs>
   );
 }
