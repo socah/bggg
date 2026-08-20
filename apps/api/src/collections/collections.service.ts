@@ -57,4 +57,42 @@ export class CollectionsService {
 
     return this.games.findByIds(rows.map((row) => row.gameId));
   }
+
+  async importCollection(userId: string): Promise<ImportSummary> {
+    const account = await this.accounts.findOneBy({ userId });
+    if (!account) {
+      throw new BadRequestException('No BGG account linked');
+    }
+
+    const collection = await this.bgg.getCollection(account.bggUsername);
+    const bggIds = collection.map((item) => item.bggId);
+
+    // Hydrates/refreshes the shared catalogue so every currently-owned game
+    // has a Game row to point at before ownership rows are touched.
+    const hydratedGames = await this.games.findOrFetchMany(bggIds);
+    const gameIdByBggId = new Map(hydratedGames.map((g) => [g.bggId, g.id]));
+    const currentGameIds = new Set(
+      bggIds
+        .map((id) => gameIdByBggId.get(id))
+        .filter((id): id is number => id !== undefined),
+    );
+
+    const existingOwnership = await this.ownership.findBy({ userId });
+    const existingGameIds = new Set(existingOwnership.map((row) => row.gameId));
+
+    const toAdd = [...currentGameIds].filter((gameId) => !existingGameIds.has(gameId));
+    const toRemove = existingOwnership.filter((row) => !currentGameIds.has(row.gameId));
+
+    if (toAdd.length > 0) {
+      await this.ownership.save(
+        toAdd.map((gameId) => this.ownership.create({ userId, gameId })),
+      );
+    }
+
+    if (toRemove.length > 0) {
+      await this.ownership.delete({ id: In(toRemove.map((row) => row.id)) });
+    }
+
+    return { added: toAdd.length, removed: toRemove.length, total: currentGameIds.size };
+  }
 }

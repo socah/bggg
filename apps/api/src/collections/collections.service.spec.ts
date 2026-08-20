@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { In } from 'typeorm';
 import { BggService } from '../bgg/bgg.service';
 import { GamesService } from '../games/games.service';
 import { Game } from '../games/game.entity';
@@ -166,6 +167,95 @@ describe('CollectionsService', () => {
 
       expect(mockGamesService.findByIds).toHaveBeenCalledWith([1, 2]);
       expect(result).toEqual(games);
+    });
+  });
+
+  describe('importCollection', () => {
+    it('should throw a 400 when this user has no linked account', async () => {
+      mockAccountsRepo.findOneBy.mockResolvedValue(null);
+
+      await expect(service.importCollection('user-1')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should add ownership rows for newly-owned games and report the summary', async () => {
+      mockAccountsRepo.findOneBy.mockResolvedValue({
+        id: 1, userId: 'user-1', bggUsername: 'aldie', linkedAt: new Date(), createdAt: new Date(),
+      });
+      mockBggService.getCollection.mockResolvedValue([
+        { bggId: 174430, name: 'Gloomhaven' },
+        { bggId: 13, name: 'Catan' },
+      ]);
+      mockGamesService.findOrFetchMany.mockResolvedValue([
+        makeGame({ id: 1, bggId: 174430 }),
+        makeGame({ id: 2, bggId: 13, name: 'Catan' }),
+      ]);
+      mockOwnershipRepo.findBy.mockResolvedValue([]); // no prior ownership
+      mockOwnershipRepo.create.mockImplementation((data) => data);
+      mockOwnershipRepo.save.mockResolvedValue(undefined);
+
+      const result = await service.importCollection('user-1');
+
+      expect(mockGamesService.findOrFetchMany).toHaveBeenCalledWith([174430, 13]);
+      expect(mockOwnershipRepo.save).toHaveBeenCalledWith([
+        expect.objectContaining({ userId: 'user-1', gameId: 1 }),
+        expect.objectContaining({ userId: 'user-1', gameId: 2 }),
+      ]);
+      expect(mockOwnershipRepo.delete).not.toHaveBeenCalled();
+      expect(result).toEqual({ added: 2, removed: 0, total: 2 });
+    });
+
+    it('should remove ownership rows for games no longer in the BGG collection', async () => {
+      mockAccountsRepo.findOneBy.mockResolvedValue({
+        id: 1, userId: 'user-1', bggUsername: 'aldie', linkedAt: new Date(), createdAt: new Date(),
+      });
+      // BGG collection now only has Gloomhaven (game id 1).
+      mockBggService.getCollection.mockResolvedValue([{ bggId: 174430, name: 'Gloomhaven' }]);
+      mockGamesService.findOrFetchMany.mockResolvedValue([makeGame({ id: 1, bggId: 174430 })]);
+      // Previously owned games 1 (Gloomhaven) AND 2 (Catan, id 5 ownership row).
+      mockOwnershipRepo.findBy.mockResolvedValue([
+        makeOwnership({ id: 10, gameId: 1 }),
+        makeOwnership({ id: 11, gameId: 2 }),
+      ]);
+
+      const result = await service.importCollection('user-1');
+
+      expect(mockOwnershipRepo.save).not.toHaveBeenCalled(); // nothing new to add
+      expect(mockOwnershipRepo.delete).toHaveBeenCalledWith({ id: In([11]) });
+      expect(result).toEqual({ added: 0, removed: 1, total: 1 });
+    });
+
+    it('should both add and remove in the same import when the collection changed both ways', async () => {
+      mockAccountsRepo.findOneBy.mockResolvedValue({
+        id: 1, userId: 'user-1', bggUsername: 'aldie', linkedAt: new Date(), createdAt: new Date(),
+      });
+      // Now owns Catan (game id 2) only; previously owned Gloomhaven (game id 1).
+      mockBggService.getCollection.mockResolvedValue([{ bggId: 13, name: 'Catan' }]);
+      mockGamesService.findOrFetchMany.mockResolvedValue([makeGame({ id: 2, bggId: 13, name: 'Catan' })]);
+      mockOwnershipRepo.findBy.mockResolvedValue([makeOwnership({ id: 10, gameId: 1 })]);
+      mockOwnershipRepo.create.mockImplementation((data) => data);
+      mockOwnershipRepo.save.mockResolvedValue(undefined);
+
+      const result = await service.importCollection('user-1');
+
+      expect(mockOwnershipRepo.save).toHaveBeenCalledWith([
+        expect.objectContaining({ userId: 'user-1', gameId: 2 }),
+      ]);
+      expect(mockOwnershipRepo.delete).toHaveBeenCalledWith({ id: In([10]) });
+      expect(result).toEqual({ added: 1, removed: 1, total: 1 });
+    });
+
+    it('should report a valid empty sync for a collection with zero owned games', async () => {
+      mockAccountsRepo.findOneBy.mockResolvedValue({
+        id: 1, userId: 'user-1', bggUsername: 'aldie', linkedAt: new Date(), createdAt: new Date(),
+      });
+      mockBggService.getCollection.mockResolvedValue([]);
+      mockGamesService.findOrFetchMany.mockResolvedValue([]);
+      mockOwnershipRepo.findBy.mockResolvedValue([makeOwnership({ id: 10, gameId: 1 })]);
+
+      const result = await service.importCollection('user-1');
+
+      expect(mockOwnershipRepo.delete).toHaveBeenCalledWith({ id: In([10]) });
+      expect(result).toEqual({ added: 0, removed: 1, total: 0 });
     });
   });
 });
