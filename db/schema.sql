@@ -110,18 +110,40 @@ CREATE TABLE IF NOT EXISTS games (
   last_synced_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
--- ── GAME OWNERSHIP ────────────────────────────────────────────────────────
--- Tracks which users personally own which games.
--- A group's game library is the union of its members' game_ownership rows —
--- there is no separate group_games table. This matches how BGG sync works:
--- the user syncs their personal BGG collection, creating ownership rows for
--- each game they own. The group sees games owned by its members.
-CREATE TABLE IF NOT EXISTS game_ownership (
-  user_id   INT  NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  game_id   INT  NOT NULL REFERENCES games(id) ON DELETE CASCADE,
-  added_at  DATE NOT NULL DEFAULT CURRENT_DATE,
+-- ── BGG ACCOUNTS ──────────────────────────────────────────────────────────
+-- Backs the 'users.bgg_username' field sketched above — that field was
+-- never actually built (this file's 'users' table never became a real
+-- TypeORM entity, same as every other table here that originally assumed
+-- one). user_id: raw Keycloak sub as TEXT, not an int FK to users(id),
+-- matching group_members and everything else in this file.
+-- Added for real by the BGG account linking & collection import feature
+-- (docs/superpowers/specs/2026-08-20-bgg-account-linking-design.md).
+CREATE TABLE IF NOT EXISTS bgg_accounts (
+  id            SERIAL       PRIMARY KEY,
+  user_id       TEXT         NOT NULL UNIQUE,
+  bgg_username  TEXT         NOT NULL,
+  linked_at     TIMESTAMPTZ  NOT NULL,
+  created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
 
-  PRIMARY KEY (user_id, game_id)
+-- ── GAME OWNERSHIP ────────────────────────────────────────────────────────
+-- Tracks which users personally own which games. A group's game library is
+-- the union of its members' game_ownership rows — there is no separate
+-- group_games table. Rows here come from a BGG collection import (see
+-- bgg_accounts above) and are kept in sync on re-import: added when a game
+-- newly appears in the user's BGG collection, removed when it no longer
+-- does. Unlinking a bgg_accounts row does NOT delete these — they represent
+-- real-world ownership, not BGG-link state.
+-- user_id: TEXT, not an INT FK to users(id) as this table originally
+-- sketched here — same drift-and-fix already applied to group_members
+-- above; this schema's 'users' table was never built as a real entity.
+CREATE TABLE IF NOT EXISTS game_ownership (
+  id        SERIAL PRIMARY KEY,
+  user_id   TEXT   NOT NULL,
+  game_id   INT    NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  added_at  DATE   NOT NULL DEFAULT CURRENT_DATE,
+
+  UNIQUE (user_id, game_id)
 );
 
 -- ── REVIEWS ───────────────────────────────────────────────────────────────
