@@ -277,6 +277,23 @@ describe('BggService', () => {
       expect(result).toEqual([]);
     });
 
+    it('should throw rather than report an empty collection when BGG returns an error body', async () => {
+      // BGG answers a renamed/deleted username with HTTP 200 and an <errors>
+      // body. Returning [] here would look identical to "owns nothing" and
+      // make importCollection delete every ownership row the user has.
+      mockHttpService.get.mockReturnValue(
+        of({
+          status: 200,
+          data: '<errors><error><message>Invalid username specified</message></error></errors>',
+        }),
+      );
+
+      await expect(service.getCollection('renameduser')).rejects.toThrow(HttpException);
+      await expect(service.getCollection('renameduser')).rejects.toThrow(
+        /Invalid username specified/,
+      );
+    });
+
     it('should retry on 202 and resolve once BGG returns 200', async () => {
       mockHttpService.get
         .mockReturnValueOnce(of({ status: 202, data: '' }))

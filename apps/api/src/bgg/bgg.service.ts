@@ -91,6 +91,18 @@ export class BggService {
     const xml = await this.fetchWithPolling(url);
     const result = this.parser.parse(xml);
 
+    // BGG answers a renamed/deleted username with HTTP 200 and an
+    // <errors><error><message>...</message></error></errors> body rather than
+    // a 404. Without this check that body parses to no <items> at all, which
+    // normalizeItems would flatten to [] — indistinguishable from a genuinely
+    // empty collection (<items totalitems="0"/>), and importCollection would
+    // read it as "owns nothing now" and delete every ownership row the user
+    // has. The two XML shapes are different, so tell them apart here.
+    if (result.errors || !result.items) {
+      const message = result.errors?.error?.message ?? 'unknown error';
+      throw new HttpException(`BGG collection request failed: ${message}`, 502);
+    }
+
     return this.normalizeItems(result).map((item) => ({
       bggId: Number(item['@_objectid']),
       name: this.textOf(item.name),
@@ -145,7 +157,10 @@ export class BggService {
   private mapItemToGame(item: any): BggGame {
     // <name> is always an array (enforced by isArray above).
     // The primary display name has type="primary"; alternates have type="alternate".
-    const primaryName = item.name.find(
+    // `?? []` guards against a malformed BGG item with no <name> at all —
+    // one bad entry in a batch would otherwise TypeError and abort the whole
+    // request; it now just falls through to the 'Unknown' default below.
+    const primaryName = (item.name ?? []).find(
       (n: Record<string, string>) => n['@_type'] === 'primary',
     );
 

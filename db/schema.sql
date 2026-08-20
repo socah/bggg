@@ -92,22 +92,45 @@ CREATE TABLE IF NOT EXISTS group_members (
 -- ── GAMES ─────────────────────────────────────────────────────────────────
 -- Shared game catalogue, keyed by BGG ID. One record per game regardless of
 -- how many users own it — ownership is tracked separately in game_ownership.
--- last_synced_at: when this record was last refreshed from BGG. The background
--- sync job uses this to decide whether to re-fetch stale data.
+-- last_fetched_at: when this record was last refreshed from BGG.
+--   GamesService.findOrFetch/findOrFetchMany compare it against a 7-day TTL
+--   to decide whether to re-fetch. Set manually on every BGG fetch, never
+--   by an @UpdateDateColumn — see the comment in game.entity.ts for why.
+--
+-- This table had drifted badly out of sync with games/game.entity.ts — same
+-- class of drift already corrected for groups and game_ownership in this
+-- file. The columns sketched here (year, image_url, min_playtime,
+-- max_playtime, bgg_rating, bgg_weight, last_synced_at) never existed on the
+-- entity, and the entity's thumbnail, image, playing_time, year_published,
+-- rating, last_fetched_at and created_at were all missing here. Nothing had
+-- queried `games` over HTTP before, so it was latent; the BGG collection
+-- import (POST /bgg-account/import, GET /bgg-account/games) is the first
+-- real consumer and would 500 on every call. Fixed to match the entity
+-- exactly. The live dev table held 0 rows, so the correction was applied
+-- there with ALTER TABLE — no data migration was involved.
+--
+-- The old CHECK (min_players > 0) / CHECK (max_players >= min_players)
+-- constraints are deliberately NOT carried over: the entity defaults both
+-- columns to 0 (BGG omits <minplayers>/<maxplayers> on some entries, and
+-- mapItemToGame maps a missing value to 0), which the first check rejects
+-- outright and which the second would only survive with an awkward
+-- "both zero OR max >= min" rewrite. A bad player-count on one game is not
+-- worth 500-ing a whole collection import over, so both are dropped and the
+-- values are taken as BGG reports them.
 CREATE TABLE IF NOT EXISTS games (
-  id             SERIAL       PRIMARY KEY,
-  bgg_id         INT          NOT NULL UNIQUE,
-  name           TEXT         NOT NULL,
-  year           INT,
-  image_url      TEXT,
-  min_players    INT          CHECK (min_players > 0),
-  max_players    INT          CHECK (max_players >= min_players),
-  min_playtime   INT,
-  max_playtime   INT,
-  bgg_rating     NUMERIC(4,2),                -- e.g. 7.84
-  bgg_weight     NUMERIC(3,2),                -- complexity 1.0–5.0
-  description    TEXT,
-  last_synced_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+  id              SERIAL       PRIMARY KEY,
+  bgg_id          INT          NOT NULL UNIQUE,
+  name            TEXT         NOT NULL,
+  description     TEXT,                         -- nullable: absent for some BGG entries
+  thumbnail       TEXT,                         -- nullable
+  image           TEXT,                         -- nullable
+  min_players     INT          NOT NULL DEFAULT 0,
+  max_players     INT          NOT NULL DEFAULT 0,
+  playing_time    INT          NOT NULL DEFAULT 0,
+  year_published  INT          NOT NULL DEFAULT 0,
+  rating          NUMERIC(4,2) NOT NULL DEFAULT 0,   -- e.g. 7.84
+  last_fetched_at TIMESTAMPTZ  NOT NULL,
+  created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
 -- ── BGG ACCOUNTS ──────────────────────────────────────────────────────────

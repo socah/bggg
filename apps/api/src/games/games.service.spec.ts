@@ -207,7 +207,7 @@ describe('GamesService', () => {
       mockGamesRepo.create.mockReturnValue(makeGame());
       mockGamesRepo.save.mockResolvedValue(makeGame());
 
-      await service.findOrFetchMany(ids);
+      const result = await service.findOrFetchMany(ids);
 
       expect(mockBggService.getGamesBatch).toHaveBeenCalledTimes(2);
       expect(mockBggService.getGamesBatch).toHaveBeenNthCalledWith(
@@ -218,6 +218,14 @@ describe('GamesService', () => {
         2,
         ids.slice(20),
       );
+      // Both batches came back empty, so every requested id is simply absent
+      // from the result — findOrFetchMany drops ids BGG omits rather than
+      // throwing. That is deliberate at this layer (a caller may legitimately
+      // want whatever BGG could give it), which is why the consumer that
+      // cannot tolerate it, CollectionsService.importCollection, has its own
+      // guard rejecting a short hydration before it syncs any ownership rows.
+      expect(result).toEqual([]);
+      expect(mockGamesRepo.save).not.toHaveBeenCalled();
     });
   });
 

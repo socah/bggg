@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, HttpException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { BggService } from '../bgg/bgg.service';
@@ -32,13 +32,16 @@ export class CollectionsService {
   // ownership (BGG has no such mechanism for third parties), only that the
   // username isn't a typo pointing nowhere.
   async linkAccount(userId: string, bggUsername: string): Promise<BggAccount> {
-    await this.bgg.getUser(bggUsername);
+    // Store BGG's canonical spelling, not the raw client input — BGG matches
+    // usernames case-insensitively, so 'ALDIE' and 'aldie' both resolve, and
+    // every later collection call reads this stored value back.
+    const { username } = await this.bgg.getUser(bggUsername);
 
     const existing = await this.accounts.findOneBy({ userId });
     const account = this.accounts.create({
       ...existing, // carries over `id` if a link already exists, so this is an UPDATE
       userId,
-      bggUsername,
+      bggUsername: username,
       linkedAt: new Date(),
     });
 
@@ -70,6 +73,20 @@ export class CollectionsService {
     // Hydrates/refreshes the shared catalogue so every currently-owned game
     // has a Game row to point at before ownership rows are touched.
     const hydratedGames = await this.games.findOrFetchMany(bggIds);
+
+    // BGG can silently omit ids it doesn't recognise from a multi-id `thing`
+    // response, and findOrFetchMany drops those rather than throwing. Syncing
+    // from that partial result would read the dropped games as "no longer
+    // owned" and delete their ownership rows, even though the collection
+    // endpoint just said the user still owns them. Refuse the whole sync —
+    // this runs before the diff, so nothing is added or removed either.
+    if (hydratedGames.length < new Set(bggIds).size) {
+      throw new HttpException(
+        'Failed to hydrate the full collection from BGG; refusing to sync ownership from a partial result',
+        502,
+      );
+    }
+
     const gameIdByBggId = new Map(hydratedGames.map((g) => [g.bggId, g.id]));
     const currentGameIds = new Set(
       bggIds
@@ -83,14 +100,26 @@ export class CollectionsService {
     const toAdd = [...currentGameIds].filter((gameId) => !existingGameIds.has(gameId));
     const toRemove = existingOwnership.filter((row) => !currentGameIds.has(row.gameId));
 
-    if (toAdd.length > 0) {
-      await this.ownership.save(
-        toAdd.map((gameId) => this.ownership.create({ userId, gameId })),
-      );
-    }
+    // One transaction, as the spec requires: the add and the remove are two
+    // halves of a single "make ownership match BGG" operation. Issued
+    // separately, a failure between them would leave the user owning the
+    // union or the intersection of the two states rather than either one.
+    // `.manager` is the repository's own EntityManager, so this reuses the
+    // existing connection rather than needing DataSource injected. Skipped
+    // entirely when there is nothing to write — a re-import of an unchanged
+    // collection is the common case, and it shouldn't cost a BEGIN/COMMIT.
+    if (toAdd.length > 0 || toRemove.length > 0) {
+      await this.ownership.manager.transaction(async (manager) => {
+        if (toAdd.length > 0) {
+          await manager.save(
+            toAdd.map((gameId) => manager.create(GameOwnership, { userId, gameId })),
+          );
+        }
 
-    if (toRemove.length > 0) {
-      await this.ownership.delete({ id: In(toRemove.map((row) => row.id)) });
+        if (toRemove.length > 0) {
+          await manager.delete(GameOwnership, { id: In(toRemove.map((row) => row.id)) });
+        }
+      });
     }
 
     return { added: toAdd.length, removed: toRemove.length, total: currentGameIds.size };

@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, HttpException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { In } from 'typeorm';
 import { BggService } from '../bgg/bgg.service';
@@ -48,11 +48,27 @@ describe('CollectionsService', () => {
     delete: jest.fn(),
   };
 
+  // importCollection's add/remove run inside ownership.manager.transaction(),
+  // so the writes land on the transaction's EntityManager rather than on the
+  // repository. mockTransactionManager stands in for that manager; the mock
+  // transaction() simply invokes the callback with it, which is enough to
+  // assert what would have been written inside the transaction.
+  const mockTransactionManager = {
+    create: jest.fn(),
+    save: jest.fn(),
+    delete: jest.fn(),
+  };
+
   const mockOwnershipRepo = {
     findBy: jest.fn(),
     create: jest.fn(),
     save: jest.fn(),
     delete: jest.fn(),
+    manager: {
+      transaction: jest.fn((cb: (m: typeof mockTransactionManager) => Promise<unknown>) =>
+        cb(mockTransactionManager),
+      ),
+    },
   };
 
   const mockBggService = {
@@ -113,6 +129,22 @@ describe('CollectionsService', () => {
 
       expect(mockBggService.getUser).toHaveBeenCalledWith('aldie');
       expect(result).toEqual(saved);
+    });
+
+    it("should store BGG's canonical username, not the client's spelling", async () => {
+      // BGG matches usernames case-insensitively and echoes back the real one.
+      mockBggService.getUser.mockResolvedValue({ username: 'aldie' });
+      mockAccountsRepo.findOneBy.mockResolvedValue(null);
+      mockAccountsRepo.create.mockImplementation((data) => data);
+      mockAccountsRepo.save.mockImplementation((data) => Promise.resolve(data));
+
+      const result = await service.linkAccount('user-1', 'ALDIE');
+
+      expect(mockBggService.getUser).toHaveBeenCalledWith('ALDIE');
+      expect(mockAccountsRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ bggUsername: 'aldie' }),
+      );
+      expect(result).toEqual(expect.objectContaining({ bggUsername: 'aldie' }));
     });
 
     it('should propagate the error and never save when BGG rejects the username', async () => {
@@ -190,17 +222,18 @@ describe('CollectionsService', () => {
         makeGame({ id: 2, bggId: 13, name: 'Catan' }),
       ]);
       mockOwnershipRepo.findBy.mockResolvedValue([]); // no prior ownership
-      mockOwnershipRepo.create.mockImplementation((data) => data);
-      mockOwnershipRepo.save.mockResolvedValue(undefined);
+      mockTransactionManager.create.mockImplementation((_entity, data) => data);
+      mockTransactionManager.save.mockResolvedValue(undefined);
 
       const result = await service.importCollection('user-1');
 
       expect(mockGamesService.findOrFetchMany).toHaveBeenCalledWith([174430, 13]);
-      expect(mockOwnershipRepo.save).toHaveBeenCalledWith([
+      expect(mockOwnershipRepo.manager.transaction).toHaveBeenCalledTimes(1);
+      expect(mockTransactionManager.save).toHaveBeenCalledWith([
         expect.objectContaining({ userId: 'user-1', gameId: 1 }),
         expect.objectContaining({ userId: 'user-1', gameId: 2 }),
       ]);
-      expect(mockOwnershipRepo.delete).not.toHaveBeenCalled();
+      expect(mockTransactionManager.delete).not.toHaveBeenCalled();
       expect(result).toEqual({ added: 2, removed: 0, total: 2 });
     });
 
@@ -219,8 +252,10 @@ describe('CollectionsService', () => {
 
       const result = await service.importCollection('user-1');
 
-      expect(mockOwnershipRepo.save).not.toHaveBeenCalled(); // nothing new to add
-      expect(mockOwnershipRepo.delete).toHaveBeenCalledWith({ id: In([11]) });
+      expect(mockTransactionManager.save).not.toHaveBeenCalled(); // nothing new to add
+      expect(mockTransactionManager.delete).toHaveBeenCalledWith(GameOwnership, {
+        id: In([11]),
+      });
       expect(result).toEqual({ added: 0, removed: 1, total: 1 });
     });
 
@@ -232,15 +267,19 @@ describe('CollectionsService', () => {
       mockBggService.getCollection.mockResolvedValue([{ bggId: 13, name: 'Catan' }]);
       mockGamesService.findOrFetchMany.mockResolvedValue([makeGame({ id: 2, bggId: 13, name: 'Catan' })]);
       mockOwnershipRepo.findBy.mockResolvedValue([makeOwnership({ id: 10, gameId: 1 })]);
-      mockOwnershipRepo.create.mockImplementation((data) => data);
-      mockOwnershipRepo.save.mockResolvedValue(undefined);
+      mockTransactionManager.create.mockImplementation((_entity, data) => data);
+      mockTransactionManager.save.mockResolvedValue(undefined);
 
       const result = await service.importCollection('user-1');
 
-      expect(mockOwnershipRepo.save).toHaveBeenCalledWith([
+      // Both writes go through the single transaction callback.
+      expect(mockOwnershipRepo.manager.transaction).toHaveBeenCalledTimes(1);
+      expect(mockTransactionManager.save).toHaveBeenCalledWith([
         expect.objectContaining({ userId: 'user-1', gameId: 2 }),
       ]);
-      expect(mockOwnershipRepo.delete).toHaveBeenCalledWith({ id: In([10]) });
+      expect(mockTransactionManager.delete).toHaveBeenCalledWith(GameOwnership, {
+        id: In([10]),
+      });
       expect(result).toEqual({ added: 1, removed: 1, total: 1 });
     });
 
@@ -254,8 +293,38 @@ describe('CollectionsService', () => {
 
       const result = await service.importCollection('user-1');
 
-      expect(mockOwnershipRepo.delete).toHaveBeenCalledWith({ id: In([10]) });
+      expect(mockTransactionManager.delete).toHaveBeenCalledWith(GameOwnership, {
+        id: In([10]),
+      });
       expect(result).toEqual({ added: 0, removed: 1, total: 0 });
+    });
+
+    it('should refuse to sync at all when BGG omitted games from the hydration batch', async () => {
+      mockAccountsRepo.findOneBy.mockResolvedValue({
+        id: 1, userId: 'user-1', bggUsername: 'aldie', linkedAt: new Date(), createdAt: new Date(),
+      });
+      // BGG says the user owns two games...
+      mockBggService.getCollection.mockResolvedValue([
+        { bggId: 174430, name: 'Gloomhaven' },
+        { bggId: 13, name: 'Catan' },
+      ]);
+      // ...but the `thing` batch only came back with one of them. Treating
+      // the missing one as unowned would delete an ownership row for a game
+      // the user demonstrably still owns.
+      mockGamesService.findOrFetchMany.mockResolvedValue([makeGame({ id: 1, bggId: 174430 })]);
+      mockOwnershipRepo.findBy.mockResolvedValue([
+        makeOwnership({ id: 10, gameId: 1 }),
+        makeOwnership({ id: 11, gameId: 2 }),
+      ]);
+
+      await expect(service.importCollection('user-1')).rejects.toThrow(HttpException);
+
+      // Nothing written — not even the add half, and no transaction opened.
+      expect(mockOwnershipRepo.manager.transaction).not.toHaveBeenCalled();
+      expect(mockTransactionManager.save).not.toHaveBeenCalled();
+      expect(mockTransactionManager.delete).not.toHaveBeenCalled();
+      expect(mockOwnershipRepo.save).not.toHaveBeenCalled();
+      expect(mockOwnershipRepo.delete).not.toHaveBeenCalled();
     });
   });
 });
