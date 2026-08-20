@@ -47,6 +47,37 @@ const SINGLE_ITEM_COLLECTION_XML = `
   </items>
 `;
 
+const MULTI_GAME_THING_XML = `
+  <items>
+    <item type="boardgame" id="174430">
+      <thumbnail>//cf.geekdo-images.com/thumb1.jpg</thumbnail>
+      <image>//cf.geekdo-images.com/image1.jpg</image>
+      <name type="primary" sortindex="1" value="Gloomhaven"/>
+      <description>A game of dungeon crawling.</description>
+      <yearpublished value="2017"/>
+      <minplayers value="1"/>
+      <maxplayers value="4"/>
+      <playingtime value="120"/>
+      <statistics page="1">
+        <ratings><average value="8.79"/></ratings>
+      </statistics>
+    </item>
+    <item type="boardgame" id="13">
+      <thumbnail>//cf.geekdo-images.com/thumb2.jpg</thumbnail>
+      <image>//cf.geekdo-images.com/image2.jpg</image>
+      <name type="primary" sortindex="1" value="Catan"/>
+      <description>A game of trading and building.</description>
+      <yearpublished value="1995"/>
+      <minplayers value="3"/>
+      <maxplayers value="4"/>
+      <playingtime value="90"/>
+      <statistics page="1">
+        <ratings><average value="7.14"/></ratings>
+      </statistics>
+    </item>
+  </items>
+`;
+
 describe('BggService', () => {
   let service: BggService;
 
@@ -257,6 +288,81 @@ describe('BggService', () => {
 
       expect(mockHttpService.get).toHaveBeenCalledTimes(2);
       expect(result).toEqual([{ bggId: 174430, name: 'Gloomhaven' }]);
+    });
+  });
+
+  // ── getGamesBatch ───────────────────────────────────────────────────────
+
+  describe('getGamesBatch', () => {
+    it('should return an empty array without calling BGG when given no ids', async () => {
+      const result = await service.getGamesBatch([]);
+
+      expect(result).toEqual([]);
+      expect(mockHttpService.get).not.toHaveBeenCalled();
+    });
+
+    it('should request all ids in one comma-separated call and parse every item', async () => {
+      mockHttpService.get.mockReturnValue(
+        of({ status: 200, data: MULTI_GAME_THING_XML }),
+      );
+
+      const result = await service.getGamesBatch([174430, 13]);
+
+      expect(mockHttpService.get).toHaveBeenCalledTimes(1);
+      expect(mockHttpService.get).toHaveBeenCalledWith(
+        'https://boardgamegeek.com/xmlapi2/thing?id=174430,13&stats=1',
+        { responseType: 'text' },
+      );
+      expect(result).toEqual<BggGame[]>([
+        {
+          bggId: 174430,
+          name: 'Gloomhaven',
+          description: 'A game of dungeon crawling.',
+          thumbnail: '//cf.geekdo-images.com/thumb1.jpg',
+          image: '//cf.geekdo-images.com/image1.jpg',
+          minPlayers: 1,
+          maxPlayers: 4,
+          playingTime: 120,
+          yearPublished: 2017,
+          rating: 8.79,
+        },
+        {
+          bggId: 13,
+          name: 'Catan',
+          description: 'A game of trading and building.',
+          thumbnail: '//cf.geekdo-images.com/thumb2.jpg',
+          image: '//cf.geekdo-images.com/image2.jpg',
+          minPlayers: 3,
+          maxPlayers: 4,
+          playingTime: 90,
+          yearPublished: 1995,
+          rating: 7.14,
+        },
+      ]);
+    });
+
+    it('should still return a one-element array for a single requested id', async () => {
+      // Same array-vs-object ambiguity as getCollection, exercised here for
+      // the `thing` endpoint's response shape instead.
+      mockHttpService.get.mockReturnValue(of({ status: 200, data: VALID_XML }));
+
+      const result = await service.getGamesBatch([174430]);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].bggId).toBe(174430);
+    });
+
+    it('should retry on 202 and resolve once BGG returns 200', async () => {
+      mockHttpService.get
+        .mockReturnValueOnce(of({ status: 202, data: '' }))
+        .mockReturnValueOnce(of({ status: 200, data: MULTI_GAME_THING_XML }));
+
+      const promise = service.getGamesBatch([174430, 13]);
+      await jest.runAllTimersAsync();
+      const result = await promise;
+
+      expect(mockHttpService.get).toHaveBeenCalledTimes(2);
+      expect(result).toHaveLength(2);
     });
   });
 });
