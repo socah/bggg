@@ -182,8 +182,12 @@ export class BggService {
   // <name> elements in the collection endpoint's response sometimes carry
   // attributes (e.g. sortindex) alongside their text content — when they do,
   // fast-xml-parser returns { '@_sortindex': ..., '#text': 'Gloomhaven' }
-  // instead of a plain string.
+  // instead of a plain string. Because isArray forces <name> to always be an
+  // array (even with one element), we extract the first element when needed.
   private textOf(node: any): string {
+    if (Array.isArray(node)) {
+      node = node[0];
+    }
     return typeof node === 'string' ? node : (node?.['#text'] ?? 'Unknown');
   }
 

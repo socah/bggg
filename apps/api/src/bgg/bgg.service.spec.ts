@@ -28,6 +28,25 @@ const VALID_XML = `
   </items>
 `;
 
+const MULTI_ITEM_COLLECTION_XML = `
+  <items totalitems="2">
+    <item objecttype="thing" objectid="174430" subtype="boardgame">
+      <name sortindex="1">Gloomhaven</name>
+    </item>
+    <item objecttype="thing" objectid="13" subtype="boardgame">
+      <name sortindex="1">Catan</name>
+    </item>
+  </items>
+`;
+
+const SINGLE_ITEM_COLLECTION_XML = `
+  <items totalitems="1">
+    <item objecttype="thing" objectid="174430" subtype="boardgame">
+      <name sortindex="1">Gloomhaven</name>
+    </item>
+  </items>
+`;
+
 describe('BggService', () => {
   let service: BggService;
 
@@ -185,6 +204,59 @@ describe('BggService', () => {
 
       await expect(service.getUser('aldie')).rejects.toThrow(HttpException);
       expect(mockHttpService.get).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ── getCollection ────────────────────────────────────────────────────────
+
+  describe('getCollection', () => {
+    it('should return every owned game when BGG responds with 200', async () => {
+      mockHttpService.get.mockReturnValue(
+        of({ status: 200, data: MULTI_ITEM_COLLECTION_XML }),
+      );
+
+      const result = await service.getCollection('someuser');
+
+      expect(result).toEqual([
+        { bggId: 174430, name: 'Gloomhaven' },
+        { bggId: 13, name: 'Catan' },
+      ]);
+    });
+
+    it('should not wrap a single-item response in extra nesting', async () => {
+      // fast-xml-parser returns items.item as a bare object (not an array)
+      // when the collection has exactly one game — normalizeItems must
+      // still produce a one-element array here, not throw or drop it.
+      mockHttpService.get.mockReturnValue(
+        of({ status: 200, data: SINGLE_ITEM_COLLECTION_XML }),
+      );
+
+      const result = await service.getCollection('someuser');
+
+      expect(result).toEqual([{ bggId: 174430, name: 'Gloomhaven' }]);
+    });
+
+    it('should return an empty array for a user who owns nothing', async () => {
+      mockHttpService.get.mockReturnValue(
+        of({ status: 200, data: '<items totalitems="0"></items>' }),
+      );
+
+      const result = await service.getCollection('someuser');
+
+      expect(result).toEqual([]);
+    });
+
+    it('should retry on 202 and resolve once BGG returns 200', async () => {
+      mockHttpService.get
+        .mockReturnValueOnce(of({ status: 202, data: '' }))
+        .mockReturnValueOnce(of({ status: 200, data: SINGLE_ITEM_COLLECTION_XML }));
+
+      const promise = service.getCollection('someuser');
+      await jest.runAllTimersAsync();
+      const result = await promise;
+
+      expect(mockHttpService.get).toHaveBeenCalledTimes(2);
+      expect(result).toEqual([{ bggId: 174430, name: 'Gloomhaven' }]);
     });
   });
 });
