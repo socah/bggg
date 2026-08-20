@@ -152,4 +152,39 @@ describe('BggService', () => {
       expect(mockHttpService.get).toHaveBeenCalledTimes(1);
     });
   });
+
+  // ── getUser ──────────────────────────────────────────────────────────────
+
+  describe('getUser', () => {
+    it('should return the username when BGG finds the user', async () => {
+      mockHttpService.get.mockReturnValue(
+        of({
+          status: 200,
+          data: '<user id="370" name="aldie" termsofuse="https://boardgamegeek.com/xmlapi/termsofuse"></user>',
+        }),
+      );
+
+      const result = await service.getUser('aldie');
+
+      expect(result).toEqual({ username: 'aldie' });
+    });
+
+    it('should throw a 404 HttpException when BGG returns an empty user element', async () => {
+      mockHttpService.get.mockReturnValue(
+        of({
+          status: 200,
+          data: '<user termsofuse="https://boardgamegeek.com/xmlapi/termsofuse"/>',
+        }),
+      );
+
+      await expect(service.getUser('nonexistentuser')).rejects.toThrow(HttpException);
+    });
+
+    it('should not poll on a non-200 status — user is a synchronous endpoint', async () => {
+      mockHttpService.get.mockReturnValue(of({ status: 500, data: '' }));
+
+      await expect(service.getUser('aldie')).rejects.toThrow(HttpException);
+      expect(mockHttpService.get).toHaveBeenCalledTimes(1);
+    });
+  });
 });
