@@ -2,14 +2,13 @@
 name: boardgame-learning
 description: >
   Learning-first development workflow for the board game group platform project,
-  active only when .claude/skills/active-mode.txt is set to "learning" (the
-  default). Use this skill for tasks in this repository when in learning mode —
-  code generation, feature implementation, infrastructure setup, and debugging.
+  invoked explicitly as `boardgame-learning`. Use this skill for code
+  generation, feature implementation, infrastructure setup, and debugging when
+  the user requests the learning workflow.
   It enforces a understand-before-generate discipline, tracks progress through
   the learning roadmap, and generates learning notes alongside every piece of
-  code built. When active-mode.txt is set to "feature-dev", defer to
-  feature-dev-skill instead. Trigger whenever the user asks to build, implement,
-  configure, or learn anything related to this project while in learning mode.
+  code built. Do not activate this skill based on repository context,
+  `active-mode.txt`, or a generic request to change code.
 ---
 
 # Board Game Platform — Learning Workflow Skill
@@ -20,27 +19,11 @@ code and every infrastructure decision — not just that things work.
 
 ---
 
-## Step 0 — Check Active Mode
+## On Explicit Invocation
 
-Before anything else, read `.claude/skills/active-mode.txt` (relative to the
-repo root). Compare its content, trimmed of surrounding whitespace, to
-`feature-dev`. If the file is missing or its (trimmed) content is anything
-other than `feature-dev`, treat it as `learning` mode and proceed normally
-below. If it is `feature-dev`, stop here: tell the user "feature-dev-skill is active
-(active-mode.txt is set to feature-dev) — use that skill instead, or run
-`make mode-learning` to switch back to learning mode." Do not proceed with
-the learning loop while in feature-dev mode.
-
----
-
-## On Every Session Start
-
-Before doing anything else:
-
-1. Read `progress.json` to determine the current phase and topic
-2. Report back in one sentence: current phase, current topic, and what was
-   last completed
-3. Ask if the user wants to continue from there or work on something else
+When this skill is invoked, read `progress.json` to determine the current phase
+and topic, then report the current phase, topic, and last completed item before
+starting the learning loop. Do not do this on ordinary repository sessions.
 
 If `progress.json` does not exist, create it using the initial state in
 `references/roadmap.md` and inform the user they are starting from Phase 0.

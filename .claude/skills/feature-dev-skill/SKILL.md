@@ -2,10 +2,10 @@
 name: feature-dev-skill
 description: >
   Use when the user asks to build or ship a production feature in this
-  repository while .claude/skills/active-mode.txt is set to "feature-dev" —
-  keeps a Plane paper trail (project BGGG) instead of the learning workflow.
-  When active-mode.txt is set to "learning" (the default) or is missing,
-  defer to boardgame-skill instead.
+  repository when explicitly invoked as `feature-dev-skill`. It keeps a Plane
+  paper trail (project BGGG) instead of the learning workflow. Do not activate
+  this skill based on repository context, `active-mode.txt`, or a generic
+  request to change code.
 ---
 
 # Production Feature Development — Plane Paper Trail Skill
@@ -18,17 +18,10 @@ progress are visible to non-git stakeholders.
 
 ---
 
-## Step 0 — Check Active Mode
+## Explicit Invocation
 
-Before anything else, read `.claude/skills/active-mode.txt` (relative to the
-repo root). Compare its content, trimmed of surrounding whitespace, to
-`feature-dev`. If the file is missing or its (trimmed) content is anything
-other than `feature-dev`, stop here: tell the user "boardgame-skill is active
-(active-mode.txt is set to learning, or the file is missing) — use that
-skill instead, or run `make mode-feature-dev` to switch to feature-dev
-mode." Do not proceed with the rest of this skill while in learning mode.
-
-If the file says `feature-dev`, continue below.
+Only follow this workflow after the user explicitly invokes
+`feature-dev-skill`. Do not use `active-mode.txt` as an activation gate.
 
 ---
 
@@ -36,7 +29,7 @@ If the file says `feature-dev`, continue below.
 
 | Stage | Key MCP call(s) | Notes |
 |---|---|---|
-| Gate | read `active-mode.txt` | Must equal `feature-dev`, else defer |
+| Invocation | Explicitly invoke `feature-dev-skill` | No mode-file gate |
 | Session start | `workitem list` (`pql='stateGroup IN openStates()'`) | Plane is the progress record, not a local file |
 | New feature | `workitem create` (full spec inlined), `page create`/`attach_to_workitem` for the affected reference doc(s) | Work item description carries the spec; Pages are topic reference docs, not per-feature mirrors |
 | Plan | `workitem create` (`parent=<feature id>`) per task | Leave `state` unset (default Todo) |
@@ -55,9 +48,10 @@ touches that subsystem — it is never created fresh per-feature.
 
 ---
 
-## On Every Session Start
+## On Explicit Invocation
 
-Query Plane for open feature work in this project:
+When this skill is explicitly invoked, query Plane for open feature work in this
+project:
 
 1. Call `mcp__plane__workitem list` with `project_id=09998445-85da-4435-aba9-dcdc70662758`
    and `pql='stateGroup IN openStates()'`.
@@ -65,8 +59,9 @@ Query Plane for open feature work in this project:
    name of the most recently updated one.
 3. Ask if the user wants to continue that one or start something new.
 
-There is no local progress file for this mode — Plane itself is the system
-of record for "where did I leave off."
+There is no local progress file for this mode — Plane itself is the system of
+record for "where did I leave off." Do not run this query on ordinary
+repository sessions.
 
 ---
 
@@ -194,9 +189,8 @@ matching this skill's purpose.
 - **Passing a state name instead of a state id.** `workitem update`'s
   `state` field takes the UUID from `state list`, matched by `group`
   (`unstarted`/`started`/`completed`) — never a display name like "Done".
-- **Not re-checking the gate mid-feature.** The user can switch back to
-  `learning` mode between sessions; re-read `active-mode.txt` at the start
-  of each session, not just once per feature.
+- **Treating this as a repository-wide default.** This workflow is opt-in and
+  runs only after the user explicitly invokes `feature-dev-skill`.
 - **Creating a new Page per feature instead of updating a topic reference
   doc.** This was this skill's original design and produced exactly the
   problem reference docs exist to avoid: disconnected, one-off pages named
