@@ -18,6 +18,50 @@ export interface BggGame {
   rating: number;
 }
 
+interface BggXmlNameNode {
+  '@_type'?: string;
+  '@_value'?: string;
+}
+
+interface BggXmlValueNode {
+  '@_value'?: string;
+}
+
+interface BggXmlItem {
+  '@_id'?: string;
+  '@_objectid'?: string;
+  name?: BggXmlNameNode[];
+  description?: string;
+  thumbnail?: string;
+  image?: string;
+  minplayers?: BggXmlValueNode;
+  maxplayers?: BggXmlValueNode;
+  playingtime?: BggXmlValueNode;
+  yearpublished?: BggXmlValueNode;
+  statistics?: {
+    ratings?: {
+      average?: BggXmlValueNode;
+    };
+  };
+}
+
+interface BggXmlParsed {
+  user?: {
+    '@_id'?: string;
+    '@_name'?: string;
+  };
+  items?: {
+    item?: BggXmlItem | BggXmlItem[];
+  };
+  errors?: {
+    error?: {
+      message?: string;
+    };
+  };
+}
+
+type CollectionNameNode = string | { '#text'?: string } | BggXmlNameNode;
+
 @Injectable()
 export class BggService {
   // Create the parser once and reuse it — XMLParser construction is not free.
@@ -53,7 +97,7 @@ export class BggService {
 
     const url = `https://boardgamegeek.com/xmlapi2/thing?id=${bggIds.join(',')}&stats=1`;
     const xml = await this.fetchWithPolling(url);
-    const result = this.parser.parse(xml);
+    const result = this.parser.parse(xml) as BggXmlParsed;
 
     return this.normalizeItems(result).map((item) => this.mapItemToGame(item));
   }
@@ -72,12 +116,12 @@ export class BggService {
       throw new HttpException(`BGG API returned ${response.status}`, response.status);
     }
 
-    const result = this.parser.parse(response.data);
+    const result = this.parser.parse(response.data) as BggXmlParsed;
     const user = result.user;
 
     // BGG responds 200 with an empty <user/> (no id attribute) for a
     // username that doesn't exist, rather than a 404.
-    if (!user || user['@_id'] === undefined) {
+    if (!user || user['@_id'] === undefined || user['@_name'] === undefined) {
       throw new HttpException(`BGG user '${username}' not found`, 404);
     }
 
@@ -89,7 +133,7 @@ export class BggService {
   async getCollection(username: string): Promise<{ bggId: number; name: string }[]> {
     const url = `https://boardgamegeek.com/xmlapi2/collection?username=${encodeURIComponent(username)}&own=1`;
     const xml = await this.fetchWithPolling(url);
-    const result = this.parser.parse(xml);
+    const result = this.parser.parse(xml) as BggXmlParsed;
 
     // BGG answers a renamed/deleted username with HTTP 200 and an
     // <errors><error><message>...</message></error></errors> body rather than
@@ -141,28 +185,29 @@ export class BggService {
   }
 
   private parseGame(xml: string, bggId: number): BggGame {
-    const result = this.parser.parse(xml);
+    const result = this.parser.parse(xml) as BggXmlParsed;
 
     // BGG wraps the response in <items><item>...</item></items>
     const item = result.items?.item;
     if (!item) {
       throw new HttpException(`Game ${bggId} not found on BGG`, 404);
     }
-
-    return this.mapItemToGame(item);
+    const gameItem = Array.isArray(item) ? item[0] : item;
+    if (!gameItem) {
+      throw new HttpException(`Game ${bggId} not found on BGG`, 404);
+    }
+    return this.mapItemToGame(gameItem);
   }
 
   // Shared by parseGame (single item) and getGamesBatch (many items) — both
   // ultimately hand this one parsed <item> object from fast-xml-parser.
-  private mapItemToGame(item: any): BggGame {
+  private mapItemToGame(item: BggXmlItem): BggGame {
     // <name> is always an array (enforced by isArray above).
     // The primary display name has type="primary"; alternates have type="alternate".
     // `?? []` guards against a malformed BGG item with no <name> at all —
     // one bad entry in a batch would otherwise TypeError and abort the whole
     // request; it now just falls through to the 'Unknown' default below.
-    const primaryName = (item.name ?? []).find(
-      (n: Record<string, string>) => n['@_type'] === 'primary',
-    );
+    const primaryName = (item.name ?? []).find((n) => n['@_type'] === 'primary');
 
     // Ratings live at item.statistics.ratings — only present because we passed stats=1.
     const ratings = item.statistics?.ratings;
@@ -188,7 +233,7 @@ export class BggService {
   // <name> already needed isArray for. <item> isn't configured with isArray
   // because that would break parseGame's single-item shape (item.name...);
   // normalizing after the fact here keeps both call shapes working.
-  private normalizeItems(parsed: any): any[] {
+  private normalizeItems(parsed: BggXmlParsed): BggXmlItem[] {
     const raw = parsed.items?.item;
     if (!raw) return [];
     return Array.isArray(raw) ? raw : [raw];
@@ -199,11 +244,23 @@ export class BggService {
   // fast-xml-parser returns { '@_sortindex': ..., '#text': 'Gloomhaven' }
   // instead of a plain string. Because isArray forces <name> to always be an
   // array (even with one element), we extract the first element when needed.
-  private textOf(node: any): string {
+  private textOf(node: CollectionNameNode | CollectionNameNode[] | undefined): string {
     if (Array.isArray(node)) {
       node = node[0];
     }
-    return typeof node === 'string' ? node : (node?.['#text'] ?? 'Unknown');
+    if (typeof node === 'string') {
+      return node;
+    }
+    if (!node) {
+      return 'Unknown';
+    }
+    if ('#text' in node && typeof node['#text'] === 'string') {
+      return node['#text'];
+    }
+    if ('@_value' in node && typeof node['@_value'] === 'string') {
+      return node['@_value'];
+    }
+    return 'Unknown';
   }
 
   private sleep(ms: number): Promise<void> {
