@@ -9,6 +9,7 @@ import { UploadsModule } from './uploads/uploads.module';
 import { InvitesModule } from './invites/invites.module';
 import { SchedulingModule } from './scheduling/scheduling.module';
 import { CalendarModule } from './calendar/calendar.module';
+import { CollectionsModule } from './collections/collections.module';
 
 // AppModule is the root of the dependency graph. NestFactory starts here.
 // Every feature module must be listed in `imports` for its routes and
@@ -40,6 +41,7 @@ import { CalendarModule } from './calendar/calendar.module';
     AuditModule,
     GroupsModule,
     GamesModule,
+    CollectionsModule,
     ChatModule,
     UploadsModule,
     InvitesModule,

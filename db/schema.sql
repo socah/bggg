@@ -92,36 +92,81 @@ CREATE TABLE IF NOT EXISTS group_members (
 -- ── GAMES ─────────────────────────────────────────────────────────────────
 -- Shared game catalogue, keyed by BGG ID. One record per game regardless of
 -- how many users own it — ownership is tracked separately in game_ownership.
--- last_synced_at: when this record was last refreshed from BGG. The background
--- sync job uses this to decide whether to re-fetch stale data.
+-- last_fetched_at: when this record was last refreshed from BGG.
+--   GamesService.findOrFetch/findOrFetchMany compare it against a 7-day TTL
+--   to decide whether to re-fetch. Set manually on every BGG fetch, never
+--   by an @UpdateDateColumn — see the comment in game.entity.ts for why.
+--
+-- This table had drifted badly out of sync with games/game.entity.ts — same
+-- class of drift already corrected for groups and game_ownership in this
+-- file. The columns sketched here (year, image_url, min_playtime,
+-- max_playtime, bgg_rating, bgg_weight, last_synced_at) never existed on the
+-- entity, and the entity's thumbnail, image, playing_time, year_published,
+-- rating, last_fetched_at and created_at were all missing here. Nothing had
+-- queried `games` over HTTP before, so it was latent; the BGG collection
+-- import (POST /bgg-account/import, GET /bgg-account/games) is the first
+-- real consumer and would 500 on every call. Fixed to match the entity
+-- exactly. The live dev table held 0 rows, so the correction was applied
+-- there with ALTER TABLE — no data migration was involved.
+--
+-- The old CHECK (min_players > 0) / CHECK (max_players >= min_players)
+-- constraints are deliberately NOT carried over: the entity defaults both
+-- columns to 0 (BGG omits <minplayers>/<maxplayers> on some entries, and
+-- mapItemToGame maps a missing value to 0), which the first check rejects
+-- outright and which the second would only survive with an awkward
+-- "both zero OR max >= min" rewrite. A bad player-count on one game is not
+-- worth 500-ing a whole collection import over, so both are dropped and the
+-- values are taken as BGG reports them.
 CREATE TABLE IF NOT EXISTS games (
-  id             SERIAL       PRIMARY KEY,
-  bgg_id         INT          NOT NULL UNIQUE,
-  name           TEXT         NOT NULL,
-  year           INT,
-  image_url      TEXT,
-  min_players    INT          CHECK (min_players > 0),
-  max_players    INT          CHECK (max_players >= min_players),
-  min_playtime   INT,
-  max_playtime   INT,
-  bgg_rating     NUMERIC(4,2),                -- e.g. 7.84
-  bgg_weight     NUMERIC(3,2),                -- complexity 1.0–5.0
-  description    TEXT,
-  last_synced_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+  id              SERIAL       PRIMARY KEY,
+  bgg_id          INT          NOT NULL UNIQUE,
+  name            TEXT         NOT NULL,
+  description     TEXT,                         -- nullable: absent for some BGG entries
+  thumbnail       TEXT,                         -- nullable
+  image           TEXT,                         -- nullable
+  min_players     INT          NOT NULL DEFAULT 0,
+  max_players     INT          NOT NULL DEFAULT 0,
+  playing_time    INT          NOT NULL DEFAULT 0,
+  year_published  INT          NOT NULL DEFAULT 0,
+  rating          NUMERIC(4,2) NOT NULL DEFAULT 0,   -- e.g. 7.84
+  last_fetched_at TIMESTAMPTZ  NOT NULL,
+  created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+-- ── BGG ACCOUNTS ──────────────────────────────────────────────────────────
+-- Backs the 'users.bgg_username' field sketched above — that field was
+-- never actually built (this file's 'users' table never became a real
+-- TypeORM entity, same as every other table here that originally assumed
+-- one). user_id: raw Keycloak sub as TEXT, not an int FK to users(id),
+-- matching group_members and everything else in this file.
+-- Added for real by the BGG account linking & collection import feature
+-- (docs/superpowers/specs/2026-08-20-bgg-account-linking-design.md).
+CREATE TABLE IF NOT EXISTS bgg_accounts (
+  id            SERIAL       PRIMARY KEY,
+  user_id       TEXT         NOT NULL UNIQUE,
+  bgg_username  TEXT         NOT NULL,
+  linked_at     TIMESTAMPTZ  NOT NULL,
+  created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
 -- ── GAME OWNERSHIP ────────────────────────────────────────────────────────
--- Tracks which users personally own which games.
--- A group's game library is the union of its members' game_ownership rows —
--- there is no separate group_games table. This matches how BGG sync works:
--- the user syncs their personal BGG collection, creating ownership rows for
--- each game they own. The group sees games owned by its members.
+-- Tracks which users personally own which games. A group's game library is
+-- the union of its members' game_ownership rows — there is no separate
+-- group_games table. Rows here come from a BGG collection import (see
+-- bgg_accounts above) and are kept in sync on re-import: added when a game
+-- newly appears in the user's BGG collection, removed when it no longer
+-- does. Unlinking a bgg_accounts row does NOT delete these — they represent
+-- real-world ownership, not BGG-link state.
+-- user_id: TEXT, not an INT FK to users(id) as this table originally
+-- sketched here — same drift-and-fix already applied to group_members
+-- above; this schema's 'users' table was never built as a real entity.
 CREATE TABLE IF NOT EXISTS game_ownership (
-  user_id   INT  NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  game_id   INT  NOT NULL REFERENCES games(id) ON DELETE CASCADE,
-  added_at  DATE NOT NULL DEFAULT CURRENT_DATE,
+  id        SERIAL PRIMARY KEY,
+  user_id   TEXT   NOT NULL,
+  game_id   INT    NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  added_at  DATE   NOT NULL DEFAULT CURRENT_DATE,
 
-  PRIMARY KEY (user_id, game_id)
+  UNIQUE (user_id, game_id)
 );
 
 -- ── REVIEWS ───────────────────────────────────────────────────────────────

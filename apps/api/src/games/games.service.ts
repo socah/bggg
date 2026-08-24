@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { BggService } from '../bgg/bgg.service';
 import { Game } from './game.entity';
 
@@ -42,6 +42,60 @@ export class GamesService {
     });
 
     return this.games.save(game);
+  }
+
+  // Chunk size for BGG's thing?id=1,2,3 batch endpoint. Kept well under any
+  // practical URL-length or response-size limit.
+  private static readonly BATCH_CHUNK_SIZE = 20;
+
+  // Same cache-freshness rule as findOrFetch, applied to a whole list at
+  // once: games already fresh in cache never touch BGG. Only the
+  // stale-or-missing subset is sent to BggService.getGamesBatch, chunked so
+  // a large collection import doesn't build one enormous URL.
+  async findOrFetchMany(bggIds: number[]): Promise<Game[]> {
+    if (bggIds.length === 0) return [];
+
+    const uniqueIds = [...new Set(bggIds)];
+    const cached = await this.games.findBy({ bggId: In(uniqueIds) });
+    const cachedByBggId = new Map(cached.map((g) => [g.bggId, g]));
+
+    const staleOrMissing = uniqueIds.filter((id) => {
+      const existing = cachedByBggId.get(id);
+      return !existing || this.isStale(existing);
+    });
+
+    const fresh = uniqueIds
+      .filter((id) => !staleOrMissing.includes(id))
+      .map((id) => cachedByBggId.get(id)!);
+
+    if (staleOrMissing.length === 0) return fresh;
+
+    const refreshed: Game[] = [];
+    for (let i = 0; i < staleOrMissing.length; i += GamesService.BATCH_CHUNK_SIZE) {
+      const chunk = staleOrMissing.slice(i, i + GamesService.BATCH_CHUNK_SIZE);
+      const bggData = await this.bgg.getGamesBatch(chunk);
+
+      for (const data of bggData) {
+        const existing = cachedByBggId.get(data.bggId);
+        const game = this.games.create({
+          ...existing, // carries over `id` and `createdAt` if row exists
+          ...data,
+          lastFetchedAt: new Date(),
+        });
+        refreshed.push(await this.games.save(game));
+      }
+    }
+
+    return [...fresh, ...refreshed];
+  }
+
+  // Plain cache read by internal Game.id — no BGG involvement, no
+  // freshness check. Used to look up games already known to be owned
+  // (via GameOwnership rows), where triggering a live fetch would be
+  // surprising for what's meant to be a simple listing read.
+  async findByIds(ids: number[]): Promise<Game[]> {
+    if (ids.length === 0) return [];
+    return this.games.findBy({ id: In(ids) });
   }
 
   private isStale(game: Game): boolean {

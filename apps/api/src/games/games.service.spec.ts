@@ -44,12 +44,14 @@ describe('GamesService', () => {
 
   const mockGamesRepo = {
     findOne: jest.fn(),
+    findBy: jest.fn(),
     create: jest.fn(),
     save: jest.fn(),
   };
 
   const mockBggService = {
     getGame: jest.fn(),
+    getGamesBatch: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -146,6 +148,102 @@ describe('GamesService', () => {
       );
 
       expect(result.name).toBe('Gloomhaven');
+    });
+  });
+
+  describe('findOrFetchMany', () => {
+    it('should return an empty array without querying anything when given no ids', async () => {
+      const result = await service.findOrFetchMany([]);
+
+      expect(result).toEqual([]);
+      expect(mockGamesRepo.findBy).not.toHaveBeenCalled();
+    });
+
+    it('should return cached games without calling BGG when every entry is fresh', async () => {
+      const cached = [
+        makeGame({ id: 1, bggId: 174430, lastFetchedAt: new Date() }),
+        makeGame({ id: 2, bggId: 13, name: 'Catan', lastFetchedAt: new Date() }),
+      ];
+      mockGamesRepo.findBy.mockResolvedValue(cached);
+
+      const result = await service.findOrFetchMany([174430, 13]);
+
+      expect(result).toEqual(expect.arrayContaining(cached));
+      expect(mockBggService.getGamesBatch).not.toHaveBeenCalled();
+    });
+
+    it('should batch-fetch only the stale or missing ids', async () => {
+      // 174430 is fresh in cache; 13 is missing entirely.
+      const freshGame = makeGame({ id: 1, bggId: 174430, lastFetchedAt: new Date() });
+      mockGamesRepo.findBy.mockResolvedValue([freshGame]);
+
+      const fetchedCatan: BggGame = {
+        bggId: 13,
+        name: 'Catan',
+        description: 'A game of trading and building.',
+        thumbnail: '//cf.geekdo-images.com/thumb2.jpg',
+        image: '//cf.geekdo-images.com/image2.jpg',
+        minPlayers: 3,
+        maxPlayers: 4,
+        playingTime: 90,
+        yearPublished: 1995,
+        rating: 7.14,
+      };
+      mockBggService.getGamesBatch.mockResolvedValue([fetchedCatan]);
+      const savedCatan = makeGame({ id: 2, bggId: 13, name: 'Catan' });
+      mockGamesRepo.create.mockReturnValue(savedCatan);
+      mockGamesRepo.save.mockResolvedValue(savedCatan);
+
+      const result = await service.findOrFetchMany([174430, 13]);
+
+      expect(mockBggService.getGamesBatch).toHaveBeenCalledWith([13]);
+      expect(result).toEqual(expect.arrayContaining([freshGame, savedCatan]));
+    });
+
+    it('should chunk more than 20 stale ids into multiple batch calls', async () => {
+      mockGamesRepo.findBy.mockResolvedValue([]); // nothing cached
+      const ids = Array.from({ length: 25 }, (_, i) => i + 1);
+      mockBggService.getGamesBatch.mockResolvedValue([]);
+      mockGamesRepo.create.mockReturnValue(makeGame());
+      mockGamesRepo.save.mockResolvedValue(makeGame());
+
+      const result = await service.findOrFetchMany(ids);
+
+      expect(mockBggService.getGamesBatch).toHaveBeenCalledTimes(2);
+      expect(mockBggService.getGamesBatch).toHaveBeenNthCalledWith(
+        1,
+        ids.slice(0, 20),
+      );
+      expect(mockBggService.getGamesBatch).toHaveBeenNthCalledWith(
+        2,
+        ids.slice(20),
+      );
+      // Both batches came back empty, so every requested id is simply absent
+      // from the result — findOrFetchMany drops ids BGG omits rather than
+      // throwing. That is deliberate at this layer (a caller may legitimately
+      // want whatever BGG could give it), which is why the consumer that
+      // cannot tolerate it, CollectionsService.importCollection, has its own
+      // guard rejecting a short hydration before it syncs any ownership rows.
+      expect(result).toEqual([]);
+      expect(mockGamesRepo.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('findByIds', () => {
+    it('should return an empty array without querying when given no ids', async () => {
+      const result = await service.findByIds([]);
+
+      expect(result).toEqual([]);
+      expect(mockGamesRepo.findBy).not.toHaveBeenCalled();
+    });
+
+    it('should return games matching the given internal ids', async () => {
+      const games = [makeGame({ id: 1 }), makeGame({ id: 2, bggId: 13 })];
+      mockGamesRepo.findBy.mockResolvedValue(games);
+
+      const result = await service.findByIds([1, 2]);
+
+      expect(result).toEqual(games);
     });
   });
 });
