@@ -91,6 +91,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async session({ session, token }) {
       session.accessToken = token.accessToken as string;
       session.error = token.error as 'RefreshTokenError' | undefined;
+      // token.sub is the Keycloak user id — NextAuth copies it off the ID
+      // token at sign-in and preserves it through refreshes. Exposing it
+      // here lets client components gate controls on "is this mine / what's
+      // my role" without decoding the access token in the browser.
+      if (token.sub && session.user) session.user.id = token.sub;
       return session;
     },
   },
