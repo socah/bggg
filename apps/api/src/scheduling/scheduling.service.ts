@@ -277,6 +277,32 @@ export class SchedulingService {
     return this.proposals.save(proposal);
   }
 
+  // POST /proposals/:id/cancel — terminal transition from collecting,
+  // confirming, OR confirmed (game nights get called off after being finalized
+  // too). Unlike undo there is no way back: a cancelled proposal stays that
+  // way and a new proposal is created instead. If a play_sessions row exists
+  // it is deleted BEFORE the status flip, same delete-before-flip ordering as
+  // undo() — a cancelled-status proposal still owning a live session would be
+  // exactly the inconsistency that ordering avoids.
+  async cancel(proposalId: string, requestingUserId: string): Promise<PlaySessionProposal> {
+    const proposal = await this.findProposalOrThrow(proposalId);
+    await this.assertCanManageProposal(proposal, requestingUserId);
+
+    if (proposal.status === 'cancelled') {
+      throw new ConflictException('Proposal is already cancelled');
+    }
+
+    if (proposal.status === 'confirmed') {
+      const session = await this.sessions.findOneBy({ proposalId: proposal.id });
+      if (session) {
+        await this.sessions.remove(session);
+      }
+    }
+
+    proposal.status = 'cancelled';
+    return this.proposals.save(proposal);
+  }
+
   async proposeGame(
     proposalId: string,
     dto: ProposeGameDto,
