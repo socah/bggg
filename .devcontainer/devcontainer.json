@@ -49,6 +49,19 @@
   // a process in this devcontainer.
   "forwardPorts": [3000, 3001, 8080],
 
+  // Editor-independent port publishing (the spec's legacy mechanism): the
+  // devcontainer CLI turns these into real 'docker -p' binds, which
+  // infra/scripts/devcontainer-up.sh relies on — forwardPorts above does
+  // nothing outside an editor, so without this a CLI-started container is
+  // unreachable from the host browser. Loopback-only: nothing here should be
+  // exposed to the network. VS Code ignores these when creating containers
+  // and keeps using forwardPorts, so behavior there is unchanged.
+  "appPort": [
+    "127.0.0.1:3000:3000",
+    "127.0.0.1:3001:3001",
+    "127.0.0.1:8080:8080"
+  ],
+
   // Runs once after the container is created and project files are mounted.
   // npm install is here (not in a Dockerfile) because it needs package.json,
   // which only exists in the mounted project — not inside the image.
