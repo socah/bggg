@@ -5,6 +5,8 @@ import { In } from 'typeorm';
 import { GroupsService } from './groups.service';
 import { Group } from './group.entity';
 import { GroupMember } from './group-member.entity';
+import { GameOwnership } from '../collections/game-ownership.entity';
+import { Game } from '../games/game.entity';
 import { AuditService } from '../audit/audit.service';
 import { KeycloakAdminClient } from '../keycloak/keycloak-admin.client';
 
@@ -36,6 +38,14 @@ describe('GroupsService', () => {
     save: jest.fn(),
   };
 
+  const mockOwnershipRepository = {
+    findBy: jest.fn(),
+  };
+
+  const mockGamesRepository = {
+    find: jest.fn(),
+  };
+
   // AuditService is a real dependency of GroupsService (2_audit_logging) —
   // without a mock provider here, the module fails to compile with an
   // "unknown dependency" error, same as the repository token would.
@@ -63,6 +73,14 @@ describe('GroupsService', () => {
         {
           provide: getRepositoryToken(GroupMember),
           useValue: mockMembersRepository,
+        },
+        {
+          provide: getRepositoryToken(GameOwnership),
+          useValue: mockOwnershipRepository,
+        },
+        {
+          provide: getRepositoryToken(Game),
+          useValue: mockGamesRepository,
         },
         {
           provide: AuditService,
@@ -338,6 +356,58 @@ describe('GroupsService', () => {
 
       await expect(service.getMembers('group-1', 'someone-else')).rejects.toThrow(ForbiddenException);
       expect(mockKeycloakAdmin.getUser).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── getLibrary ───────────────────────────────────────────────────────────
+
+  describe('getLibrary', () => {
+    const gameFixture = (id: number, name: string): Game => ({
+      id, bggId: 1000 + id, name, description: '', thumbnail: `t-${id}.jpg`, image: '',
+      minPlayers: 2, maxPlayers: 4, playingTime: 90, yearPublished: 2015, rating: 7.5,
+      lastFetchedAt: new Date(), createdAt: new Date(),
+    });
+
+    it('returns the deduplicated union of all members owned games, sorted by name', async () => {
+      const group: Group = { id: 'group-1', name: 'Chess Club', ownerId: OWNER_ID, isSolo: false, createdAt: new Date() };
+      mockRepository.findOneBy.mockResolvedValue(group);
+      mockMembersRepository.findOneBy.mockResolvedValue({
+        id: 1, userId: OWNER_ID, groupId: 'group-1', role: 'member', joinedAt: new Date(),
+      });
+      mockMembersRepository.findBy.mockResolvedValue([
+        { id: 1, userId: 'user-a', groupId: 'group-1', role: 'owner', joinedAt: new Date() },
+        { id: 2, userId: 'user-b', groupId: 'group-1', role: 'member', joinedAt: new Date() },
+      ]);
+      // Both users own game 42 — the union must contain it ONCE.
+      mockOwnershipRepository.findBy.mockResolvedValue([
+        { id: 1, userId: 'user-a', gameId: 42, addedAt: new Date() },
+        { id: 2, userId: 'user-a', gameId: 7, addedAt: new Date() },
+        { id: 3, userId: 'user-b', gameId: 42, addedAt: new Date() },
+      ]);
+      mockGamesRepository.find.mockResolvedValue([gameFixture(7, 'Azul'), gameFixture(42, 'Gloomhaven')]);
+
+      const result = await service.getLibrary('group-1', 'user-b');
+
+      expect(result).toEqual([
+        { id: 7, bggId: 1007, name: 'Azul', thumbnail: 't-7.jpg', minPlayers: 2, maxPlayers: 4 },
+        { id: 42, bggId: 1042, name: 'Gloomhaven', thumbnail: 't-42.jpg', minPlayers: 2, maxPlayers: 4 },
+      ]);
+    });
+
+    it('returns an empty array when no member owns anything', async () => {
+      const group: Group = { id: 'group-1', name: 'Chess Club', ownerId: OWNER_ID, isSolo: false, createdAt: new Date() };
+      mockRepository.findOneBy.mockResolvedValue(group);
+      // Requester membership for findOne's access check:
+      mockMembersRepository.findOneBy.mockResolvedValue({
+        id: 1, userId: OWNER_ID, groupId: 'group-1', role: 'owner', joinedAt: new Date(),
+      });
+      mockMembersRepository.findBy.mockResolvedValue([]);
+      mockOwnershipRepository.findBy.mockResolvedValue([]);
+
+      const result = await service.getLibrary('group-1', OWNER_ID);
+
+      expect(result).toEqual([]);
+      expect(mockGamesRepository.find).not.toHaveBeenCalled();
     });
   });
 });

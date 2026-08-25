@@ -3,6 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { Group } from './group.entity';
 import { GroupMember } from './group-member.entity';
+import { GameOwnership } from '../collections/game-ownership.entity';
+import { Game } from '../games/game.entity';
 import { CreateGroupDto } from './dto/create-group.dto';
 import { UpdateGroupDto } from './dto/update-group.dto';
 import { AuditService } from '../audit/audit.service';
@@ -15,6 +17,13 @@ export class GroupsService {
     private readonly groupRepository: Repository<Group>,
     @InjectRepository(GroupMember)
     private readonly members: Repository<GroupMember>,
+    // The group game library is the union of members' game_ownership rows —
+    // same "each module registers its own repository for a shared entity"
+    // pattern SchedulingModule uses for GroupMember.
+    @InjectRepository(GameOwnership)
+    private readonly ownership: Repository<GameOwnership>,
+    @InjectRepository(Game)
+    private readonly gamesRepo: Repository<Game>,
     // AuditService is injectable here because GroupsModule imports AuditModule,
     // which exports AuditService. No circular dependency — AuditModule never
     // imports GroupsModule.
@@ -77,6 +86,44 @@ export class GroupsService {
         role: m.role,
       })),
     );
+  }
+
+  // GET /groups/:groupId/games — every game owned by ANY member, deduped,
+  // sorted by name. This is the data source for the propose-a-game picker
+  // on proposals. Read-only, so plain membership (any role) suffices —
+  // same access level as getMembers.
+  async getLibrary(
+    id: string,
+    requestingUserId: string,
+  ): Promise<Array<Pick<Game, 'id' | 'bggId' | 'name' | 'thumbnail' | 'minPlayers' | 'maxPlayers'>>> {
+    await this.findOne(id, requestingUserId);
+
+    const memberships = await this.members.findBy({ groupId: id });
+    if (memberships.length === 0) return [];
+
+    const ownerships = await this.ownership.findBy({
+      userId: In(memberships.map((m) => m.userId)),
+    });
+    if (ownerships.length === 0) return [];
+
+    // Set-dedupe here, not via DISTINCT SQL — ownership rows per user are
+    // already unique on (user_id, game_id), so duplicates only arise ACROSS
+    // users, which this collapse handles in one place.
+    const gameIds = [...new Set(ownerships.map((o) => o.gameId))];
+
+    const games = await this.gamesRepo.find({
+      where: { id: In(gameIds) },
+      order: { name: 'ASC' },
+    });
+
+    return games.map((g) => ({
+      id: g.id,
+      bggId: g.bggId,
+      name: g.name,
+      thumbnail: g.thumbnail,
+      minPlayers: g.minPlayers,
+      maxPlayers: g.maxPlayers,
+    }));
   }
 
   async create(dto: CreateGroupDto, requestingUserId: string): Promise<Group> {

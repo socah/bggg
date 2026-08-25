@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Group } from './group.entity';
 import { GroupMember } from './group-member.entity';
+import { GameOwnership } from '../collections/game-ownership.entity';
+import { Game } from '../games/game.entity';
 import { GroupsController } from './groups.controller';
 import { GroupsService } from './groups.service';
 import { AuditModule } from '../audit/audit.module';
@@ -17,7 +19,11 @@ import { KeycloakModule } from '../keycloak/keycloak.module';
   // resolve member subs to display names. No circular dependency:
   // KeycloakModule never imports GroupsModule — same reasoning already
   // documented in invites.module.ts.
-  imports: [TypeOrmModule.forFeature([Group, GroupMember]), AuditModule, KeycloakModule],
+  imports: [
+    TypeOrmModule.forFeature([Group, GroupMember, GameOwnership, Game]),
+    AuditModule,
+    KeycloakModule,
+  ],
 
   // controllers: NestJS instantiates these and registers their routes.
   controllers: [GroupsController],
