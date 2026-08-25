@@ -39,7 +39,7 @@ async function bootstrap() {
   // the API using the victim's browser token — a CSRF-adjacent attack.
   app.enableCors({
     origin: process.env.CORS_ORIGIN,
-    methods: ['GET', 'POST', 'PATCH', 'DELETE'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
