@@ -65,8 +65,8 @@ export function CalendarMonthGrid({ proposals, onSelectProposal }: CalendarMonth
         </button>
       </div>
       <div className="mb-1 grid grid-cols-7 gap-1">
-        {WEEKDAY_INITIALS.map((initial) => (
-          <div key={initial} className="text-center text-xs font-medium text-text-muted">
+        {WEEKDAY_INITIALS.map((initial, index) => (
+          <div key={`${initial}-${index}`} className="text-center text-xs font-medium text-text-muted">
             {initial}
           </div>
         ))}
