@@ -21,6 +21,17 @@ import { ProposeGameDto } from './dto/propose-game.dto';
 import { computeOverlapWindow, NoOverlapError } from './overlap-window';
 import { resolveAvailabilityWindow } from './resolve-window';
 
+// One entry of GET /proposals/:id/games (and the games array inside
+// GET /proposals/:id). proposalGameId is the join-row id the vote
+// endpoints address; votedByMe lets the UI render the caller's own vote
+// state without a second request.
+export interface ProposalGameWithVotes {
+  proposalGameId: string;
+  game: { id: number; name: string };
+  voteCount: number;
+  votedByMe: boolean;
+}
+
 @Injectable()
 export class SchedulingService {
   constructor(
@@ -358,7 +369,7 @@ export class SchedulingService {
   async listProposalGames(
     proposalId: string,
     requestingUserId: string,
-  ): Promise<Array<{ game: { id: number; name: string }; voteCount: number }>> {
+  ): Promise<ProposalGameWithVotes[]> {
     const proposal = await this.findProposalOrThrow(proposalId);
     await this.groupsService.findOne(proposal.groupId, requestingUserId);
 
@@ -380,11 +391,16 @@ export class SchedulingService {
     // number of proposed games per proposal ever got large.
     return Promise.all(
       proposalGames.map(async (proposalGame) => ({
+        proposalGameId: proposalGame.id,
         game: {
           id: proposalGame.gameId,
           name: gameById.get(proposalGame.gameId)?.name ?? 'Unknown game',
         },
         voteCount: await this.gameVotes.countBy({ proposalGameId: proposalGame.id }),
+        votedByMe: await this.gameVotes.existsBy({
+          proposalGameId: proposalGame.id,
+          userId: requestingUserId,
+        }),
       })),
     );
   }
@@ -400,7 +416,7 @@ export class SchedulingService {
   ): Promise<{
     proposal: PlaySessionProposal;
     rsvps: PlaySessionRsvp[];
-    games: Array<{ game: { id: number; name: string }; voteCount: number }>;
+    games: ProposalGameWithVotes[];
   }> {
     const proposal = await this.findProposalOrThrow(proposalId);
     await this.groupsService.findOne(proposal.groupId, requestingUserId);

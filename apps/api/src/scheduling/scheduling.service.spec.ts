@@ -22,7 +22,7 @@ describe('SchedulingService', () => {
   const mockRsvps = { findBy: jest.fn() };
   const mockSessions = { findOneBy: jest.fn(), remove: jest.fn() };
   const mockProposalGames = { findBy: jest.fn() };
-  const mockGameVotes = { countBy: jest.fn() };
+  const mockGameVotes = { countBy: jest.fn(), existsBy: jest.fn() };
   const mockGames = { findBy: jest.fn() };
   const mockMembers = { findOneBy: jest.fn() };
   const mockGroupsService = { findOne: jest.fn() };
@@ -59,8 +59,6 @@ describe('SchedulingService', () => {
       const proposalGame: PlaySessionProposalGame = {
         id: 'pg-1', proposalId: PROPOSAL_ID, gameId: 42, proposedBy: USER_ID, createdAt: new Date(),
       };
-      // The join row above only carries gameId — the response's game name has
-      // to come from the games table itself, which is what this fixture is.
       const game: Game = {
         id: 42, bggId: 174430, name: 'Gloomhaven', description: '', thumbnail: '', image: '',
         minPlayers: 1, maxPlayers: 4, playingTime: 120, yearPublished: 2017, rating: 8.79,
@@ -72,14 +70,50 @@ describe('SchedulingService', () => {
       mockProposalGames.findBy.mockResolvedValue([proposalGame]);
       mockGames.findBy.mockResolvedValue([game]);
       mockGameVotes.countBy.mockResolvedValue(2);
+      // The requesting user has NOT voted on this game.
+      mockGameVotes.existsBy.mockResolvedValue(false);
 
       const result = await service.getProposal(PROPOSAL_ID, USER_ID);
 
       expect(result).toEqual({
         proposal,
         rsvps,
-        games: [{ game: { id: 42, name: 'Gloomhaven' }, voteCount: 2 }],
+        games: [{
+          proposalGameId: 'pg-1',
+          game: { id: 42, name: 'Gloomhaven' },
+          voteCount: 2,
+          votedByMe: false,
+        }],
       });
+    });
+
+    it('marks games the requesting user has already voted for as votedByMe', async () => {
+      const proposal: PlaySessionProposal = {
+        id: PROPOSAL_ID, groupId: GROUP_ID, createdBy: USER_ID, proposedDate: '2026-08-20',
+        hostId: null, status: 'collecting', confirmedStart: null, confirmedEnd: null, createdAt: new Date(),
+      };
+      mockProposals.findOneBy.mockResolvedValue(proposal);
+      mockGroupsService.findOne.mockResolvedValue({ id: GROUP_ID });
+      mockProposalGames.findBy.mockResolvedValue([
+        { id: 'pg-1', proposalId: PROPOSAL_ID, gameId: 42, proposedBy: USER_ID, createdAt: new Date() },
+      ]);
+      mockGames.findBy.mockResolvedValue([
+        { id: 42, bggId: 174430, name: 'Gloomhaven', description: '', thumbnail: '', image: '',
+          minPlayers: 1, maxPlayers: 4, playingTime: 120, yearPublished: 2017, rating: 8.79,
+          lastFetchedAt: new Date(), createdAt: new Date() },
+      ]);
+      mockGameVotes.countBy.mockResolvedValue(3);
+      mockGameVotes.existsBy.mockResolvedValue(true);
+
+      const result = await service.listProposalGames(PROPOSAL_ID, USER_ID);
+
+      expect(result).toEqual([{
+        proposalGameId: 'pg-1',
+        game: { id: 42, name: 'Gloomhaven' },
+        voteCount: 3,
+        votedByMe: true,
+      }]);
+      expect(mockGameVotes.existsBy).toHaveBeenCalledWith({ proposalGameId: 'pg-1', userId: USER_ID });
     });
   });
 
