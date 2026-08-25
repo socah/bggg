@@ -61,12 +61,22 @@ export class GroupsService {
 
   // Reuses findOne's existing 404-vs-403 access check — same "look but
   // don't touch" read access every role gets, no stricter check needed
-  // since this is read-only.
-  async getMembers(id: string, requestingUserId: string): Promise<KeycloakUserInfo[]> {
+  // since this is read-only. Each member's group_members.role rides along
+  // on the response so clients can gate management UI on it without an
+  // extra endpoint.
+  async getMembers(
+    id: string,
+    requestingUserId: string,
+  ): Promise<Array<KeycloakUserInfo & { role: string }>> {
     await this.findOne(id, requestingUserId);
 
     const memberships = await this.members.findBy({ groupId: id });
-    return Promise.all(memberships.map((m) => this.keycloakAdmin.getUser(m.userId)));
+    return Promise.all(
+      memberships.map(async (m) => ({
+        ...(await this.keycloakAdmin.getUser(m.userId)),
+        role: m.role,
+      })),
+    );
   }
 
   async create(dto: CreateGroupDto, requestingUserId: string): Promise<Group> {

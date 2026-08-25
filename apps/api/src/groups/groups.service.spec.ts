@@ -308,7 +308,7 @@ describe('GroupsService', () => {
   // ── getMembers ───────────────────────────────────────────────────────────
 
   describe('getMembers', () => {
-    it('should return display names for every member, after checking access', async () => {
+    it('should return display names AND group roles for every member, after checking access', async () => {
       const group: Group = { id: 'group-1', name: 'Chess Club', ownerId: OWNER_ID, isSolo: false, createdAt: new Date() };
       mockRepository.findOneBy.mockResolvedValue(group);
       mockMembersRepository.findOneBy.mockResolvedValue({
@@ -324,12 +324,10 @@ describe('GroupsService', () => {
 
       const result = await service.getMembers('group-1', OWNER_ID);
 
-      // findOne's own 404/403 check runs first — reused rather than
-      // reimplemented, same pattern as update()/remove().
       expect(mockRepository.findOneBy).toHaveBeenCalledWith({ id: 'group-1' });
       expect(result).toEqual([
-        { id: 'user-a', displayName: 'Alice' },
-        { id: 'user-b', displayName: 'Bob' },
+        { id: 'user-a', displayName: 'Alice', role: 'owner' },
+        { id: 'user-b', displayName: 'Bob', role: 'member' },
       ]);
     });
 
