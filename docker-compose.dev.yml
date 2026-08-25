@@ -19,6 +19,12 @@ services:
     # lives in git, not in admin-UI clicks that vanish when the container
     # is recreated.
     command: start-dev --import-realm
+    volumes:
+      # Dev-only seeding helper ('make seed-user' exec's it inside this
+      # container): realm imports only apply on first boot, and the realm
+      # file is shared with prod, so the throwaway dev login lives in a
+      # mounted script rather than boardgame-realm.json.
+      - ./infra/keycloak/seed-dev-user.sh:/seed-dev-user.sh:ro
     # 8080: Keycloak's own HTTP port (login pages, token endpoint, JWKS).
     # Next.js and NestJS both reach it at http://localhost:8080 in dev —
     # direct access, bypassing Traefik entirely (dev doesn't run Traefik/
