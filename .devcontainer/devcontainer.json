@@ -19,7 +19,11 @@
     // created, with nothing installed by hand. No official devcontainers/
     // feature exists for this CLI, so this is a community one (same as the
     // ansible feature above).
-    "ghcr.io/skriptfabrik/devcontainer-features/infisical-cli:1": {}
+    "ghcr.io/skriptfabrik/devcontainer-features/infisical-cli:1": {},
+    // Installs the 'opencode' AI coding assistant CLI (pre-compiled binary
+    // from GitHub releases into /usr/local/bin). The Superpowers plugin it
+    // runs is wired up in the project-level opencode.json.
+    "ghcr.io/devcontainer-community/devcontainer-features/opencode.ai:1": {}
   },
 
   // Extensions installed inside the container, not on the host.
@@ -37,7 +41,13 @@
 
   // 3000 — Next.js web app (the browser-facing UI)
   // 3001 — NestJS API (start with PORT=3001 npm run start:dev in apps/api)
-  "forwardPorts": [3000, 3001],
+  // 8080 — Keycloak: the OIDC login redirect sends the BROWSER to
+  // AUTH_KEYCLOAK_ISSUER (localhost:8080) before any app code runs, so if
+  // this port isn't forwarded the host browser dead-ends at the login step.
+  // It must be listed explicitly: auto-detection can't see it, because the
+  // listener belongs to Keycloak's container under Docker-in-Docker, not to
+  // a process in this devcontainer.
+  "forwardPorts": [3000, 3001, 8080],
 
   // Runs once after the container is created and project files are mounted.
   // npm install is here (not in a Dockerfile) because it needs package.json,
