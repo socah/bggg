@@ -258,6 +258,12 @@ export class SchedulingService {
       throw new ConflictException('Proposal is already in collecting status');
     }
 
+    // Terminal state (see cancel()) — undo must not resurrect a cancelled
+    // proposal.
+    if (proposal.status === 'cancelled') {
+      throw new ConflictException('A cancelled proposal cannot be un-cancelled');
+    }
+
     // Delete the play_sessions row BEFORE the proposal loses its
     // 'confirmed' status — a confirmed-status session backed by a
     // collecting proposal is exactly the inconsistency this ordering

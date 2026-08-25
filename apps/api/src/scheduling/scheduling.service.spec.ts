@@ -138,5 +138,12 @@ describe('SchedulingService', () => {
 
       await expect(service.cancel(PROPOSAL_ID, USER_ID)).rejects.toBeInstanceOf(ForbiddenException);
     });
+
+    it('rejects undo on a cancelled proposal', async () => {
+      mockProposals.findOneBy.mockResolvedValue({ ...baseProposal(), status: 'cancelled' });
+
+      await expect(service.undo(PROPOSAL_ID, USER_ID)).rejects.toBeInstanceOf(ConflictException);
+      expect(mockProposals.save).not.toHaveBeenCalled();
+    });
   });
 });
