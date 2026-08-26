@@ -6,6 +6,7 @@ import { useGroupMembers } from '@/hooks/use-group-members';
 import { useProposalActions } from '@/hooks/use-proposal-actions';
 import { ProposalLifecycleActions } from '@/components/proposal-lifecycle-actions';
 import { ProposalRsvpSection } from '@/components/proposal-rsvp-section';
+import { ProposalGamesSection } from '@/components/proposal-games-section';
 import { Dialog, DialogSheetContent, DialogClose, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 
@@ -121,19 +122,12 @@ export function ProposalDetailPanel({ proposalId, onClose, onChanged }: Proposal
                 </ul>
               </div>
 
-              <div>
-                <div className="font-medium">Suggested games</div>
-                <ul className="flex flex-col gap-1">
-                  {detail.games.map(({ game, voteCount }) => (
-                    <li key={game.id} className="flex items-center gap-2">
-                      {game.name}
-                      <Badge>
-                        {voteCount} vote{voteCount === 1 ? '' : 's'}
-                      </Badge>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              <ProposalGamesSection
+                proposalId={detail.proposal.id}
+                groupId={detail.proposal.groupId}
+                proposalStatus={detail.proposal.status}
+                onChanged={onChanged}
+              />
 
               <ProposalLifecycleActions proposal={detail.proposal} canManage={canManage} actions={actions} />
             </div>
