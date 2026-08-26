@@ -5,6 +5,7 @@ import { useProposalDetail } from '@/hooks/use-proposal-detail';
 import { useGroupMembers } from '@/hooks/use-group-members';
 import { useProposalActions } from '@/hooks/use-proposal-actions';
 import { ProposalLifecycleActions } from '@/components/proposal-lifecycle-actions';
+import { ProposalRsvpSection } from '@/components/proposal-rsvp-section';
 import { Dialog, DialogSheetContent, DialogClose, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 
@@ -72,6 +73,13 @@ export function ProposalDetailPanel({ proposalId, onClose, onChanged }: Proposal
                   <div className="text-text-muted">Host: {nameFor(detail.proposal.hostId)}</div>
                 )}
               </div>
+
+              <ProposalRsvpSection
+                proposalId={detail.proposal.id}
+                proposalStatus={detail.proposal.status}
+                myRsvp={detail.rsvps.find((r) => r.userId === myId)}
+                actions={actions}
+              />
 
               <div>
                 <div className="font-medium">RSVPs</div>
