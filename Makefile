@@ -2,13 +2,20 @@
 # already tells plain 'docker compose' which override file to merge in, so no
 # '-f'/'--env-file' flags are needed here the way deploy-prod below needs both.
 .DEFAULT_GOAL := help
-.PHONY: help deploy-dev deploy-prod dev-setup seed-user sync-secrets db-migrate dev-up dev-stop dev-status
+.PHONY: help deploy-dev deploy-prod dev-setup seed-user sync-secrets db-migrate dev-up dev-stop dev-status dev-down
 
 help:
-	@echo "Available targets: deploy-dev deploy-prod dev-setup dev-stop dev-status seed-user sync-secrets db-migrate"
+	@echo "Available targets: deploy-dev deploy-prod dev-setup dev-down dev-stop dev-status seed-user sync-secrets db-migrate"
 
 deploy-dev:
 	docker compose up -d --build
+
+# Stops the whole Docker Compose stack (traefik, keycloak, vault, db, api/web
+# containers) and removes its containers/networks. Volumes are kept, so the
+# dev database survives. Swap stacks between checkouts: 'make dev-down' here,
+# 'make dev-setup' in the other checkout, and back.
+dev-down:
+	docker compose down
 
 # One-command local setup: bring the whole dev stack up (db, keycloak, vault),
 # seed the throwaway login (username 'user', password 'user'), sync the
