@@ -1,5 +1,6 @@
 import { ComingSoon } from '@/components/coming-soon';
 import { AppearanceSettings } from '@/components/appearance-settings';
+import { CalendarFeedSettings } from '@/components/calendar-feed-settings';
 
 export default function PersonalProfilePage() {
   return (
@@ -8,6 +9,12 @@ export default function PersonalProfilePage() {
         <h2 className="font-display text-xl">Appearance</h2>
         <div className="mt-4">
           <AppearanceSettings />
+        </div>
+      </section>
+      <section>
+        <h2 className="font-display text-xl">Calendar feed</h2>
+        <div className="mt-4">
+          <CalendarFeedSettings />
         </div>
       </section>
       <ComingSoon label="Profile" />
