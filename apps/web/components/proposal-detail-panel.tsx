@@ -84,11 +84,40 @@ export function ProposalDetailPanel({ proposalId, onClose, onChanged }: Proposal
               <div>
                 <div className="font-medium">RSVPs</div>
                 <ul>
-                  {detail.rsvps.map((rsvp) => (
-                    <li key={rsvp.userId}>
-                      {nameFor(rsvp.userId)} — {rsvp.status}
-                    </li>
-                  ))}
+                  {detail.rsvps.map((rsvp) => {
+                    const isHost = detail.proposal.hostId === rsvp.userId;
+                    const canMakeHost =
+                      canManage &&
+                      detail.proposal.status !== 'cancelled' &&
+                      rsvp.status === 'yes';
+                    return (
+                      <li key={rsvp.userId} className="flex items-center gap-2">
+                        <span>{nameFor(rsvp.userId)} — {rsvp.status}</span>
+                        {isHost && <Badge>Host</Badge>}
+                        {canManage && rsvp.confirmed && <Badge>Locked in</Badge>}
+                        {canMakeHost && !isHost && (
+                          <button
+                            type="button"
+                            className="text-xs text-text-muted underline"
+                            disabled={actions.pendingAction !== null}
+                            onClick={() => void actions.setHost(detail.proposal.id, rsvp.userId)}
+                          >
+                            Make host
+                          </button>
+                        )}
+                        {canManage && isHost && detail.proposal.status !== 'cancelled' && (
+                          <button
+                            type="button"
+                            className="text-xs text-text-muted underline"
+                            disabled={actions.pendingAction !== null}
+                            onClick={() => void actions.clearHost(detail.proposal.id)}
+                          >
+                            Clear host
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
 
