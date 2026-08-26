@@ -72,6 +72,7 @@ export async function apiMutate(
     try {
       const data = await response.json();
       if (typeof data?.message === 'string') message = data.message;
+      else if (Array.isArray(data?.message)) message = data.message.join('; ');
     } catch {
       // Non-JSON error body — statusText is the best we have.
     }

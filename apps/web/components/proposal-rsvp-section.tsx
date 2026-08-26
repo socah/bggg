@@ -138,6 +138,7 @@ export function ProposalRsvpSection({ proposalId, proposalStatus, myRsvp, action
                 Save hours
               </Button>
               {!myRsvp && <span className="text-xs text-text-muted">(saves your answer as Yes)</span>}
+              <span className="text-xs text-text-muted">(times in UTC)</span>
             </div>
           )}
         </div>

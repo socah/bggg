@@ -117,12 +117,12 @@ describe('SchedulingService', () => {
     });
   });
 
-  describe('cancel', () => {
-    const baseProposal = (): PlaySessionProposal => ({
-      id: PROPOSAL_ID, groupId: GROUP_ID, createdBy: USER_ID, proposedDate: '2026-08-30',
-      hostId: null, status: 'collecting', confirmedStart: null, confirmedEnd: null, createdAt: new Date(),
-    });
+  const baseProposal = (): PlaySessionProposal => ({
+    id: PROPOSAL_ID, groupId: GROUP_ID, createdBy: USER_ID, proposedDate: '2026-08-30',
+    hostId: null, status: 'collecting', confirmedStart: null, confirmedEnd: null, createdAt: new Date(),
+  });
 
+  describe('cancel', () => {
     it('cancels a collecting proposal without touching play_sessions', async () => {
       mockProposals.findOneBy.mockResolvedValue(baseProposal());
       mockProposals.save.mockImplementation(async (p: PlaySessionProposal) => p);
@@ -158,6 +158,16 @@ describe('SchedulingService', () => {
       );
     });
 
+    it('cancels a confirming proposal without touching play_sessions', async () => {
+      mockProposals.findOneBy.mockResolvedValue({ ...baseProposal(), status: 'confirming' as const });
+      mockProposals.save.mockImplementation(async (p: PlaySessionProposal) => p);
+
+      const result = await service.cancel(PROPOSAL_ID, USER_ID);
+
+      expect(result.status).toBe('cancelled');
+      expect(mockSessions.findOneBy).not.toHaveBeenCalled();
+    });
+
     it('rejects cancelling an already-cancelled proposal', async () => {
       mockProposals.findOneBy.mockResolvedValue({ ...baseProposal(), status: 'cancelled' });
 
@@ -172,7 +182,9 @@ describe('SchedulingService', () => {
 
       await expect(service.cancel(PROPOSAL_ID, USER_ID)).rejects.toBeInstanceOf(ForbiddenException);
     });
+  });
 
+  describe('undo', () => {
     it('rejects undo on a cancelled proposal', async () => {
       mockProposals.findOneBy.mockResolvedValue({ ...baseProposal(), status: 'cancelled' });
 
