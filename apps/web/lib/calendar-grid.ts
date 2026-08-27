@@ -40,6 +40,11 @@ export function toDateKey(date: Date): string {
   ).padStart(2, '0')}`;
 }
 
+export function weekIndexForDate(grid: CalendarDay[], dateKey: string): number | null {
+  const index = grid.findIndex(({ date }) => toDateKey(date) === dateKey);
+  return index === -1 ? null : Math.floor(index / 7);
+}
+
 // The date a proposal is placed on — see the design spec's "Placement
 // rule": confirmedStart's date once one exists, else proposedDate.
 //

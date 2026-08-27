@@ -12,6 +12,7 @@ export function GroupCalendarView({ groupId }: { groupId: string }) {
   const { proposals, loading, error, retry } = useGroupProposals(groupId);
   const { groups } = useGroups();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
 
   // Any successful panel action can move badges between days (finalize
@@ -38,7 +39,12 @@ export function GroupCalendarView({ groupId }: { groupId: string }) {
           </button>
         </p>
       )}
-      <CalendarMonthGrid proposals={proposals} onSelectProposal={(proposal) => setSelectedId(proposal.id)} />
+      <CalendarMonthGrid
+        proposals={proposals}
+        selectedDateKey={selectedDateKey ?? undefined}
+        onSelectDate={setSelectedDateKey}
+        onSelectProposal={(proposal) => setSelectedId(proposal.id)}
+      />
       <ProposalDetailPanel proposalId={selectedId} onClose={() => setSelectedId(null)} onChanged={refreshAll} />
 
       <CreateProposalDialog

@@ -12,6 +12,7 @@ export default function PersonalCalendarPage() {
   const { proposals, loading, error, retry } = useAggregateProposals();
   const { groups } = useGroups();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
 
   return (
@@ -32,7 +33,12 @@ export default function PersonalCalendarPage() {
           </button>
         </p>
       )}
-      <CalendarMonthGrid proposals={proposals} onSelectProposal={(proposal) => setSelectedId(proposal.id)} />
+      <CalendarMonthGrid
+        proposals={proposals}
+        selectedDateKey={selectedDateKey ?? undefined}
+        onSelectDate={setSelectedDateKey}
+        onSelectProposal={(proposal) => setSelectedId(proposal.id)}
+      />
       <ProposalDetailPanel proposalId={selectedId} onClose={() => setSelectedId(null)} onChanged={retry} />
 
       <CreateProposalDialog
