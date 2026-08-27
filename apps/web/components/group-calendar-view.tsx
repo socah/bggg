@@ -2,18 +2,19 @@
 
 import { useState } from 'react';
 import { useGroupProposals } from '@/hooks/use-proposals';
-import { useGroups } from '@/hooks/use-groups';
 import { CalendarMonthGrid } from '@/components/calendar-month-grid';
 import { ProposalDetailPanel } from '@/components/proposal-detail-panel';
-import { CreateProposalDialog } from '@/components/create-proposal-dialog';
-import { Button } from '@/components/ui/button';
+import { CreateProposalInlineForm } from '@/components/create-proposal-inline-form';
+import { placementDateKey } from '@/lib/calendar-grid';
+
+type CalendarSelection =
+  | { kind: 'draft'; dateKey: string }
+  | { kind: 'proposal'; id: string; dateKey: string }
+  | null;
 
 export function GroupCalendarView({ groupId }: { groupId: string }) {
   const { proposals, loading, error, retry } = useGroupProposals(groupId);
-  const { groups } = useGroups();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
+  const [selection, setSelection] = useState<CalendarSelection>(null);
 
   // Any successful panel action can move badges between days (finalize
   // re-dates placement, undo/cancel removes them) — bump the list too.
@@ -23,12 +24,7 @@ export function GroupCalendarView({ groupId }: { groupId: string }) {
 
   return (
     <div>
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="font-display text-lg">Schedule</h2>
-        <Button type="button" className="px-3 py-1 text-xs" onClick={() => setCreateOpen(true)}>
-          + New proposal
-        </Button>
-      </div>
+      <h2 className="mb-3 font-display text-lg">Schedule</h2>
 
       {loading && <p>Loading this group&apos;s schedule…</p>}
       {error && (
@@ -41,20 +37,29 @@ export function GroupCalendarView({ groupId }: { groupId: string }) {
       )}
       <CalendarMonthGrid
         proposals={proposals}
-        selectedDateKey={selectedDateKey ?? undefined}
-        onSelectDate={setSelectedDateKey}
-        onSelectProposal={(proposal) => setSelectedId(proposal.id)}
-      />
-      <ProposalDetailPanel proposalId={selectedId} onClose={() => setSelectedId(null)} onChanged={refreshAll} />
-
-      <CreateProposalDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        groups={groups.length > 0 ? groups : [{ id: groupId, name: 'This group', ownerId: '', isSolo: false, createdAt: '' }]}
-        defaultGroupId={groupId}
-        onCreated={(created) => {
-          setSelectedId(created.id);
-          refreshAll();
+        selectedDateKey={selection?.dateKey}
+        onSelectDate={(dateKey) => setSelection({ kind: 'draft', dateKey })}
+        onSelectProposal={(proposal) =>
+          setSelection({ kind: 'proposal', id: proposal.id, dateKey: placementDateKey(proposal) })
+        }
+        renderInlineContent={() => {
+          if (!selection) return null;
+          if (selection.kind === 'draft') {
+            return (
+              <CreateProposalInlineForm
+                key={selection.dateKey}
+                date={selection.dateKey}
+                groups={[]}
+                defaultGroupId={groupId}
+                onCreated={(created) => {
+                  setSelection({ kind: 'proposal', id: created.id, dateKey: placementDateKey(created) });
+                  refreshAll();
+                }}
+                onCancel={() => setSelection(null)}
+              />
+            );
+          }
+          return <ProposalDetailPanel proposalId={selection.id} onClose={() => setSelection(null)} onChanged={refreshAll} />;
         }}
       />
     </div>

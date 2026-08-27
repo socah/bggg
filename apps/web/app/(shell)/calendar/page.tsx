@@ -5,24 +5,22 @@ import { useAggregateProposals } from '@/hooks/use-proposals';
 import { useGroups } from '@/hooks/use-groups';
 import { CalendarMonthGrid } from '@/components/calendar-month-grid';
 import { ProposalDetailPanel } from '@/components/proposal-detail-panel';
-import { CreateProposalDialog } from '@/components/create-proposal-dialog';
-import { Button } from '@/components/ui/button';
+import { CreateProposalInlineForm } from '@/components/create-proposal-inline-form';
+import { placementDateKey } from '@/lib/calendar-grid';
+
+type CalendarSelection =
+  | { kind: 'draft'; dateKey: string }
+  | { kind: 'proposal'; id: string; dateKey: string }
+  | null;
 
 export default function PersonalCalendarPage() {
   const { proposals, loading, error, retry } = useAggregateProposals();
   const { groups } = useGroups();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
+  const [selection, setSelection] = useState<CalendarSelection>(null);
 
   return (
     <div>
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="font-display text-lg">My schedule</h2>
-        <Button type="button" className="px-3 py-1 text-xs" onClick={() => setCreateOpen(true)}>
-          + New proposal
-        </Button>
-      </div>
+      <h2 className="mb-3 font-display text-lg">My schedule</h2>
 
       {loading && <p>Loading your schedule…</p>}
       {error && (
@@ -35,19 +33,28 @@ export default function PersonalCalendarPage() {
       )}
       <CalendarMonthGrid
         proposals={proposals}
-        selectedDateKey={selectedDateKey ?? undefined}
-        onSelectDate={setSelectedDateKey}
-        onSelectProposal={(proposal) => setSelectedId(proposal.id)}
-      />
-      <ProposalDetailPanel proposalId={selectedId} onClose={() => setSelectedId(null)} onChanged={retry} />
-
-      <CreateProposalDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        groups={groups}
-        onCreated={(created) => {
-          setSelectedId(created.id);
-          retry();
+        selectedDateKey={selection?.dateKey}
+        onSelectDate={(dateKey) => setSelection({ kind: 'draft', dateKey })}
+        onSelectProposal={(proposal) =>
+          setSelection({ kind: 'proposal', id: proposal.id, dateKey: placementDateKey(proposal) })
+        }
+        renderInlineContent={() => {
+          if (!selection) return null;
+          if (selection.kind === 'draft') {
+            return (
+              <CreateProposalInlineForm
+                key={selection.dateKey}
+                date={selection.dateKey}
+                groups={groups}
+                onCreated={(created) => {
+                  setSelection({ kind: 'proposal', id: created.id, dateKey: placementDateKey(created) });
+                  retry();
+                }}
+                onCancel={() => setSelection(null)}
+              />
+            );
+          }
+          return <ProposalDetailPanel proposalId={selection.id} onClose={() => setSelection(null)} onChanged={retry} />;
         }}
       />
     </div>
