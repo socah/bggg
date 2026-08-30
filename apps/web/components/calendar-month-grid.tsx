@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { buildMonthGrid, placementDateKey, toDateKey, type CalendarDay } from '@/lib/calendar-grid';
 import type { Group, Proposal, ProposalWithGroup } from '@/lib/types';
 import { InlineProposalPanel } from '@/components/inline-proposal-panel';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/cn';
 
 const MAX_BADGES_PER_DAY = 3;
@@ -23,38 +24,43 @@ function badgeLabel(item: CalendarItem): string {
   return hasGroupName(item) ? `${base} — ${item.groupName}` : base;
 }
 
-export type ActiveSelection =
-  | { type: 'draft'; date: string }
-  | { type: 'proposal'; proposalId: string; date: string }
-  | null;
-
 interface WeekRowExpanderProps {
   isExpanded: boolean;
-  selection: ActiveSelection;
+  date: string | null;
+  dayProposals: CalendarItem[];
+  draftOpen: boolean;
+  onSetDraftOpen: (open: boolean) => void;
   groups: Group[];
   defaultGroupId?: string;
   onProposalsChanged?: () => void;
-  onSelectCreatedProposal: (proposal: Proposal) => void;
   onClose: () => void;
 }
 
 function WeekRowExpander({
   isExpanded,
-  selection,
+  date,
+  dayProposals,
+  draftOpen,
+  onSetDraftOpen,
   groups,
   defaultGroupId,
   onProposalsChanged,
-  onSelectCreatedProposal,
   onClose,
 }: WeekRowExpanderProps) {
-  const [cachedSelection, setCachedSelection] = useState<ActiveSelection>(selection);
+  const [cachedDate, setCachedDate] = useState<string | null>(date);
+  const [cachedProposals, setCachedProposals] = useState<CalendarItem[]>(dayProposals);
+  const [cachedDraftOpen, setCachedDraftOpen] = useState<boolean>(draftOpen);
 
-  // Keep the last valid selection cached during collapse animation
-  if (selection && selection !== cachedSelection) {
-    setCachedSelection(selection);
+  // Keep last state cached during collapse transition
+  if (date && date !== cachedDate) {
+    setCachedDate(date);
+    setCachedProposals(dayProposals);
+    setCachedDraftOpen(draftOpen);
   }
 
-  const current = isExpanded ? selection : cachedSelection;
+  const currentDate = isExpanded ? date : cachedDate;
+  const currentProposals = isExpanded ? dayProposals : cachedProposals;
+  const currentDraftOpen = isExpanded ? draftOpen : cachedDraftOpen;
 
   return (
     <div
@@ -64,16 +70,59 @@ function WeekRowExpander({
       )}
     >
       <div className="overflow-hidden">
-        {current && (
-          <InlineProposalPanel
-            proposalId={current.type === 'proposal' ? current.proposalId : null}
-            draftDate={current.type === 'draft' ? current.date : undefined}
-            groups={groups}
-            defaultGroupId={defaultGroupId}
-            onClose={onClose}
-            onProposalsChanged={onProposalsChanged}
-            onSelectProposal={onSelectCreatedProposal}
-          />
+        {currentDate && (
+          currentProposals.length === 0 ? (
+            <InlineProposalPanel
+              proposalId={null}
+              draftDate={currentDate}
+              groups={groups}
+              defaultGroupId={defaultGroupId}
+              onClose={onClose}
+              onProposalsChanged={onProposalsChanged}
+              onSelectProposal={() => {
+                onProposalsChanged?.();
+              }}
+            />
+          ) : (
+            <div className="flex flex-col gap-3">
+              {currentProposals.map((proposal) => (
+                <InlineProposalPanel
+                  key={proposal.id}
+                  proposalId={proposal.id}
+                  groups={groups}
+                  defaultGroupId={defaultGroupId}
+                  onClose={onClose}
+                  onProposalsChanged={onProposalsChanged}
+                />
+              ))}
+
+              {currentDraftOpen ? (
+                <InlineProposalPanel
+                  proposalId={null}
+                  draftDate={currentDate}
+                  groups={groups}
+                  defaultGroupId={defaultGroupId}
+                  onClose={() => onSetDraftOpen(false)}
+                  onProposalsChanged={onProposalsChanged}
+                  onSelectProposal={() => {
+                    onSetDraftOpen(false);
+                    onProposalsChanged?.();
+                  }}
+                />
+              ) : (
+                <div className="flex justify-start">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="text-xs px-3 py-1"
+                    onClick={() => onSetDraftOpen(true)}
+                  >
+                    + Add proposal
+                  </Button>
+                </div>
+              )}
+            </div>
+          )
         )}
       </div>
     </div>
@@ -94,7 +143,8 @@ export function CalendarMonthGrid({
   onProposalsChanged,
 }: CalendarMonthGridProps) {
   const [monthAnchor, setMonthAnchor] = useState<Date>(() => new Date());
-  const [activeSelection, setActiveSelection] = useState<ActiveSelection>(null);
+  const [activeDate, setActiveDate] = useState<string | null>(null);
+  const [draftOpen, setDraftOpen] = useState(false);
 
   const grid = useMemo(() => buildMonthGrid(monthAnchor), [monthAnchor]);
 
@@ -119,11 +169,21 @@ export function CalendarMonthGrid({
 
   // Determine which week row (if any) contains the currently selected date
   const activeWeekIndex = useMemo(() => {
-    if (!activeSelection) return -1;
+    if (!activeDate) return -1;
     return weeks.findIndex((week) =>
-      week.some((day) => toDateKey(day.date) === activeSelection.date)
+      week.some((day) => toDateKey(day.date) === activeDate)
     );
-  }, [activeSelection, weeks]);
+  }, [activeDate, weeks]);
+
+  function handleSelectDate(key: string) {
+    if (activeDate === key) {
+      setActiveDate(null);
+      setDraftOpen(false);
+    } else {
+      setActiveDate(key);
+      setDraftOpen(false);
+    }
+  }
 
   return (
     <div>
@@ -131,7 +191,8 @@ export function CalendarMonthGrid({
         <button
           type="button"
           onClick={() => {
-            setActiveSelection(null);
+            setActiveDate(null);
+            setDraftOpen(false);
             setMonthAnchor((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1));
           }}
           className="text-xs text-text-muted hover:text-text"
@@ -144,7 +205,8 @@ export function CalendarMonthGrid({
         <button
           type="button"
           onClick={() => {
-            setActiveSelection(null);
+            setActiveDate(null);
+            setDraftOpen(false);
             setMonthAnchor((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1));
           }}
           className="text-xs text-text-muted hover:text-text"
@@ -154,7 +216,8 @@ export function CalendarMonthGrid({
         <button
           type="button"
           onClick={() => {
-            setActiveSelection(null);
+            setActiveDate(null);
+            setDraftOpen(false);
             setMonthAnchor(new Date());
           }}
           className="text-xs text-text-muted hover:text-text underline"
@@ -174,6 +237,7 @@ export function CalendarMonthGrid({
       <div className="flex flex-col gap-1">
         {weeks.map((week, weekIndex) => {
           const isRowExpanded = activeWeekIndex === weekIndex;
+          const dayProposalsForActiveDate = activeDate ? (byDate.get(activeDate) ?? []) : [];
 
           return (
             <div key={`week-${weekIndex}`} className="flex flex-col">
@@ -183,18 +247,12 @@ export function CalendarMonthGrid({
                   const dayItems = byDate.get(key) ?? [];
                   const shown = dayItems.slice(0, MAX_BADGES_PER_DAY);
                   const overflow = dayItems.length - shown.length;
-                  const isSelected = activeSelection?.date === key;
+                  const isSelected = activeDate === key;
 
                   return (
                     <div
                       key={key}
-                      onClick={() => {
-                        setActiveSelection((prev) =>
-                          prev?.type === 'draft' && prev.date === key
-                            ? null
-                            : { type: 'draft', date: key }
-                        );
-                      }}
+                      onClick={() => handleSelectDate(key)}
                       className={cn(
                         'min-h-20 rounded border p-1 text-xs cursor-pointer transition-colors',
                         isSelected ? 'border-primary ring-1 ring-primary' : 'border-border',
@@ -210,11 +268,7 @@ export function CalendarMonthGrid({
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setActiveSelection((prev) =>
-                              prev?.type === 'proposal' && prev.proposalId === item.id
-                                ? null
-                                : { type: 'proposal', proposalId: item.id, date: key }
-                            );
+                            handleSelectDate(key);
                           }}
                           className="mt-1 block w-full truncate rounded bg-highlight px-1 text-left text-text hover:opacity-80"
                         >
@@ -227,22 +281,20 @@ export function CalendarMonthGrid({
                 })}
               </div>
 
-              {/* Inline Expander with Symmetrical Smooth Transition */}
+              {/* Inline Expander with Stacked Date Proposals */}
               <WeekRowExpander
                 isExpanded={isRowExpanded}
-                selection={isRowExpanded ? activeSelection : null}
+                date={isRowExpanded ? activeDate : null}
+                dayProposals={dayProposalsForActiveDate}
+                draftOpen={draftOpen}
+                onSetDraftOpen={setDraftOpen}
                 groups={groups}
                 defaultGroupId={defaultGroupId}
                 onProposalsChanged={onProposalsChanged}
-                onSelectCreatedProposal={(created) => {
-                  onProposalsChanged?.();
-                  setActiveSelection({
-                    type: 'proposal',
-                    proposalId: created.id,
-                    date: created.proposedDate,
-                  });
+                onClose={() => {
+                  setActiveDate(null);
+                  setDraftOpen(false);
                 }}
-                onClose={() => setActiveSelection(null)}
               />
             </div>
           );
