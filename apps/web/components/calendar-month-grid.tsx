@@ -1,8 +1,11 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { buildMonthGrid, placementDateKey, toDateKey } from '@/lib/calendar-grid';
-import type { Proposal, ProposalWithGroup } from '@/lib/types';
+import { buildMonthGrid, placementDateKey, toDateKey, type CalendarDay } from '@/lib/calendar-grid';
+import type { Group, Proposal, ProposalWithGroup } from '@/lib/types';
+import { InlineCreateProposal } from '@/components/inline-create-proposal';
+import { InlineProposalDetail } from '@/components/inline-proposal-detail';
+import { cn } from '@/lib/cn';
 
 const MAX_BADGES_PER_DAY = 3;
 
@@ -21,15 +24,36 @@ function badgeLabel(item: CalendarItem): string {
   return hasGroupName(item) ? `${base} — ${item.groupName}` : base;
 }
 
-interface CalendarMonthGridProps {
+export type ActiveSelection =
+  | { type: 'draft'; date: string }
+  | { type: 'proposal'; proposalId: string; date: string }
+  | null;
+
+export interface CalendarMonthGridProps {
   proposals: CalendarItem[];
-  onSelectProposal: (proposal: CalendarItem) => void;
+  groups?: Group[];
+  defaultGroupId?: string;
+  onProposalsChanged?: () => void;
 }
 
-export function CalendarMonthGrid({ proposals, onSelectProposal }: CalendarMonthGridProps) {
+export function CalendarMonthGrid({
+  proposals,
+  groups = [],
+  defaultGroupId,
+  onProposalsChanged,
+}: CalendarMonthGridProps) {
   const [monthAnchor, setMonthAnchor] = useState<Date>(() => new Date());
+  const [activeSelection, setActiveSelection] = useState<ActiveSelection>(null);
 
   const grid = useMemo(() => buildMonthGrid(monthAnchor), [monthAnchor]);
+
+  const weeks = useMemo(() => {
+    const rows: CalendarDay[][] = [];
+    for (let i = 0; i < grid.length; i += 7) {
+      rows.push(grid.slice(i, i + 7));
+    }
+    return rows;
+  }, [grid]);
 
   const byDate = useMemo(() => {
     const map = new Map<string, CalendarItem[]>();
@@ -42,28 +66,52 @@ export function CalendarMonthGrid({ proposals, onSelectProposal }: CalendarMonth
     return map;
   }, [proposals]);
 
+  // Determine which week row (if any) contains the currently selected date
+  const activeWeekIndex = useMemo(() => {
+    if (!activeSelection) return -1;
+    return weeks.findIndex((week) =>
+      week.some((day) => toDateKey(day.date) === activeSelection.date)
+    );
+  }, [activeSelection, weeks]);
+
   return (
     <div>
       <div className="mb-2 flex items-center justify-between">
         <button
           type="button"
-          onClick={() => setMonthAnchor((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1))}
+          onClick={() => {
+            setActiveSelection(null);
+            setMonthAnchor((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1));
+          }}
+          className="text-xs text-text-muted hover:text-text"
         >
           ← Prev
         </button>
-        <span className="font-semibold">
+        <span className="font-semibold text-sm">
           {monthAnchor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
         </span>
         <button
           type="button"
-          onClick={() => setMonthAnchor((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1))}
+          onClick={() => {
+            setActiveSelection(null);
+            setMonthAnchor((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1));
+          }}
+          className="text-xs text-text-muted hover:text-text"
         >
           Next →
         </button>
-        <button type="button" onClick={() => setMonthAnchor(new Date())}>
+        <button
+          type="button"
+          onClick={() => {
+            setActiveSelection(null);
+            setMonthAnchor(new Date());
+          }}
+          className="text-xs text-text-muted hover:text-text underline"
+        >
           Today
         </button>
       </div>
+
       <div className="mb-1 grid grid-cols-7 gap-1">
         {WEEKDAY_INITIALS.map((initial, index) => (
           <div key={`${initial}-${index}`} className="text-center text-xs font-medium text-text-muted">
@@ -71,31 +119,86 @@ export function CalendarMonthGrid({ proposals, onSelectProposal }: CalendarMonth
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-7 gap-1">
-        {grid.map(({ date, inMonth }) => {
-          const key = toDateKey(date);
-          const dayItems = byDate.get(key) ?? [];
-          const shown = dayItems.slice(0, MAX_BADGES_PER_DAY);
-          const overflow = dayItems.length - shown.length;
+
+      <div className="flex flex-col gap-1">
+        {weeks.map((week, weekIndex) => {
+          const isRowExpanded = activeWeekIndex === weekIndex;
+
           return (
-            <div
-              key={key}
-              className={`min-h-20 rounded border border-border p-1 text-xs ${
-                inMonth ? 'bg-surface-raised' : 'bg-surface text-text-muted'
-              }`}
-            >
-              <div className="font-medium">{date.getDate()}</div>
-              {shown.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => onSelectProposal(item)}
-                  className="mt-1 block w-full truncate rounded bg-highlight px-1 text-left text-text"
-                >
-                  {badgeLabel(item)}
-                </button>
-              ))}
-              {overflow > 0 && <div className="mt-1 text-text-muted">+{overflow} more</div>}
+            <div key={`week-${weekIndex}`} className="flex flex-col">
+              <div className="grid grid-cols-7 gap-1">
+                {week.map(({ date, inMonth }) => {
+                  const key = toDateKey(date);
+                  const dayItems = byDate.get(key) ?? [];
+                  const shown = dayItems.slice(0, MAX_BADGES_PER_DAY);
+                  const overflow = dayItems.length - shown.length;
+                  const isSelected = activeSelection?.date === key;
+
+                  return (
+                    <div
+                      key={key}
+                      onClick={() => {
+                        setActiveSelection({ type: 'draft', date: key });
+                      }}
+                      className={cn(
+                        'min-h-20 rounded border p-1 text-xs cursor-pointer transition-colors',
+                        isSelected ? 'border-primary ring-1 ring-primary' : 'border-border',
+                        inMonth ? 'bg-surface-raised hover:bg-surface' : 'bg-surface text-text-muted hover:bg-surface-raised/50'
+                      )}
+                    >
+                      <div className="flex items-center justify-between font-medium">
+                        <span>{date.getDate()}</span>
+                      </div>
+                      {shown.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveSelection({
+                              type: 'proposal',
+                              proposalId: item.id,
+                              date: key,
+                            });
+                          }}
+                          className="mt-1 block w-full truncate rounded bg-highlight px-1 text-left text-text hover:opacity-80"
+                        >
+                          {badgeLabel(item)}
+                        </button>
+                      ))}
+                      {overflow > 0 && <div className="mt-1 text-text-muted">+{overflow} more</div>}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Inline Expander Slot */}
+              {isRowExpanded && activeSelection && (
+                <div className="my-2">
+                  {activeSelection.type === 'draft' ? (
+                    <InlineCreateProposal
+                      date={activeSelection.date}
+                      groups={groups}
+                      defaultGroupId={defaultGroupId}
+                      onCreated={(created) => {
+                        onProposalsChanged?.();
+                        setActiveSelection({
+                          type: 'proposal',
+                          proposalId: created.id,
+                          date: created.proposedDate,
+                        });
+                      }}
+                      onCancel={() => setActiveSelection(null)}
+                    />
+                  ) : (
+                    <InlineProposalDetail
+                      proposalId={activeSelection.proposalId}
+                      onClose={() => setActiveSelection(null)}
+                      onChanged={onProposalsChanged}
+                    />
+                  )}
+                </div>
+              )}
             </div>
           );
         })}
