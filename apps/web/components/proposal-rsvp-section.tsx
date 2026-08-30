@@ -6,6 +6,7 @@ import type { ProposalActions } from '@/hooks/use-proposal-actions';
 import { hhmm, formatWindowRange } from '@/lib/datetime';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { TimePickerDialog } from '@/components/ui/time-picker-dialog';
 
 interface ProposalRsvpSectionProps {
   proposalId: string;
@@ -25,6 +26,8 @@ export function ProposalRsvpSection({ proposalId, proposalStatus, myRsvp, action
   const [hoursOpen, setHoursOpen] = useState(false);
   const [startInput, setStartInput] = useState('');
   const [endInput, setEndInput] = useState('');
+  const [timePickerTarget, setTimePickerTarget] = useState<'start' | 'end' | null>(null);
+
   // Pre-fill the hour fields from the saved RSVP whenever it changes —
   // adjusted during render (guarded by the previous value) rather than in
   // an effect, so there's no cascading render.
@@ -111,19 +114,35 @@ export function ProposalRsvpSection({ proposalId, proposalStatus, myRsvp, action
           </button>
           {hoursOpen && (
             <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
-              <input
-                type="time"
-                value={startInput}
-                onChange={(e) => setStartInput(e.target.value)}
+              <button
+                type="button"
+                onClick={() => setTimePickerTarget('start')}
+                className="rounded border border-border bg-surface px-2 py-1 text-xs hover:border-text-muted"
                 aria-label="Available from"
-              />
+              >
+                {startInput || 'Start time'}
+              </button>
               <span>–</span>
-              <input
-                type="time"
-                value={endInput}
-                onChange={(e) => setEndInput(e.target.value)}
+              <button
+                type="button"
+                onClick={() => setTimePickerTarget('end')}
+                className="rounded border border-border bg-surface px-2 py-1 text-xs hover:border-text-muted"
                 aria-label="Available until"
-              />
+              >
+                {endInput || 'End time'}
+              </button>
+              {(startInput || endInput) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStartInput('');
+                    setEndInput('');
+                  }}
+                  className="text-xs text-text-muted underline"
+                >
+                  Clear
+                </button>
+              )}
               <Button
                 type="button"
                 variant="secondary"
@@ -139,6 +158,23 @@ export function ProposalRsvpSection({ proposalId, proposalStatus, myRsvp, action
               </Button>
               {!myRsvp && <span className="text-xs text-text-muted">(saves your answer as Yes)</span>}
               <span className="text-xs text-text-muted">(times in UTC)</span>
+
+              <TimePickerDialog
+                open={timePickerTarget !== null}
+                value={timePickerTarget === 'start' ? startInput : endInput}
+                title={timePickerTarget === 'start' ? 'Available from' : 'Available until'}
+                onOpenChange={(open) => {
+                  if (!open) setTimePickerTarget(null);
+                }}
+                onConfirm={(selectedTime) => {
+                  if (timePickerTarget === 'start') {
+                    setStartInput(selectedTime);
+                  } else if (timePickerTarget === 'end') {
+                    setEndInput(selectedTime);
+                  }
+                  setTimePickerTarget(null);
+                }}
+              />
             </div>
           )}
         </div>
