@@ -3,8 +3,7 @@
 import { useMemo, useState } from 'react';
 import { buildMonthGrid, placementDateKey, toDateKey, type CalendarDay } from '@/lib/calendar-grid';
 import type { Group, Proposal, ProposalWithGroup } from '@/lib/types';
-import { InlineCreateProposal } from '@/components/inline-create-proposal';
-import { InlineProposalDetail } from '@/components/inline-proposal-detail';
+import { InlineProposalPanel } from '@/components/inline-proposal-panel';
 import { cn } from '@/lib/cn';
 
 const MAX_BADGES_PER_DAY = 3;
@@ -66,21 +65,15 @@ function WeekRowExpander({
     >
       <div className="overflow-hidden">
         {current && (
-          current.type === 'draft' ? (
-            <InlineCreateProposal
-              date={current.date}
-              groups={groups}
-              defaultGroupId={defaultGroupId}
-              onCreated={onSelectCreatedProposal}
-              onCancel={onClose}
-            />
-          ) : (
-            <InlineProposalDetail
-              proposalId={current.proposalId}
-              onClose={onClose}
-              onChanged={onProposalsChanged}
-            />
-          )
+          <InlineProposalPanel
+            proposalId={current.type === 'proposal' ? current.proposalId : null}
+            draftDate={current.type === 'draft' ? current.date : undefined}
+            groups={groups}
+            defaultGroupId={defaultGroupId}
+            onClose={onClose}
+            onProposalsChanged={onProposalsChanged}
+            onSelectProposal={onSelectCreatedProposal}
+          />
         )}
       </div>
     </div>

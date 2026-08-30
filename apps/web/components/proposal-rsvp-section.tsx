@@ -43,7 +43,7 @@ export function ProposalRsvpSection({ proposalId, proposalStatus, myRsvp, action
   if (proposalStatus === 'confirming' || proposalStatus === 'confirmed') {
     const window = formatWindowRange(myRsvp?.availableStart ?? null, myRsvp?.availableEnd ?? null);
     return (
-      <div className="border-t border-border pt-3">
+      <div>
         <div className="font-medium">Your answer</div>
         <p className="mt-1 text-text-muted">
           {myRsvp ? (
@@ -87,7 +87,7 @@ export function ProposalRsvpSection({ proposalId, proposalStatus, myRsvp, action
   }
 
   return (
-    <div className="border-t border-border pt-3">
+    <div>
       <div className="font-medium">Your answer</div>
       <div className="mt-2 flex gap-2">
         {ANSWERS.map((answer) => (
