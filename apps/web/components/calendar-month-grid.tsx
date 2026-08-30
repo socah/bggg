@@ -29,6 +29,64 @@ export type ActiveSelection =
   | { type: 'proposal'; proposalId: string; date: string }
   | null;
 
+interface WeekRowExpanderProps {
+  isExpanded: boolean;
+  selection: ActiveSelection;
+  groups: Group[];
+  defaultGroupId?: string;
+  onProposalsChanged?: () => void;
+  onSelectCreatedProposal: (proposal: Proposal) => void;
+  onClose: () => void;
+}
+
+function WeekRowExpander({
+  isExpanded,
+  selection,
+  groups,
+  defaultGroupId,
+  onProposalsChanged,
+  onSelectCreatedProposal,
+  onClose,
+}: WeekRowExpanderProps) {
+  const [cachedSelection, setCachedSelection] = useState<ActiveSelection>(selection);
+
+  // Keep the last valid selection cached during collapse animation
+  if (selection && selection !== cachedSelection) {
+    setCachedSelection(selection);
+  }
+
+  const current = isExpanded ? selection : cachedSelection;
+
+  return (
+    <div
+      className={cn(
+        'grid transition-[grid-template-rows,opacity] duration-300 ease-in-out',
+        isExpanded ? 'grid-rows-[1fr] opacity-100 my-2' : 'grid-rows-[0fr] opacity-0 my-0'
+      )}
+    >
+      <div className="overflow-hidden">
+        {current && (
+          current.type === 'draft' ? (
+            <InlineCreateProposal
+              date={current.date}
+              groups={groups}
+              defaultGroupId={defaultGroupId}
+              onCreated={onSelectCreatedProposal}
+              onCancel={onClose}
+            />
+          ) : (
+            <InlineProposalDetail
+              proposalId={current.proposalId}
+              onClose={onClose}
+              onChanged={onProposalsChanged}
+            />
+          )
+        )}
+      </div>
+    </div>
+  );
+}
+
 export interface CalendarMonthGridProps {
   proposals: CalendarItem[];
   groups?: Group[];
@@ -176,40 +234,23 @@ export function CalendarMonthGrid({
                 })}
               </div>
 
-              {/* Inline Expander with Smooth Transition */}
-              <div
-                className={cn(
-                  'grid transition-[grid-template-rows,opacity] duration-300 ease-in-out',
-                  isRowExpanded ? 'grid-rows-[1fr] opacity-100 my-2' : 'grid-rows-[0fr] opacity-0 my-0'
-                )}
-              >
-                <div className="overflow-hidden">
-                  {isRowExpanded && activeSelection && (
-                    activeSelection.type === 'draft' ? (
-                      <InlineCreateProposal
-                        date={activeSelection.date}
-                        groups={groups}
-                        defaultGroupId={defaultGroupId}
-                        onCreated={(created) => {
-                          onProposalsChanged?.();
-                          setActiveSelection({
-                            type: 'proposal',
-                            proposalId: created.id,
-                            date: created.proposedDate,
-                          });
-                        }}
-                        onCancel={() => setActiveSelection(null)}
-                      />
-                    ) : (
-                      <InlineProposalDetail
-                        proposalId={activeSelection.proposalId}
-                        onClose={() => setActiveSelection(null)}
-                        onChanged={onProposalsChanged}
-                      />
-                    )
-                  )}
-                </div>
-              </div>
+              {/* Inline Expander with Symmetrical Smooth Transition */}
+              <WeekRowExpander
+                isExpanded={isRowExpanded}
+                selection={isRowExpanded ? activeSelection : null}
+                groups={groups}
+                defaultGroupId={defaultGroupId}
+                onProposalsChanged={onProposalsChanged}
+                onSelectCreatedProposal={(created) => {
+                  onProposalsChanged?.();
+                  setActiveSelection({
+                    type: 'proposal',
+                    proposalId: created.id,
+                    date: created.proposedDate,
+                  });
+                }}
+                onClose={() => setActiveSelection(null)}
+              />
             </div>
           );
         })}
