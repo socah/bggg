@@ -41,3 +41,29 @@ export const DialogSheetContent = forwardRef<
   </DialogPrimitive.Portal>
 ));
 DialogSheetContent.displayName = 'DialogSheetContent';
+
+export const DialogContent = forwardRef<
+  React.ElementRef<typeof DialogPrimitive.Content>,
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
+>(({ className, children, style, ...props }, ref) => (
+  <DialogPrimitive.Portal>
+    <DialogOverlay />
+    <DialogPrimitive.Content
+      ref={ref}
+      className={cn(
+        'fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 bg-surface-raised p-6 rounded-md focus:outline-none max-w-sm w-full',
+        className
+      )}
+      style={{
+        border: 'var(--border-w) solid var(--border)',
+        boxShadow: 'var(--shadow-card)',
+        ...style,
+      }}
+      {...props}
+    >
+      {children}
+    </DialogPrimitive.Content>
+  </DialogPrimitive.Portal>
+));
+DialogContent.displayName = 'DialogContent';
+
