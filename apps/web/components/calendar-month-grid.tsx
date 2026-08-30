@@ -138,7 +138,11 @@ export function CalendarMonthGrid({
                     <div
                       key={key}
                       onClick={() => {
-                        setActiveSelection({ type: 'draft', date: key });
+                        setActiveSelection((prev) =>
+                          prev?.type === 'draft' && prev.date === key
+                            ? null
+                            : { type: 'draft', date: key }
+                        );
                       }}
                       className={cn(
                         'min-h-20 rounded border p-1 text-xs cursor-pointer transition-colors',
@@ -155,11 +159,11 @@ export function CalendarMonthGrid({
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setActiveSelection({
-                              type: 'proposal',
-                              proposalId: item.id,
-                              date: key,
-                            });
+                            setActiveSelection((prev) =>
+                              prev?.type === 'proposal' && prev.proposalId === item.id
+                                ? null
+                                : { type: 'proposal', proposalId: item.id, date: key }
+                            );
                           }}
                           className="mt-1 block w-full truncate rounded bg-highlight px-1 text-left text-text hover:opacity-80"
                         >
@@ -172,33 +176,40 @@ export function CalendarMonthGrid({
                 })}
               </div>
 
-              {/* Inline Expander Slot */}
-              {isRowExpanded && activeSelection && (
-                <div className="my-2">
-                  {activeSelection.type === 'draft' ? (
-                    <InlineCreateProposal
-                      date={activeSelection.date}
-                      groups={groups}
-                      defaultGroupId={defaultGroupId}
-                      onCreated={(created) => {
-                        onProposalsChanged?.();
-                        setActiveSelection({
-                          type: 'proposal',
-                          proposalId: created.id,
-                          date: created.proposedDate,
-                        });
-                      }}
-                      onCancel={() => setActiveSelection(null)}
-                    />
-                  ) : (
-                    <InlineProposalDetail
-                      proposalId={activeSelection.proposalId}
-                      onClose={() => setActiveSelection(null)}
-                      onChanged={onProposalsChanged}
-                    />
+              {/* Inline Expander with Smooth Transition */}
+              <div
+                className={cn(
+                  'grid transition-[grid-template-rows,opacity] duration-300 ease-in-out',
+                  isRowExpanded ? 'grid-rows-[1fr] opacity-100 my-2' : 'grid-rows-[0fr] opacity-0 my-0'
+                )}
+              >
+                <div className="overflow-hidden">
+                  {isRowExpanded && activeSelection && (
+                    activeSelection.type === 'draft' ? (
+                      <InlineCreateProposal
+                        date={activeSelection.date}
+                        groups={groups}
+                        defaultGroupId={defaultGroupId}
+                        onCreated={(created) => {
+                          onProposalsChanged?.();
+                          setActiveSelection({
+                            type: 'proposal',
+                            proposalId: created.id,
+                            date: created.proposedDate,
+                          });
+                        }}
+                        onCancel={() => setActiveSelection(null)}
+                      />
+                    ) : (
+                      <InlineProposalDetail
+                        proposalId={activeSelection.proposalId}
+                        onClose={() => setActiveSelection(null)}
+                        onChanged={onProposalsChanged}
+                      />
+                    )
                   )}
                 </div>
-              )}
+              </div>
             </div>
           );
         })}

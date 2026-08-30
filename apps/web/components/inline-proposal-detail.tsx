@@ -40,15 +40,25 @@ export function InlineProposalDetail({ proposalId, onClose, onChanged }: InlineP
   }
 
   return (
-    <div className="rounded-md border border-border bg-surface-raised p-4 font-body text-sm shadow-sm transition-all">
+    <div className="rounded-md border border-border bg-surface-raised p-4 font-body text-sm shadow-sm transition-all relative">
       <div className="flex items-center justify-between border-b border-border pb-2 mb-3">
-        <h3 className="font-display text-base font-semibold">Proposal Overview</h3>
+        <div className="text-xs text-text-muted">
+          {detail && (
+            <span>
+              Status: <strong className="text-text font-medium">{detail.proposal.status}</strong>
+              {' · '}Proposed by: <strong className="text-text font-medium">{nameFor(detail.proposal.createdBy)}</strong>
+              {detail.proposal.hostId && (
+                <> · Host: <strong className="text-text font-medium">{nameFor(detail.proposal.hostId)}</strong></>
+              )}
+            </span>
+          )}
+        </div>
         <Button
           type="button"
           variant="ghost"
           onClick={onClose}
-          className="h-6 w-6 p-0 text-text-muted hover:text-text"
-          aria-label="Close overview"
+          className="h-6 w-6 p-0 text-text-muted hover:text-text ml-auto"
+          aria-label="Close"
         >
           ✕
         </Button>
@@ -74,14 +84,6 @@ export function InlineProposalDetail({ proposalId, onClose, onChanged }: InlineP
       ) : (
         detail && (
           <div className="space-y-4">
-            <div>
-              <div className="font-display text-base font-medium">{detail.proposal.proposedDate}</div>
-              <div className="text-xs text-text-muted">Status: {detail.proposal.status}</div>
-              <div className="text-xs text-text-muted">Proposed by: {nameFor(detail.proposal.createdBy)}</div>
-              {detail.proposal.hostId && (
-                <div className="text-xs text-text-muted">Host: {nameFor(detail.proposal.hostId)}</div>
-              )}
-            </div>
 
             <ProposalRsvpSection
               proposalId={detail.proposal.id}
