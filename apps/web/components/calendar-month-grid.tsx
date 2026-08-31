@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { buildMonthGrid, placementDateKey, toDateKey, type CalendarDay } from '@/lib/calendar-grid';
 import type { Group, Proposal, ProposalWithGroup } from '@/lib/types';
 import { InlineProposalPanel } from '@/components/inline-proposal-panel';
@@ -50,6 +50,8 @@ function WeekRowExpander({
   const [cachedDate, setCachedDate] = useState<string | null>(date);
   const [cachedProposals, setCachedProposals] = useState<CalendarItem[]>(dayProposals);
   const [cachedDraftOpen, setCachedDraftOpen] = useState<boolean>(draftOpen);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [contentHeight, setContentHeight] = useState<number | null>(null);
 
   // Keep last state cached during collapse transition
   if (date && date !== cachedDate) {
@@ -62,14 +64,30 @@ function WeekRowExpander({
   const currentProposals = isExpanded ? dayProposals : cachedProposals;
   const currentDraftOpen = isExpanded ? draftOpen : cachedDraftOpen;
 
+  useEffect(() => {
+    if (!isExpanded || !contentRef.current) return;
+
+    const updateHeight = () => {
+      if (contentRef.current) setContentHeight(contentRef.current.scrollHeight);
+    };
+
+    updateHeight();
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(contentRef.current);
+    return () => observer.disconnect();
+  }, [isExpanded, currentDate, currentDraftOpen]);
+
   return (
     <div
       className={cn(
-        'grid transition-[grid-template-rows,opacity] duration-300 ease-in-out',
-        isExpanded ? 'grid-rows-[1fr] opacity-100 my-2' : 'grid-rows-[0fr] opacity-0 my-0'
+        'overflow-hidden transition-[height,opacity] duration-300 ease-in-out',
+        isExpanded ? 'opacity-100 my-2' : 'opacity-0 my-0'
       )}
+      style={{
+        height: isExpanded ? (contentHeight === null ? 'auto' : `${contentHeight}px`) : 0,
+      }}
     >
-      <div className="overflow-hidden">
+      <div ref={contentRef}>
         {currentDate && (
           currentProposals.length === 0 ? (
             <InlineProposalPanel
