@@ -2,10 +2,10 @@
 # already tells plain 'docker compose' which override file to merge in, so no
 # '-f'/'--env-file' flags are needed here the way deploy-prod below needs both.
 .DEFAULT_GOAL := help
-.PHONY: help deploy-dev deploy-prod dev-setup seed-user sync-secrets db-migrate dev-up dev-stop dev-status devcontainer-up devcontainer-run deploy-dev-with-user
+.PHONY: help deploy-dev deploy-prod dev-setup seed-user sync-secrets db-migrate migration-generate dev-up dev-stop dev-status devcontainer-up devcontainer-run deploy-dev-with-user
 
 help:
-	@echo "Available targets: deploy-dev deploy-prod dev-setup dev-stop dev-status seed-user sync-secrets db-migrate devcontainer-up devcontainer-run deploy-dev-with-user"
+	@echo "Available targets: deploy-dev deploy-prod dev-setup dev-stop dev-status seed-user sync-secrets db-migrate migration-generate devcontainer-up devcontainer-run deploy-dev-with-user"
 
 # Devcontainer-friendly flow: keep app servers outside Docker so VS Code's
 # forwarded ports map directly to host-browser URLs.
@@ -75,6 +75,24 @@ sync-secrets:
 # in its own table and skips them on re-run.
 db-migrate:
 	@set -a && . ./.env && set +a && DB_HOST=localhost npm run migration:run --workspace=apps/api
+
+# Generates a migration from the current local database to match the entities.
+# NAME is optional; TypeORM adds its own timestamp prefix, while the fallback
+# keeps the generated class name descriptive and unique when no name is given.
+# TypeORM exits nonzero when there is no schema diff, which is normal during a
+# repeated dev setup, so that specific result is treated as success.
+migration-generate:
+	@set -a && . ./.env && set +a && \
+	migration_name="$${NAME:-Migration$$(date -u +%Y%m%d%H%M%S)}"; \
+	output=$$(DB_HOST=localhost npm run migration:generate --workspace=apps/api -- "src/migrations/$$migration_name" 2>&1) || rc=$$?; \
+	printf '%s\n' "$$output"; \
+	if [ "$${rc:-0}" -ne 0 ]; then \
+		case "$$output" in \
+			*"No changes in database schema were found"*) ;; \
+			*) exit "$$rc" ;; \
+		esac; \
+	fi
+
 
 dev-up:
 	sh scripts/dev-servers.sh start
