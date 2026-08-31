@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # One command for a normal deploy: pulls the four Vault AppRole values, the
-# DuckDNS token, the Keycloak/Auth.js/R2 secrets, and the Let's Encrypt
+# DuckDNS token, the BGG/Keycloak/Auth.js/R2 secrets, and the Let's Encrypt
 # contact email (and everything else under Infisical's /ENV_VARS) into this
 # shell, then runs ansible-playbook with them already filled in via '-e'.
 # Without this, every deploy meant manually re-typing (or copy-pasting)
@@ -53,7 +53,7 @@ fi
 # prompt.
 if [ -z "${VAULT_AGENT_ROLE_ID:-}" ] || [ -z "${VAULT_AGENT_SECRET_ID:-}" ] ||
    [ -z "${VAULT_BOOTSTRAP_ROLE_ID:-}" ] || [ -z "${VAULT_BOOTSTRAP_SECRET_ID:-}" ] ||
-   [ -z "${DUCKDNS_TOKEN:-}" ]; then
+   [ -z "${DUCKDNS_TOKEN:-}" ] || [ -z "${BGG_API_TOKEN:-}" ]; then
   # shellcheck source=../scripts/import-secrets.sh
   source "$SCRIPT_DIR/../scripts/import-secrets.sh"
 fi
@@ -65,6 +65,11 @@ for var in VAULT_AGENT_ROLE_ID VAULT_AGENT_SECRET_ID VAULT_BOOTSTRAP_ROLE_ID VAU
     exit 1
   fi
 done
+
+if [ -z "${BGG_API_TOKEN:-}" ]; then
+  echo "BGG_API_TOKEN isn't set in Infisical's /ENV_VARS — add it there." >&2
+  exit 1
+fi
 
 if [ -z "${DUCKDNS_TOKEN:-}" ]; then
   echo "DUCKDNS_TOKEN isn't set in Infisical's /ENV_VARS — add it there (see roles/duckdns/defaults/main.yml)." >&2
@@ -91,6 +96,7 @@ ansible-playbook -i "$SCRIPT_DIR/inventory.ini" "$SCRIPT_DIR/playbook.yml" \
   -e vault_bootstrap_role_id="$VAULT_BOOTSTRAP_ROLE_ID" \
   -e vault_bootstrap_secret_id="$VAULT_BOOTSTRAP_SECRET_ID" \
   -e duckdns_token="$DUCKDNS_TOKEN" \
+  -e bgg_api_token="$BGG_API_TOKEN" \
   -e keycloak_admin_password="${KEYCLOAK_ADMIN_PASSWORD:-}" \
   -e keycloak_api_service_secret="${KEYCLOAK_API_SERVICE_SECRET:-}" \
   -e letsencrypt_email="${LETSENCRYPT_EMAIL:-}" \

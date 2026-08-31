@@ -111,6 +111,10 @@ letsencrypt_email: ""
 auth_secret: ""
 auth_keycloak_secret: ""
 
+# BGG's API rejects unauthenticated requests. This is supplied at deploy time
+# from Infisical's /ENV_VARS and passed through to Docker Compose.
+bgg_api_token: ""
+
 # Cloudflare R2 (photo uploads, apps/api/src/uploads/r2.service.ts) — same
 # pattern again. R2_BUCKET/MAX_UPLOAD_BYTES/R2_MAX_STORAGE_BYTES live in
 # .env.prod instead (non-secret config) — no R2_PUBLIC_URL_BASE at all,

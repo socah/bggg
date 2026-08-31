@@ -1,0 +1,27 @@
+#!/bin/sh
+set -eu
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+DEPLOY_SCRIPT="$SCRIPT_DIR/deploy.sh"
+TASKS_FILE="$SCRIPT_DIR/roles/app_deploy/tasks/main.yml"
+
+failures=0
+check() {
+  if [ "$2" = expected ]; then
+    printf 'ok   %s\n' "$1"
+  else
+    failures=$((failures + 1))
+    printf 'FAIL %s (got %s)\n' "$1" "$2"
+  fi
+}
+
+check "deploy wrapper forwards BGG_API_TOKEN" \
+  "$(grep -q -- '-e bgg_api_token=' "$DEPLOY_SCRIPT" && printf expected || printf missing)"
+check "compose task exports BGG_API_TOKEN" \
+  "$(grep -c '^    BGG_API_TOKEN:' "$TASKS_FILE" | grep -q '^2$' && printf expected || printf missing)"
+
+if [ "$failures" -gt 0 ]; then
+  printf '\n%s test(s) failed\n' "$failures"
+  exit 1
+fi
+printf '\nall tests passed\n'
