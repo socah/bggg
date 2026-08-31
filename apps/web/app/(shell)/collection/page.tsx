@@ -1,5 +1,5 @@
-import { ComingSoon } from '@/components/coming-soon';
+import { PersonalCollection } from '@/components/personal-collection';
 
 export default function PersonalCollectionPage() {
-  return <ComingSoon label="Collection" />;
+  return <PersonalCollection />;
 }

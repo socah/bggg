@@ -261,6 +261,7 @@ services:
       KEYCLOAK_ISSUER: https://${DOMAIN_NAME}/auth/realms/${KEYCLOAK_REALM}
       KEYCLOAK_API_SERVICE_ID: ${KEYCLOAK_API_SERVICE_ID}
       KEYCLOAK_API_SERVICE_SECRET: ${KEYCLOAK_API_SERVICE_SECRET}
+      BGG_API_TOKEN: ${BGG_API_TOKEN}
       # Cloudflare R2 — read by apps/api/src/uploads/r2.service.ts for
       # presigned photo upload/download URLs. No R2_PUBLIC_URL_BASE: this
       # bucket is private (see R2Service.createPresignedGetUrl's own

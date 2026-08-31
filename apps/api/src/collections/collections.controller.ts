@@ -24,10 +24,14 @@ interface AuthenticatedRequest {
 export class CollectionsController {
   constructor(private readonly collectionsService: CollectionsService) {}
 
-  // GET /bgg-account → the current link, or null if none
+  // GET /bgg-account → { account }, where account is the current link or
+  // null if none. Wrapped in an envelope rather than returning the account
+  // (or null) directly: NestJS's Express adapter serializes a null handler
+  // result as an EMPTY 200 body, which would break clients calling
+  // response.json() on it.
   @Get()
-  getAccount(@Request() req: AuthenticatedRequest) {
-    return this.collectionsService.getAccount(req.user.sub);
+  async getAccount(@Request() req: AuthenticatedRequest) {
+    return { account: await this.collectionsService.getAccount(req.user.sub) };
   }
 
   // POST /bgg-account → 200 OK, upserts the link (create or re-link)

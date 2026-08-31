@@ -177,6 +177,15 @@ dev, once, after Keycloak has booted for the first time.
 
 ## Local dev setup
 
+- Fast path: `make deploy-dev-with-user` boots the stack, fetches the
+  generated Keycloak client secrets into `.env`, and seeds one app user
+  from `DEV_SEED_USER_EMAIL` / `DEV_SEED_USER_PASSWORD`.
+- Devcontainer + forwarded-ports path: `make devcontainer-up` boots only
+  `db` + `keycloak`, fetches secrets, and seeds the same dev user; then run
+  `npm run dev:api` and `npm run dev:web` so the app is reachable through
+  forwarded localhost port `3000`.
+- Single-command variant: `make devcontainer-run` performs the same setup
+  and then starts both `dev:api` and `dev:web` in one terminal session.
 - `docker compose up -d db keycloak` (needs a root `.env` — copy from
   `.env.example` — since `docker-compose.dev.yml` alone has no
   `image`/`build` for every service; `COMPOSE_FILE` in `.env` merges the
@@ -185,7 +194,8 @@ dev, once, after Keycloak has booted for the first time.
   generates it fresh per import) — copy it from the admin console
   (`http://localhost:8080` → **boardgame** realm → Clients → web →
   Credentials) into `apps/web/.env.local`.
-- No seed user exists (`registrationAllowed: false`, no regular users in
+- If you skip `make deploy-dev-with-user`, no seed user exists
+  (`registrationAllowed: false`, no regular users in
   `infra/keycloak/boardgame-realm.json`) — create one via the admin
   console or Admin REST API before testing a real login.
 - Verifying the full login round trip (submitting real credentials into

@@ -113,7 +113,7 @@ export class BggService {
     );
 
     if (response.status !== 200) {
-      throw new HttpException(`BGG API returned ${response.status}`, response.status);
+      throw new HttpException(this.upstreamFailureMessage(response.status), 502);
     }
 
     const result = this.parser.parse(response.data) as BggXmlParsed;
@@ -177,11 +177,30 @@ export class BggService {
       }
 
       // Any other status (404, 500, etc.) is unrecoverable — stop immediately.
-      throw new HttpException(`BGG API returned ${response.status}`, response.status);
+      // Always rethrown as 502 regardless of BGG's own status — see
+      // upstreamFailureMessage for why the passthrough would be harmful.
+      throw new HttpException(this.upstreamFailureMessage(response.status), 502);
     }
 
     // If we exhausted all retries BGG never became ready. 504 = Gateway Timeout.
     throw new HttpException('BGG API did not respond after max retries', 504);
+  }
+
+  // Whatever BGG answers, it must never surface as OUR 401/403: apps/web's
+  // apiFetch (lib/api.ts) treats any 401 as "the user's Keycloak session
+  // died" and signs them out — so BGG refusing *us* would log *the user*
+  // out mid-action. 502 Bad Gateway is the honest status: the failure is
+  // upstream, not authentication to this API. When BGG says 401/403 and no
+  // token is configured, say so explicitly — that is by far the most likely
+  // cause since BGG made application tokens mandatory in mid-2025.
+  private upstreamFailureMessage(status: number): string {
+    const hint =
+      status === 401 || status === 403
+        ? !process.env.BGG_API_TOKEN
+          ? ' — BGG_API_TOKEN is not set; BGG requires a registered application token (https://boardgamegeek.com/using_the_xml_api)'
+          : ' — the configured BGG_API_TOKEN was rejected by BGG'
+        : '';
+    return `BGG API returned ${status}${hint}`;
   }
 
   private parseGame(xml: string, bggId: number): BggGame {

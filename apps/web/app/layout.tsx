@@ -32,6 +32,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
       {/* Every family referenced by the five styles in globals.css, loaded in
           one Google Fonts request. Next.js hoists <link> elements rendered
           anywhere in the Server Component tree into the real <head>, so these
@@ -44,8 +45,10 @@ export default function RootLayout({
           already applies to every page, which is exactly what it asks for. */}
       <link
         rel="stylesheet"
+        precedence="default"
         href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300..700&family=Karla:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&family=Space+Mono:wght@400;700&family=Comic+Neue:wght@400;700&family=Titan+One&family=Rubik:wght@400;500;600;700&family=Share+Tech+Mono&family=Baloo+2:wght@500;600;700&family=Quicksand:wght@400;500;600;700&display=swap"
       />
+      </head>
       {/* min-h-screen ensures the background colour fills the viewport
           even on short pages. bg-bg/text-text/font-body come from the
           design tokens in globals.css so we don't have to repeat them

@@ -45,7 +45,16 @@ export class Game {
   // type: 'decimal' + precision/scale → stored as NUMERIC(4,2) in Postgres.
   // 'float' would introduce floating-point rounding errors for a value we
   // display to users (e.g. 8.7999999 instead of 8.8).
-  @Column({ type: 'decimal', precision: 4, scale: 2, default: 0 })
+  @Column({
+    type: 'decimal',
+    precision: 4,
+    scale: 2,
+    default: 0,
+    transformer: {
+      to: (value: number) => value,
+      from: (value: string) => Number(value),
+    },
+  })
   rating!: number;
 
   // last_fetched_at is set manually every time we refresh from BGG.

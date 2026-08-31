@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { logOut } from '@/lib/actions';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
@@ -36,7 +37,9 @@ export function UserMenu({ name }: { name: string }) {
       <DropdownMenuContent align="end">
         <div className="px-2 py-1.5 text-text-muted">{name}</div>
         <DropdownMenuSeparator />
-        <DropdownMenuItem disabled>Settings</DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href="/profile">Settings</Link>
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         {/* No <form> here on purpose. Radix's MenuItem closes (and unmounts)
             the portal synchronously on click, which races a native form

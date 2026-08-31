@@ -20,7 +20,19 @@ import { BggService } from './bgg.service';
     // timeout — BGG can hang; a bounded per-request timeout keeps one stuck
     // socket from tying up a request indefinitely. This is per HTTP call, so
     // it doesn't cap fetchWithPolling's own (deliberate) multi-attempt wait.
-    HttpModule.register({ validateStatus: () => true, timeout: 10000 }),
+    //
+    // Authorization header — since mid-2025 BGG requires a registered
+    // application token on every XML API call (see
+    // https://boardgamegeek.com/using_the_xml_api); without one every request
+    // answers 401. The token lives in BGG_API_TOKEN (.env / Infisical in prod)
+    // and is attached here, once, so every BggService call inherits it.
+    HttpModule.register({
+      validateStatus: () => true,
+      timeout: 10000,
+      ...(process.env.BGG_API_TOKEN && {
+        headers: { Authorization: `Bearer ${process.env.BGG_API_TOKEN}` },
+      }),
+    }),
   ],
   providers: [BggService],
   // exports makes BggService available to any module that imports BggModule.
