@@ -16,6 +16,27 @@ import { TimePickerDialog } from '@/components/ui/time-picker-dialog';
 import { apiMutate } from '@/lib/api';
 import type { Group, GroupLibraryGame, Proposal } from '@/lib/types';
 
+function MemberName({
+  userId,
+  members,
+  loading,
+}: {
+  userId: string;
+  members: { id: string; displayName: string }[];
+  loading: boolean;
+}) {
+  if (loading) {
+    return (
+      <span
+        aria-label="Loading member name"
+        className="inline-block h-3 w-20 animate-pulse rounded-sm bg-border align-middle"
+      />
+    );
+  }
+
+  return members.find((member) => member.id === userId)?.displayName ?? 'Unknown member';
+}
+
 export interface InlineProposalPanelProps {
   /** If set, shows existing proposal details; if null, shows draft proposal creation. */
   proposalId: string | null;
@@ -48,7 +69,7 @@ export function InlineProposalPanel({
   const { detail, loading: loadingDetail, notFound, error: detailError, retry: retryDetail } =
     useProposalDetail(proposalId);
   const existingGroupId = detail?.proposal.groupId ?? null;
-  const members = useGroupMembers(existingGroupId);
+  const { members, loading: loadingMembers } = useGroupMembers(existingGroupId);
   const actions = useProposalActions(() => {
     retryDetail();
     onProposalsChanged?.();
@@ -76,11 +97,6 @@ export function InlineProposalPanel({
   // Group Library (for game suggestions)
   const library = useGroupLibrary(effectiveGroupId || null);
   const existingGames = useProposalGames(proposalId, onProposalsChanged);
-
-  // Helper for member display names
-  function nameFor(userId: string): string {
-    return members.find((m) => m.id === userId)?.displayName ?? userId;
-  }
 
   const myRole = myId ? members.find((m) => m.id === myId)?.role : undefined;
   const canManage =
@@ -172,9 +188,9 @@ export function InlineProposalPanel({
               <span>
                 {activeGroup && <>Group: <strong className="font-medium text-text">{activeGroup.isSolo ? `${activeGroup.name} (solo)` : activeGroup.name}</strong> · </>}
                 Status: <strong className="font-medium text-text">{detail.proposal.status}</strong>
-                {' · '}Proposed by: <strong className="font-medium text-text">{nameFor(detail.proposal.createdBy)}</strong>
+                {' · '}Proposed by: <strong className="font-medium text-text"><MemberName userId={detail.proposal.createdBy} members={members} loading={loadingMembers} /></strong>
                 {detail.proposal.hostId && (
-                  <> · Host: <strong className="font-medium text-text">{nameFor(detail.proposal.hostId)}</strong></>
+                  <> · Host: <strong className="font-medium text-text"><MemberName userId={detail.proposal.hostId} members={members} loading={loadingMembers} /></strong></>
                 )}
               </span>
             )
@@ -301,7 +317,7 @@ export function InlineProposalPanel({
                     rsvp.status === 'yes';
                   return (
                     <li key={rsvp.userId} className="flex items-center gap-2 text-xs">
-                      <span>{nameFor(rsvp.userId)} — {rsvp.status}</span>
+                      <span><MemberName userId={rsvp.userId} members={members} loading={loadingMembers} /> — {rsvp.status}</span>
                       {isHost && <Badge>Host</Badge>}
                       {canManage && rsvp.confirmed && <Badge>Locked in</Badge>}
                       {canMakeHost && !isHost && (

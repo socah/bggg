@@ -8,8 +8,14 @@ import type { GroupMemberInfo } from '@/lib/types';
 // (in the aggregate space, it could be any of the user's groups) — so it
 // fetches members for whichever group the loaded proposal turns out to
 // belong to, rather than requiring a caller to plumb a groupId through.
-export function useGroupMembers(groupId: string | null): GroupMemberInfo[] {
+interface GroupMembersResult {
+  members: GroupMemberInfo[];
+  loading: boolean;
+}
+
+export function useGroupMembers(groupId: string | null): GroupMembersResult {
   const [members, setMembers] = useState<GroupMemberInfo[]>([]);
+  const [loadedGroupId, setLoadedGroupId] = useState<string | null>(null);
 
   useEffect(() => {
     // Nothing to fetch — the return statement below already yields [] for
@@ -25,15 +31,24 @@ export function useGroupMembers(groupId: string | null): GroupMemberInfo[] {
         return res.json();
       })
       .then((data: GroupMemberInfo[]) => {
-        if (!cancelled) setMembers(data);
+        if (!cancelled) {
+          setMembers(data);
+          setLoadedGroupId(groupId);
+        }
       })
       .catch(() => {
-        if (!cancelled) setMembers([]);
+        if (!cancelled) {
+          setMembers([]);
+          setLoadedGroupId(groupId);
+        }
       });
     return () => {
       cancelled = true;
     };
   }, [groupId]);
 
-  return groupId ? members : [];
+  return {
+    members: groupId && loadedGroupId === groupId ? members : [],
+    loading: !!groupId && loadedGroupId !== groupId,
+  };
 }
