@@ -2,10 +2,10 @@
 # already tells plain 'docker compose' which override file to merge in, so no
 # '-f'/'--env-file' flags are needed here the way deploy-prod below needs both.
 .DEFAULT_GOAL := help
-.PHONY: help deploy-dev deploy-prod dev-setup seed-user sync-secrets db-migrate migration-generate dev-up dev-stop dev-status dev-down devcontainer-up devcontainer-run deploy-dev-with-user
+.PHONY: help deploy-dev deploy-prod dev-setup dev-setup-all dev-status-all dev-stop-all dev-down-all dev-clean-all seed-user sync-secrets db-migrate migration-generate dev-up dev-stop dev-status dev-down devcontainer-up devcontainer-run deploy-dev-with-user
 
 help:
-	@echo "Available targets: deploy-dev deploy-prod dev-setup dev-down dev-stop dev-status seed-user sync-secrets db-migrate migration-generate dev-up devcontainer-up devcontainer-run deploy-dev-with-user"
+	@echo "Available targets: deploy-dev deploy-prod dev-setup dev-setup-all dev-status-all dev-stop-all dev-down-all dev-clean-all dev-down dev-stop dev-status seed-user sync-secrets db-migrate migration-generate dev-up devcontainer-up devcontainer-run deploy-dev-with-user"
 
 # Devcontainer-friendly flow: keep app servers outside Docker so VS Code's
 # forwarded ports map directly to host-browser URLs.
@@ -49,7 +49,7 @@ deploy-dev:
 # dev database survives. Swap stacks between checkouts: 'make dev-down' here,
 # 'make dev-setup' in the other checkout, and back.
 dev-down:
-	docker compose down
+	sh scripts/worktree-dev.sh down
 
 # One-command local setup: bring the whole dev stack up (db, keycloak, vault),
 # seed the throwaway login (username 'user', password 'user'), sync the
@@ -60,7 +60,23 @@ dev-down:
 # logs/api.log and logs/web.log. Migrations run before the servers start —
 # the API never alters its own schema (synchronize: false), so a fresh
 # database without this step makes every DB-backed page fail.
-dev-setup: deploy-dev seed-user sync-secrets db-migrate dev-up
+dev-setup:
+	sh scripts/worktree-dev.sh setup
+
+dev-setup-all:
+	sh scripts/worktrees-dev.sh setup
+
+dev-status-all:
+	sh scripts/worktrees-dev.sh status
+
+dev-stop-all:
+	sh scripts/worktrees-dev.sh stop
+
+dev-down-all:
+	sh scripts/worktrees-dev.sh down
+
+dev-clean-all:
+	sh scripts/worktrees-dev.sh clean --confirm
 
 # Creates or password-resets the dev-only user via kcadm.sh inside the
 # running keycloak container (infra/keycloak/seed-dev-user.sh). Safe to
@@ -101,13 +117,13 @@ migration-generate:
 
 
 dev-up:
-	sh scripts/dev-servers.sh start
+	sh scripts/worktree-dev.sh up
 
 dev-stop:
-	sh scripts/dev-servers.sh stop
+	sh scripts/worktree-dev.sh stop
 
 dev-status:
-	sh scripts/dev-servers.sh status
+	sh scripts/worktree-dev.sh status
 # Full local bootstrap: bring up the stack, fetch Keycloak-generated client
 # secrets into .env, then seed a login-capable app user.
 deploy-dev-with-user:

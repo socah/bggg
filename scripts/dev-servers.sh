@@ -9,8 +9,8 @@
 # drive this script with fake throwaway processes instead of npm.
 set -eu
 
-PID_DIR="${PID_DIR:-logs}"
-LOG_DIR="${LOG_DIR:-logs}"
+PID_DIR="${PID_DIR:-${DEV_STATE_DIR:-logs}}"
+LOG_DIR="${LOG_DIR:-${DEV_STATE_DIR:-logs}}"
 API_CMD="${API_CMD:-npm run dev:api}"
 WEB_CMD="${WEB_CMD:-npm run dev:web}"
 

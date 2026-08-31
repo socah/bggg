@@ -60,6 +60,7 @@ infra/ansible/inventory.ini
 # Logs
 *.log
 logs/
+.dev/
 
 # Git worktrees (superpowers SDD scratch workspaces)
 .worktrees/

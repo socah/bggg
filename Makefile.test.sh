@@ -16,8 +16,8 @@ check "migration generation target exists" \
   "$(grep -q '^migration-generate:' "$MAKEFILE" && printf expected || printf missing)"
 check "migration generation has an automatic fallback name" \
   "$(grep -q 'date -u +%Y%m%d%H%M%S' "$MAKEFILE" && printf expected || printf missing)"
-check "dev setup applies committed migrations only" \
-  "$(grep -q '^dev-setup:.*db-migrate.*dev-up' "$MAKEFILE" && ! grep -q '^dev-setup:.*migration-generate' "$MAKEFILE" && printf expected || printf wrong-order)"
+check "dev setup delegates to worktree helper" \
+  "$(grep -q '^dev-setup:' "$MAKEFILE" && grep -q 'scripts/worktree-dev.sh setup' "$MAKEFILE" && ! grep -q '^dev-setup:.*migration-generate' "$MAKEFILE" && printf expected || printf wrong-order)"
 check "automatic migration sync is not part of dev setup" \
   "$(grep -q '^migration-sync:' "$MAKEFILE" && printf present || printf expected)"
 check "no-change generation is not fatal" \
