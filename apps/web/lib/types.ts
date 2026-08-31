@@ -46,8 +46,10 @@ export interface Rsvp {
 // Only the fields the detail panel actually displays — apps/api/src/games/
 // game.entity.ts has several more that the UI doesn't need yet.
 export interface ProposalGameSummary {
+  proposalGameId: string;
   game: { id: number; name: string };
   voteCount: number;
+  votedByMe: boolean;
 }
 
 export interface ProposalDetail {
@@ -56,7 +58,31 @@ export interface ProposalDetail {
   games: ProposalGameSummary[];
 }
 
+export type MemberRole = 'owner' | 'admin' | 'member';
+
+// Mirrors apps/api getMembers: Keycloak display info + the member's
+// group_members.role, which drives which lifecycle controls the panel shows.
 export interface GroupMemberInfo {
   id: string;
   displayName: string;
+  role: MemberRole;
+}
+
+// Body of PUT /proposals/:id/rsvp. Times are optional HH:mm (24h) —
+// omitted means the server applies the Decision G default window
+// (10:00–02:00 next day) anchored to the proposal's date.
+export interface RsvpInput {
+  status: Rsvp['status'];
+  availableStart?: string;
+  availableEnd?: string;
+}
+
+// One row of GET /groups/:groupId/games — the propose-a-game picker's data.
+export interface GroupLibraryGame {
+  id: number;
+  bggId: number;
+  name: string;
+  thumbnail: string | null;
+  minPlayers: number;
+  maxPlayers: number;
 }

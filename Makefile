@@ -2,10 +2,10 @@
 # already tells plain 'docker compose' which override file to merge in, so no
 # '-f'/'--env-file' flags are needed here the way deploy-prod below needs both.
 .DEFAULT_GOAL := help
-.PHONY: help deploy-dev deploy-prod dev-setup seed-user sync-secrets db-migrate migration-generate dev-up dev-stop dev-status devcontainer-up devcontainer-run deploy-dev-with-user
+.PHONY: help deploy-dev deploy-prod dev-setup seed-user sync-secrets db-migrate migration-generate dev-up dev-stop dev-status dev-down devcontainer-up devcontainer-run deploy-dev-with-user
 
 help:
-	@echo "Available targets: deploy-dev deploy-prod dev-setup dev-stop dev-status seed-user sync-secrets db-migrate migration-generate devcontainer-up devcontainer-run deploy-dev-with-user"
+	@echo "Available targets: deploy-dev deploy-prod dev-setup dev-down dev-stop dev-status seed-user sync-secrets db-migrate migration-generate dev-up devcontainer-up devcontainer-run deploy-dev-with-user"
 
 # Devcontainer-friendly flow: keep app servers outside Docker so VS Code's
 # forwarded ports map directly to host-browser URLs.
@@ -41,9 +41,15 @@ devcontainer-run: devcontainer-up
 	npm run dev:web & WEB_PID=$$!; \
 	trap "kill $$API_PID $$WEB_PID" INT TERM EXIT; \
 	wait'
-
 deploy-dev:
 	docker compose up -d --build
+
+# Stops the whole Docker Compose stack (traefik, keycloak, vault, db, api/web
+# containers) and removes its containers/networks. Volumes are kept, so the
+# dev database survives. Swap stacks between checkouts: 'make dev-down' here,
+# 'make dev-setup' in the other checkout, and back.
+dev-down:
+	docker compose down
 
 # One-command local setup: bring the whole dev stack up (db, keycloak, vault),
 # seed the throwaway login (username 'user', password 'user'), sync the

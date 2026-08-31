@@ -5,14 +5,16 @@ export interface CalendarDay {
   inMonth: boolean;
 }
 
-// Builds a full 7-column grid (Sun-Sat) for the month containing
+// Builds a full 7-column grid (Mon-Sun) for the month containing
 // `monthAnchor`, including the leading/trailing days from adjacent months
 // needed to fill complete weeks.
 export function buildMonthGrid(monthAnchor: Date): CalendarDay[] {
   const year = monthAnchor.getFullYear();
   const month = monthAnchor.getMonth();
   const firstOfMonth = new Date(year, month, 1);
-  const startWeekday = firstOfMonth.getDay();
+  // JS getDay(): 0=Sunday..6=Saturday. Rebased to Monday-first by folding
+  // the weekend around: Sunday(0) becomes 6, Monday(1) stays 0.
+  const startWeekday = (firstOfMonth.getDay() + 6) % 7;
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
   const days: CalendarDay[] = [];

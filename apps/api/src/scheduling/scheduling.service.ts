@@ -21,6 +21,17 @@ import { ProposeGameDto } from './dto/propose-game.dto';
 import { computeOverlapWindow, NoOverlapError } from './overlap-window';
 import { resolveAvailabilityWindow } from './resolve-window';
 
+// One entry of GET /proposals/:id/games (and the games array inside
+// GET /proposals/:id). proposalGameId is the join-row id the vote
+// endpoints address; votedByMe lets the UI render the caller's own vote
+// state without a second request.
+export interface ProposalGameWithVotes {
+  proposalGameId: string;
+  game: { id: number; name: string };
+  voteCount: number;
+  votedByMe: boolean;
+}
+
 @Injectable()
 export class SchedulingService {
   constructor(
@@ -258,6 +269,12 @@ export class SchedulingService {
       throw new ConflictException('Proposal is already in collecting status');
     }
 
+    // Terminal state (see cancel()) — undo must not resurrect a cancelled
+    // proposal.
+    if (proposal.status === 'cancelled') {
+      throw new ConflictException('A cancelled proposal cannot be un-cancelled');
+    }
+
     // Delete the play_sessions row BEFORE the proposal loses its
     // 'confirmed' status — a confirmed-status session backed by a
     // collecting proposal is exactly the inconsistency this ordering
@@ -274,6 +291,32 @@ export class SchedulingService {
     proposal.status = 'collecting';
     proposal.confirmedStart = null;
     proposal.confirmedEnd = null;
+    return this.proposals.save(proposal);
+  }
+
+  // POST /proposals/:id/cancel — terminal transition from collecting,
+  // confirming, OR confirmed (game nights get called off after being finalized
+  // too). Unlike undo there is no way back: a cancelled proposal stays that
+  // way and a new proposal is created instead. If a play_sessions row exists
+  // it is deleted BEFORE the status flip, same delete-before-flip ordering as
+  // undo() — a cancelled-status proposal still owning a live session would be
+  // exactly the inconsistency that ordering avoids.
+  async cancel(proposalId: string, requestingUserId: string): Promise<PlaySessionProposal> {
+    const proposal = await this.findProposalOrThrow(proposalId);
+    await this.assertCanManageProposal(proposal, requestingUserId);
+
+    if (proposal.status === 'cancelled') {
+      throw new ConflictException('Proposal is already cancelled');
+    }
+
+    if (proposal.status === 'confirmed') {
+      const session = await this.sessions.findOneBy({ proposalId: proposal.id });
+      if (session) {
+        await this.sessions.remove(session);
+      }
+    }
+
+    proposal.status = 'cancelled';
     return this.proposals.save(proposal);
   }
 
@@ -326,7 +369,7 @@ export class SchedulingService {
   async listProposalGames(
     proposalId: string,
     requestingUserId: string,
-  ): Promise<Array<{ game: { id: number; name: string }; voteCount: number }>> {
+  ): Promise<ProposalGameWithVotes[]> {
     const proposal = await this.findProposalOrThrow(proposalId);
     await this.groupsService.findOne(proposal.groupId, requestingUserId);
 
@@ -348,11 +391,16 @@ export class SchedulingService {
     // number of proposed games per proposal ever got large.
     return Promise.all(
       proposalGames.map(async (proposalGame) => ({
+        proposalGameId: proposalGame.id,
         game: {
           id: proposalGame.gameId,
           name: gameById.get(proposalGame.gameId)?.name ?? 'Unknown game',
         },
         voteCount: await this.gameVotes.countBy({ proposalGameId: proposalGame.id }),
+        votedByMe: await this.gameVotes.existsBy({
+          proposalGameId: proposalGame.id,
+          userId: requestingUserId,
+        }),
       })),
     );
   }
@@ -368,7 +416,7 @@ export class SchedulingService {
   ): Promise<{
     proposal: PlaySessionProposal;
     rsvps: PlaySessionRsvp[];
-    games: Array<{ game: { id: number; name: string }; voteCount: number }>;
+    games: ProposalGameWithVotes[];
   }> {
     const proposal = await this.findProposalOrThrow(proposalId);
     await this.groupsService.findOne(proposal.groupId, requestingUserId);

@@ -58,6 +58,16 @@ export class GroupsController {
     return this.groupsService.getMembers(groupId, req.user.sub);
   }
 
+  // GET /groups/:groupId/games → the group's game library: union of all
+  // members' owned games (see GroupsService.getLibrary).
+  @Get(':groupId/games')
+  getLibrary(
+    @Param('groupId', ParseUUIDPipe) groupId: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.groupsService.getLibrary(groupId, req.user.sub);
+  }
+
   // POST /groups → 201 Created. ownerId is set from the token — not the body.
   @Post()
   @HttpCode(201)

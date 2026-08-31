@@ -99,6 +99,14 @@ export class ProposalsController {
     return this.schedulingService.undo(id, req.user.sub);
   }
 
+  // POST /proposals/:id/cancel → terminal state from ANY active status. A
+  // confirmed game night can still be called off in real life; if a
+  // play_sessions row exists it is deleted first (see SchedulingService.cancel).
+  @Post(':id/cancel')
+  cancel(@Param('id', ParseUUIDPipe) id: string, @Request() req: AuthenticatedRequest) {
+    return this.schedulingService.cancel(id, req.user.sub);
+  }
+
   // POST /proposals/:id/games → 201 Created, or returns the existing row if
   // this game was already proposed (see SchedulingService.proposeGame).
   @Post(':id/games')
