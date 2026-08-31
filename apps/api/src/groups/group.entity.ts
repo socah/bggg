@@ -1,5 +1,6 @@
 import {
   Entity,
+  Index,
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
@@ -10,6 +11,7 @@ import {
 // name ('group'), but our table is 'groups' — and GROUP is a reserved word
 // in SQL, so being explicit here avoids a hard-to-debug runtime error.
 @Entity('groups')
+@Index('groups_owner_solo_unique', ['ownerId'], { unique: true, where: 'is_solo' })
 export class Group {
   // 'uuid' instructs PostgreSQL to call gen_random_uuid() on INSERT.
   // The resulting value (e.g. "a3f7…") is not guessable, unlike 1, 2, 3.
@@ -17,13 +19,13 @@ export class Group {
   id!: string;
 
   // NOT NULL by default — matches the SQL constraint in db/schema.sql.
-  @Column()
+  @Column({ type: 'text' })
   name!: string;
 
   // Stores the JWT `sub` claim of the user who created this group.
   // This is the anchor for all ownership checks — every mutating operation
   // compares the incoming user's sub against this value.
-  @Column({ name: 'owner_id' })
+  @Column({ name: 'owner_id', type: 'text' })
   ownerId!: string;
 
   // True for the one auto-provisioned group every user always belongs to
@@ -35,6 +37,6 @@ export class Group {
   // @CreateDateColumn sets this automatically on INSERT — you never pass it in.
   // name: 'created_at' matches the snake_case column in the DB; the property
   // stays camelCase to follow TypeScript conventions.
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 }

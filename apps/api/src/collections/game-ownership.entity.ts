@@ -2,7 +2,6 @@ import {
   Entity,
   PrimaryGeneratedColumn,
   Column,
-  CreateDateColumn,
 } from 'typeorm';
 
 // @Entity('game_ownership') — join table between a person (raw Keycloak
@@ -17,7 +16,7 @@ export class GameOwnership {
   @PrimaryGeneratedColumn()
   id!: number;
 
-  @Column({ name: 'user_id' })
+  @Column({ name: 'user_id', type: 'text' })
   userId!: string;
 
   // Bare column, not a @ManyToOne relation to Game — same "plain column, no
@@ -27,6 +26,6 @@ export class GameOwnership {
   @Column({ name: 'game_id' })
   gameId!: number;
 
-  @CreateDateColumn({ name: 'added_at', type: 'date' })
+  @Column({ name: 'added_at', type: 'date', default: () => 'CURRENT_DATE' })
   addedAt!: Date;
 }

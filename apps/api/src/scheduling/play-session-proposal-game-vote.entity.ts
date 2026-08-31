@@ -13,9 +13,9 @@ import { Entity, PrimaryColumn } from 'typeorm';
 // Invite.tokenHash being a bare @PrimaryColumn rather than an extra id.
 @Entity('play_session_proposal_game_votes')
 export class PlaySessionProposalGameVote {
-  @PrimaryColumn({ name: 'proposal_game_id' })
+  @PrimaryColumn({ name: 'proposal_game_id', type: 'uuid', primaryKeyConstraintName: 'play_session_proposal_game_votes_pkey' })
   proposalGameId!: string;
 
-  @PrimaryColumn({ name: 'user_id' })
+  @PrimaryColumn({ name: 'user_id', type: 'text', primaryKeyConstraintName: 'play_session_proposal_game_votes_pkey' })
   userId!: string;
 }

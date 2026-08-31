@@ -14,12 +14,12 @@ export class Invite {
   // (256 bits of entropy in the token it was derived from), so a second
   // unique column would just be redundant bookkeeping. See Decision 1 in
   // notes/3_invite_system.md for why it's hashed at all.
-  @PrimaryColumn({ name: 'token_hash' })
+  @PrimaryColumn({ name: 'token_hash', type: 'text' })
   tokenHash!: string;
 
   // Bare uuid column, not a relation — same pattern as GroupMember.groupId
   // and Group.ownerId throughout this codebase.
-  @Column({ name: 'group_id' })
+  @Column({ name: 'group_id', type: 'uuid' })
   groupId!: string;
 
   @Column({ type: 'text' })
@@ -28,7 +28,7 @@ export class Invite {
   // The Keycloak 'sub' of whoever created this invite — kept even after the
   // invite is used or expired, so "who invited this person" stays answerable
   // for as long as the row exists. Same identity anchor as everywhere else.
-  @Column({ name: 'created_by' })
+  @Column({ name: 'created_by', type: 'text' })
   createdBy!: string;
 
   @Column({ name: 'expires_at', type: 'timestamptz' })
@@ -53,6 +53,6 @@ export class Invite {
   @Column({ name: 'used_by', type: 'text', nullable: true })
   usedBy!: string | null;
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 }

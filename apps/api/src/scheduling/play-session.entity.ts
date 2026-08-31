@@ -24,7 +24,7 @@ export class PlaySession {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @Column({ name: 'group_id' })
+  @Column({ name: 'group_id', type: 'uuid' })
   groupId!: string;
 
   @Column({ name: 'played_at', type: 'timestamptz' })
@@ -41,9 +41,9 @@ export class PlaySession {
   // Explicit 'type' required — 'string | null' reflects as a bare
   // 'Object' at runtime (reflect-metadata can't represent union types),
   // which Postgres's driver rejects (same fix as Invite.usedBy).
-  @Column({ name: 'proposal_id', type: 'text', nullable: true })
+  @Column({ name: 'proposal_id', type: 'uuid', nullable: true })
   proposalId!: string | null;
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 }

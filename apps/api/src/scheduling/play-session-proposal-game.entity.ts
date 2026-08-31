@@ -14,12 +14,12 @@ import {
 // interest in an already-proposed game is a vote (see
 // play-session-proposal-game-vote.entity.ts), not a second row here.
 @Entity('play_session_proposal_games')
-@Unique(['proposalId', 'gameId'])
+@Unique('play_session_proposal_games_proposal_id_game_id_key', ['proposalId', 'gameId'])
 export class PlaySessionProposalGame {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @Column({ name: 'proposal_id' })
+  @Column({ name: 'proposal_id', type: 'uuid' })
   proposalId!: string;
 
   // Bare int column, not a relation — same choice game_ownership.gameId
@@ -29,9 +29,9 @@ export class PlaySessionProposalGame {
 
   // Keycloak sub of whoever suggested this game — same identity anchor
   // pattern as everywhere else, not the same thing as "who voted for it."
-  @Column({ name: 'proposed_by' })
+  @Column({ name: 'proposed_by', type: 'text' })
   proposedBy!: string;
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 }

@@ -432,17 +432,29 @@ CREATE TABLE IF NOT EXISTS invites (
   created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
+-- ── MESSAGES ───────────────────────────────────────────────────────────────
+-- Append-only group chat messages. User identifiers are raw Keycloak subjects,
+-- matching the identity columns used by groups and memberships.
+CREATE TABLE IF NOT EXISTS messages (
+  id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  group_id   TEXT        NOT NULL,
+  sender_id  TEXT        NOT NULL,
+  body       TEXT        NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- ── AUDIT LOG ─────────────────────────────────────────────────────────────
 -- Append-only record of security-relevant events (Phase 2 — audit_logging topic).
--- user_id ON DELETE SET NULL: preserve the log even if the user is deleted.
+-- actor_id stores the raw Keycloak subject so the audit trail survives user
+-- deletion and does not depend on the legacy users table.
 -- metadata: JSONB for flexible extra context (e.g. old/new values, IP address).
 -- No UPDATE or DELETE should ever touch this table.
 CREATE TABLE IF NOT EXISTS audit_log (
-  id           SERIAL       PRIMARY KEY,
-  user_id      INT          REFERENCES users(id) ON DELETE SET NULL,
-  action       TEXT         NOT NULL, -- e.g. 'invite.created', 'review.deleted'
-  target_type  TEXT,                  -- e.g. 'group', 'game', 'invite'
-  target_id    INT,                   -- the id of the affected row
-  metadata     JSONB,                 -- flexible extra context
-  created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+  id          SERIAL       PRIMARY KEY,
+  actor_id    TEXT         NOT NULL,
+  action      TEXT         NOT NULL, -- e.g. 'invite.created', 'review.deleted'
+  target_type TEXT         NOT NULL, -- e.g. 'group', 'game', 'invite'
+  target_id   TEXT         NOT NULL, -- the id of the affected row
+  metadata    JSONB,                 -- flexible extra context
+  created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );

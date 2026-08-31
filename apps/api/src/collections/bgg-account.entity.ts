@@ -16,18 +16,18 @@ export class BggAccount {
 
   // unique: true — one BGG link per person. Re-linking updates this row
   // rather than creating a second one.
-  @Column({ name: 'user_id', unique: true })
+  @Column({ name: 'user_id', type: 'text', unique: true })
   userId!: string;
 
-  @Column({ name: 'bgg_username' })
+  @Column({ name: 'bgg_username', type: 'text' })
   bggUsername!: string;
 
   // Set explicitly by CollectionsService.linkAccount on every link/re-link,
   // not @CreateDateColumn — a re-link (changing bggUsername) should update
   // this timestamp, and @CreateDateColumn only ever fires once, at INSERT.
-  @Column({ name: 'linked_at' })
+  @Column({ name: 'linked_at', type: 'timestamptz' })
   linkedAt!: Date;
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 }

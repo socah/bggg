@@ -2,7 +2,6 @@ import {
   Entity,
   PrimaryGeneratedColumn,
   Column,
-  CreateDateColumn,
 } from 'typeorm';
 
 // Exported so GroupsService and InvitesService can both reference the same
@@ -24,14 +23,14 @@ export class GroupMember {
   // foreign key into a 'users' table. See Decision 2 in
   // notes/3_invite_system.md for why — this codebase has never built a
   // synced users table, even though db/schema.sql sketches one.
-  @Column({ name: 'user_id' })
+  @Column({ name: 'user_id', type: 'text' })
   userId!: string;
 
   // Bare uuid column, not a @ManyToOne relation to Group — same choice
   // Message.groupId already made. Every query against this table is "find
   // memberships for group X" or "find groups for user Y"; neither needs
   // TypeORM to eagerly load a full Group object through this row.
-  @Column({ name: 'group_id' })
+  @Column({ name: 'group_id', type: 'uuid' })
   groupId!: string;
 
   // TypeScript narrows this to GroupRole at compile time. The matching
@@ -43,6 +42,6 @@ export class GroupMember {
 
   // DATE, not TIMESTAMPTZ — matches db/schema.sql's joined_at column. We
   // only ever care which day someone joined, never the time of day.
-  @CreateDateColumn({ name: 'joined_at', type: 'date' })
+  @Column({ name: 'joined_at', type: 'date', default: () => 'CURRENT_DATE' })
   joinedAt!: Date;
 }

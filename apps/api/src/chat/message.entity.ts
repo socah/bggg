@@ -16,17 +16,17 @@ export class Message {
   // and AuditLog.actorId already made in this codebase: querying "all
   // messages for group X" only ever needs the id, and a bare column avoids
   // pulling in TypeORM's relation-loading machinery for a lookup this simple.
-  @Column({ name: 'group_id' })
+  @Column({ name: 'group_id', type: 'text' })
   groupId!: string;
 
   // The JWT 'sub' claim of whoever sent the message — same identity anchor
   // used everywhere else (Group.ownerId, AuditLog.actorId).
-  @Column({ name: 'sender_id' })
+  @Column({ name: 'sender_id', type: 'text' })
   senderId!: string;
 
   @Column({ type: 'text' })
   body!: string;
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 }

@@ -22,12 +22,12 @@ export class PlaySessionProposal {
 
   // Bare uuid column, not a relation — same choice every other table in
   // this codebase has made for group_id (Group, GroupMember, Invite, ...).
-  @Column({ name: 'group_id' })
+  @Column({ name: 'group_id', type: 'uuid' })
   groupId!: string;
 
   // Keycloak sub of whoever proposed this — same identity anchor as
   // Group.ownerId, Invite.createdBy.
-  @Column({ name: 'created_by' })
+  @Column({ name: 'created_by', type: 'text' })
   createdBy!: string;
 
   // The calendar day this proposal is about, chosen by the creator up front
@@ -71,6 +71,6 @@ export class PlaySessionProposal {
   @Column({ name: 'confirmed_end', type: 'timestamptz', nullable: true })
   confirmedEnd!: Date | null;
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 }

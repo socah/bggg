@@ -18,16 +18,16 @@ export type RsvpStatus = 'yes' | 'maybe' | 'no';
 // proposal — a repeat call has to be an UPDATE, not an INSERT (see
 // SchedulingService.rsvp).
 @Entity('play_session_proposal_rsvps')
-@Unique(['proposalId', 'userId'])
+@Unique('play_session_proposal_rsvps_proposal_id_user_id_key', ['proposalId', 'userId'])
 export class PlaySessionRsvp {
   @PrimaryGeneratedColumn()
   id!: number;
 
-  @Column({ name: 'proposal_id' })
+  @Column({ name: 'proposal_id', type: 'uuid' })
   proposalId!: string;
 
   // Keycloak sub — same identity anchor as every other userId column here.
-  @Column({ name: 'user_id' })
+  @Column({ name: 'user_id', type: 'text' })
   userId!: string;
 
   @Column({ type: 'text' })
@@ -51,12 +51,12 @@ export class PlaySessionRsvp {
   @Column({ type: 'boolean', default: false })
   confirmed!: boolean;
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 
   // Tracks when a member last changed their answer — e.g. flipping from
   // 'maybe' to 'yes' after seeing who else is in. Nothing reads this yet,
   // but it's cheap to have from day one and expensive to backfill later.
-  @UpdateDateColumn({ name: 'updated_at' })
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
   updatedAt!: Date;
 }

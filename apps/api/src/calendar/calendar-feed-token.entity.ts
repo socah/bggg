@@ -16,15 +16,15 @@ export class CalendarFeedToken {
   // as Invite.tokenHash: it's already unique by construction (derived from
   // 256 bits of random entropy), so a second unique column would be
   // redundant bookkeeping.
-  @PrimaryColumn({ name: 'token_hash' })
+  @PrimaryColumn({ name: 'token_hash', type: 'text' })
   tokenHash!: string;
 
   // UNIQUE, not just indexed: enforces "at most one active feed token per
   // user" at the database level, not merely by service-layer convention —
   // issuing a new one has to overwrite the old row, not add a second one.
-  @Column({ name: 'user_id', unique: true })
+  @Column({ name: 'user_id', type: 'text', unique: true })
   userId!: string;
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 }

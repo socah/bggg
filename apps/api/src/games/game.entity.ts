@@ -17,17 +17,17 @@ export class Game {
   @Column({ name: 'bgg_id', unique: true })
   bggId!: number;
 
-  @Column()
+  @Column({ type: 'text' })
   name!: string;
 
   // nullable: true — description can be absent for some BGG entries.
-  @Column({ nullable: true })
+  @Column({ type: 'text', nullable: true })
   description!: string;
 
-  @Column({ nullable: true })
+  @Column({ type: 'text', nullable: true })
   thumbnail!: string;
 
-  @Column({ nullable: true })
+  @Column({ type: 'text', nullable: true })
   image!: string;
 
   @Column({ name: 'min_players', default: 0 })
@@ -61,9 +61,9 @@ export class Game {
   // We do NOT use @UpdateDateColumn here — that would fire on any update
   // to this row (e.g. a future field we haven't added yet), which would
   // incorrectly reset the staleness clock without an actual BGG fetch.
-  @Column({ name: 'last_fetched_at' })
+  @Column({ name: 'last_fetched_at', type: 'timestamptz' })
   lastFetchedAt!: Date;
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 }

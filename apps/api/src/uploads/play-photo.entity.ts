@@ -15,12 +15,12 @@ export class PlayPhoto {
   // exists (topic 3_scheduling) with a uuid PK, so this column's type
   // follows it — see db/schema.sql's comment on play_sessions.id for why
   // it's uuid rather than the originally-sketched SERIAL.
-  @Column({ name: 'session_id' })
+  @Column({ name: 'session_id', type: 'uuid' })
   sessionId!: string;
 
   // Stores the JWT `sub` claim of the user who uploaded this photo — same
   // ownership-anchor pattern as Group.ownerId.
-  @Column({ name: 'uploaded_by' })
+  @Column({ name: 'uploaded_by', type: 'text' })
   uploadedBy!: string;
 
   // The R2 object key (e.g. "play-photos/<userId>/<uuid>") — the ONLY
@@ -33,7 +33,7 @@ export class PlayPhoto {
   // Any code that needs to display this photo calls
   // R2Service.createPresignedGetUrl(key) fresh, after checking the
   // requester is actually a member of the group this photo belongs to.
-  @Column({ unique: true })
+  @Column({ type: 'text', unique: true })
   key!: string;
 
   // Read from R2's own HeadObject response at confirm time — NOT trusted
@@ -47,6 +47,6 @@ export class PlayPhoto {
   @Column({ name: 'size_bytes' })
   sizeBytes!: number;
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 }
