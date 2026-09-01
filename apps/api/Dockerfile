@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # --- deps: install only what apps/api needs, nothing from apps/web ---
-FROM node:20-alpine AS deps
+FROM node:22-alpine AS deps
 WORKDIR /workspace
 # 'workspaces' in the root package.json is a glob ("apps/*") — npm
 # resolves it against whatever package.json files actually exist in this
@@ -13,14 +13,13 @@ COPY apps/api/package.json apps/api/package.json
 RUN npm ci --workspace=apps/api --include-workspace-root
 
 # --- build: compile TypeScript to dist/, then strip dev-only deps ---
-FROM node:20-alpine AS build
+FROM node:22-alpine AS build
 WORKDIR /workspace
-# No 'apps/api/node_modules' to copy here — with only this one workspace
-# in the build context, every dependency hoists cleanly to the root
-# node_modules (no version conflict forcing a nested copy, unlike the full
-# monorepo install on a dev machine). Node's own module resolution walks
-# up from apps/api/ and finds packages here regardless.
+# Copy both the hoisted dependencies and the API workspace's local binaries.
+# npm keeps some workspace devDependencies local, including the Nest CLI used
+# during this build. Node's module resolution handles both locations.
 COPY --from=deps /workspace/node_modules ./node_modules
+COPY --from=deps /workspace/apps/api/node_modules ./apps/api/node_modules
 COPY --from=deps /workspace/package.json /workspace/package-lock.json ./
 COPY --from=deps /workspace/apps/api/package.json apps/api/package.json
 COPY apps/api/src apps/api/src
@@ -33,7 +32,7 @@ RUN npm run build --workspace=apps/api
 RUN npm prune --omit=dev --workspace=apps/api --include-workspace-root
 
 # --- runtime: only compiled JS + production node_modules ---
-FROM node:20-alpine AS runtime
+FROM node:22-alpine AS runtime
 WORKDIR /workspace
 ENV NODE_ENV=production
 COPY --from=build /workspace/node_modules ./node_modules

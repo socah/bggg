@@ -1,6 +1,16 @@
 import NextAuth from 'next-auth';
 import Keycloak from 'next-auth/providers/keycloak';
 
+// Browsers share localhost cookies across ports. Namespace Auth.js's cookies
+// so separate worktrees do not overwrite each other's sessions.
+const cookieSuffix = process.env.WEB_HOST_PORT ? `.${process.env.WEB_HOST_PORT}` : '';
+const cookieOptions = {
+  httpOnly: true,
+  sameSite: 'lax' as const,
+  path: '/',
+  secure: process.env.AUTH_URL?.startsWith('https://') ?? false,
+};
+
 // Keycloak is passed uncalled (not Keycloak({...})) — Auth.js calls it
 // internally after reading clientId/clientSecret/issuer from the
 // AUTH_KEYCLOAK_ID / AUTH_KEYCLOAK_SECRET / AUTH_KEYCLOAK_ISSUER env vars
@@ -15,6 +25,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   // infra/keycloak/boardgame-realm.json's 'web' client redirect URI
   // ('.../web/auth/callback/keycloak').
   basePath: '/web/auth',
+  cookies: {
+    sessionToken: { name: `authjs.session-token${cookieSuffix}`, options: cookieOptions },
+    callbackUrl: { name: `authjs.callback-url${cookieSuffix}`, options: cookieOptions },
+    csrfToken: { name: `authjs.csrf-token${cookieSuffix}`, options: cookieOptions },
+    pkceCodeVerifier: {
+      name: `authjs.pkce.code_verifier${cookieSuffix}`,
+      options: { ...cookieOptions, maxAge: 60 * 15 },
+    },
+    state: {
+      name: `authjs.state${cookieSuffix}`,
+      options: { ...cookieOptions, maxAge: 60 * 15 },
+    },
+    nonce: { name: `authjs.nonce${cookieSuffix}`, options: cookieOptions },
+  },
   providers: [Keycloak],
 
   callbacks: {

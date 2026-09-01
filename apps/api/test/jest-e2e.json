@@ -5,8 +5,13 @@
   "testRegex": "\\.e2e-spec\\.ts$",
   "transform": {
     "^.+\\.(t|j)s$": ["ts-jest", {
-      "tsconfig": "tsconfig.json"
+      "useESM": true,
+      "tsconfig": {
+        "module": "ESNext"
+      }
     }]
   },
+  "extensionsToTreatAsEsm": [".ts"],
+  "setupFilesAfterEnv": ["<rootDir>/jest.setup.mjs"],
   "transformIgnorePatterns": ["node_modules/(?!(jose)/)"]
 }

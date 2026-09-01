@@ -1,11 +1,11 @@
 {
   "name": "bggg",
 
-  // Microsoft's official Node 20 dev container image.
+  // Microsoft's official Node 22 dev container image.
   // Includes: non-root 'node' user, git, curl, VS Code server support.
   // We use the image directly (no custom Dockerfile) until we need
   // system packages the base image doesn't provide.
-  "image": "mcr.microsoft.com/devcontainers/typescript-node:20",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:22",
 
   // Dev Container features: pre-packaged install scripts run after container start.
   // Docker-in-Docker lets us run 'docker compose' from the integrated terminal
