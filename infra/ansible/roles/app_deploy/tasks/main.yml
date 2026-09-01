@@ -384,7 +384,7 @@
 - name: Run database migrations
   command: >-
     docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.prod
-    exec -T api node node_modules/typeorm/cli.js migration:run -d apps/api/dist/data-source.js
+    run --rm --no-deps api node node_modules/typeorm/cli.js migration:run -d apps/api/dist/data-source.js
   args:
     chdir: "{{ deploy_dir }}"
   environment:

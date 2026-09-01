@@ -21,6 +21,8 @@ check "compose task exports BGG_API_TOKEN" \
   "$(grep -c '^    BGG_API_TOKEN:' "$TASKS_FILE" | grep -q '^4$' && printf expected || printf missing)"
 check "migration task exports database Compose variables" \
   "$(grep -c '^    DB_USER:' "$TASKS_FILE" | grep -q '^3$' && grep -c '^    DB_NAME:' "$TASKS_FILE" | grep -q '^3$' && grep -c '^    DB_PASSWORD:' "$TASKS_FILE" | grep -q '^4$' && printf expected || printf missing)"
+check "migration task does not require a running api service" \
+  "$(grep -A4 -- '- name: Run database migrations' "$TASKS_FILE" | grep -q ' run --rm --no-deps api ' && printf expected || printf missing)"
 
 if [ "$failures" -gt 0 ]; then
   printf '\n%s test(s) failed\n' "$failures"
