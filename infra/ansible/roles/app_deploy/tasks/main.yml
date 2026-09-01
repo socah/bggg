@@ -344,11 +344,28 @@
   command: docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.prod exec -T db pg_isready -U "{{ db_user }}"
   args:
     chdir: "{{ deploy_dir }}"
+  environment:
+    DB_USER: "{{ db_user }}"
+    DB_NAME: "{{ db_name }}"
+    DB_PASSWORD: "{{ bootstrap_db_password }}"
+    VAULT_KMS_KEY_ID: "{{ vault_kms_key_id }}"
+    VAULT_KMS_CRYPTO_ENDPOINT: "{{ vault_kms_crypto_endpoint }}"
+    VAULT_KMS_MANAGEMENT_ENDPOINT: "{{ vault_kms_management_endpoint }}"
+    KEYCLOAK_ADMIN_PASSWORD: "{{ keycloak_admin_password }}"
+    KEYCLOAK_API_SERVICE_SECRET: "{{ keycloak_api_service_secret }}"
+    LETSENCRYPT_EMAIL: "{{ letsencrypt_email }}"
+    AUTH_SECRET: "{{ auth_secret }}"
+    AUTH_KEYCLOAK_SECRET: "{{ auth_keycloak_secret }}"
+    BGG_API_TOKEN: "{{ bgg_api_token }}"
+    R2_ENDPOINT: "{{ r2_endpoint }}"
+    R2_ACCESS_KEY_ID: "{{ r2_access_key_id }}"
+    R2_SECRET_ACCESS_KEY: "{{ r2_secret_access_key }}"
   register: pg_ready
   until: pg_ready.rc == 0
   retries: 30
   delay: 2
   changed_when: false
+  no_log: true
 
 # This is the step that would have caught today's incident before it ever
 # reached a user: 'is_solo' shipped in the entity/schema.sql but the
@@ -370,4 +387,21 @@
     exec -T api node node_modules/typeorm/cli.js migration:run -d apps/api/dist/data-source.js
   args:
     chdir: "{{ deploy_dir }}"
+  environment:
+    DB_USER: "{{ db_user }}"
+    DB_NAME: "{{ db_name }}"
+    DB_PASSWORD: "{{ bootstrap_db_password }}"
+    VAULT_KMS_KEY_ID: "{{ vault_kms_key_id }}"
+    VAULT_KMS_CRYPTO_ENDPOINT: "{{ vault_kms_crypto_endpoint }}"
+    VAULT_KMS_MANAGEMENT_ENDPOINT: "{{ vault_kms_management_endpoint }}"
+    KEYCLOAK_ADMIN_PASSWORD: "{{ keycloak_admin_password }}"
+    KEYCLOAK_API_SERVICE_SECRET: "{{ keycloak_api_service_secret }}"
+    LETSENCRYPT_EMAIL: "{{ letsencrypt_email }}"
+    AUTH_SECRET: "{{ auth_secret }}"
+    AUTH_KEYCLOAK_SECRET: "{{ auth_keycloak_secret }}"
+    BGG_API_TOKEN: "{{ bgg_api_token }}"
+    R2_ENDPOINT: "{{ r2_endpoint }}"
+    R2_ACCESS_KEY_ID: "{{ r2_access_key_id }}"
+    R2_SECRET_ACCESS_KEY: "{{ r2_secret_access_key }}"
   changed_when: true
+  no_log: true

@@ -18,7 +18,9 @@ check() {
 check "deploy wrapper forwards BGG_API_TOKEN" \
   "$(grep -q -- '-e bgg_api_token=' "$DEPLOY_SCRIPT" && printf expected || printf missing)"
 check "compose task exports BGG_API_TOKEN" \
-  "$(grep -c '^    BGG_API_TOKEN:' "$TASKS_FILE" | grep -q '^2$' && printf expected || printf missing)"
+  "$(grep -c '^    BGG_API_TOKEN:' "$TASKS_FILE" | grep -q '^4$' && printf expected || printf missing)"
+check "migration task exports database Compose variables" \
+  "$(grep -c '^    DB_USER:' "$TASKS_FILE" | grep -q '^3$' && grep -c '^    DB_NAME:' "$TASKS_FILE" | grep -q '^3$' && grep -c '^    DB_PASSWORD:' "$TASKS_FILE" | grep -q '^4$' && printf expected || printf missing)"
 
 if [ "$failures" -gt 0 ]; then
   printf '\n%s test(s) failed\n' "$failures"
