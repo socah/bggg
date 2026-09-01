@@ -1,14 +1,14 @@
 # syntax=docker/dockerfile:1
 
 # --- deps: install only what apps/web needs, nothing from apps/api ---
-FROM node:20-alpine AS deps
+FROM node:22-alpine AS deps
 WORKDIR /workspace
 COPY package.json package-lock.json ./
 COPY apps/web/package.json apps/web/package.json
 RUN npm ci --workspace=apps/web --include-workspace-root
 
 # --- build: produce the traced 'standalone' server bundle ---
-FROM node:20-alpine AS build
+FROM node:22-alpine AS build
 WORKDIR /workspace
 COPY --from=deps /workspace/node_modules ./node_modules
 COPY --from=deps /workspace/package.json /workspace/package-lock.json ./
@@ -21,7 +21,7 @@ COPY apps/web apps/web
 RUN npm run build --workspace=apps/web
 
 # --- runtime: only the traced server + static assets, nothing else ---
-FROM node:20-alpine AS runtime
+FROM node:22-alpine AS runtime
 WORKDIR /workspace
 ENV NODE_ENV=production
 # Decision ('standalone' output, set in next.config.ts): Next's build

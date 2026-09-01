@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     // ── Language target ───────────────────────────────────────────────────
-    // Node 20 (our engine) understands ES2021 natively, so we can target it
+    // Node 22 (our engine) understands ES2021 natively, so we can target it
     // directly instead of down-compiling to ES5. Keeps output readable.
     "target": "ES2021",
 

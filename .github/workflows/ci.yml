@@ -81,7 +81,7 @@ jobs:
       - uses: actions/setup-node@v4
         if: needs.changes.outputs[matrix.workspace] == 'true'
         with:
-          node-version: '20'
+          node-version: '22.22.3'
           # Caches ~/.npm keyed on package-lock.json's hash (root-level lockfile,
           # since this is an npm workspaces monorepo — one lockfile for both apps).
           cache: 'npm'

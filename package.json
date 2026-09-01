@@ -10,7 +10,7 @@
     "dev:web": "set -a && . ./.env && set +a && PORT=\"${WEB_HOST_PORT:-3000}\" npm run dev --workspace=apps/web"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.22.3"
   },
   "overrides": {
     "@rollup/plugin-terser": {
