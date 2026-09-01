@@ -7,40 +7,6 @@
 help:
 	@echo "Available targets: deploy-dev deploy-prod dev-setup dev-setup-all dev-status-all dev-stop-all dev-down-all dev-clean-all dev-down dev-stop dev-status seed-user sync-secrets db-migrate migration-generate dev-up devcontainer-up devcontainer-run deploy-dev-with-user"
 
-# Devcontainer-friendly flow: keep app servers outside Docker so VS Code's
-# forwarded ports map directly to host-browser URLs.
-devcontainer-up:
-	@if ! command -v infisical >/dev/null 2>&1; then \
-		echo "infisical CLI not found — install it before running devcontainer-up" >&2; \
-		exit 1; \
-	fi
-	@BGG_API_TOKEN=$$(infisical secrets get BGG_API_TOKEN --path=/ENV_VARS --env="$${INFISICAL_ENV:-dev}" --plain) || { \
-		echo "Could not read BGG_API_TOKEN from Infisical" >&2; exit 1; \
-	}; \
-	sed -i '/^BGG_API_TOKEN=/d' .env; \
-	printf 'BGG_API_TOKEN=%s\n' "$$BGG_API_TOKEN" >> .env
-	docker compose up -d db keycloak
-	infra/scripts/fetch-keycloak-dev-secrets.sh
-	set -a && . ./.env && set +a && \
-	KEYCLOAK_URL="http://localhost:8080" \
-	BOOTSTRAP_ADMIN_EMAIL="$${DEV_SEED_USER_EMAIL}" \
-	BOOTSTRAP_ADMIN_PASSWORD="$${DEV_SEED_USER_PASSWORD}" \
-	npm run seed:admin --workspace=apps/api
-	@echo "Next steps:"
-	@echo "  Terminal 1: npm run dev:api"
-	@echo "  Terminal 2: npm run dev:web"
-	@echo "  Open forwarded port 3000 in your host browser."
-	@echo "  Keycloak is on forwarded port 8080."
-
-# One-command local run for devcontainers: setup infra, then start both app
-# dev servers in this terminal. Ctrl+C stops both child processes.
-devcontainer-run: devcontainer-up
-	@echo "Starting dev:api and dev:web (Ctrl+C to stop both)..."
-	@bash -lc 'set -euo pipefail; \
-	npm run dev:api & API_PID=$$!; \
-	npm run dev:web & WEB_PID=$$!; \
-	trap "kill $$API_PID $$WEB_PID" INT TERM EXIT; \
-	wait'
 deploy-dev:
 	docker compose up -d --build
 
