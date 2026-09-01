@@ -28,6 +28,7 @@ check "API dev command uses allocated port" "$( grep -q 'API_HOST_PORT:-3001' "$
 check "web dev command does not hard-code port" "$( ! grep -q -- '--port 3000' "$ROOT/apps/web/package.json" && echo expected || echo hard-coded )"
 check "host commands use published database port" "$( [ "$(grep -c 'DB_PORT="\$host_db_port"' "$SCRIPT")" = 2 ] && ! grep -q 'DB_PORT="\$(read_var DB_HOST_PORT)"' "$SCRIPT" && echo expected || echo wrong )"
 
+check "dev setup uses canonical bootstrap credentials" "$( grep -q 'BOOTSTRAP_ADMIN_EMAIL="\$BOOTSTRAP_ADMIN_EMAIL"' "$SCRIPT" && grep -q 'BOOTSTRAP_ADMIN_PASSWORD="\$BOOTSTRAP_ADMIN_PASSWORD"' "$SCRIPT" && ! grep -q 'DEV_SEED_USER_' "$SCRIPT" && echo expected || echo wrong )"
 check "setup cleans legacy server state" "$( grep -q 'LEGACY_DEV_STATE_DIR' "$SCRIPT" && echo expected || echo missing )"
 check "web dev command targets allocated API" "$( grep -q 'NEXT_PUBLIC_API_URL=http://localhost:\$api_port' "$SCRIPT" && echo expected || echo missing )"
 check "auth cookies are isolated per worktree" "$( grep -q 'cookieSuffix' "$ROOT/apps/web/auth.ts" && echo expected || echo missing )"

@@ -179,7 +179,7 @@ dev, once, after Keycloak has booted for the first time.
 
 - Fast path: `make deploy-dev-with-user` boots the stack, fetches the
   generated Keycloak client secrets into `.env`, and seeds one app user
-  from `DEV_SEED_USER_EMAIL` / `DEV_SEED_USER_PASSWORD`.
+  from `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD`.
 - Devcontainer + forwarded-ports path: `make devcontainer-up` boots only
   `db` + `keycloak`, fetches secrets, and seeds the same dev user; then run
   `npm run dev:api` and `npm run dev:web` so the app is reachable through

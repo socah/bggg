@@ -130,7 +130,6 @@ init_env() {
   ensure_local_secret KEYCLOAK_ADMIN_PASSWORD "$(random_value)"
   ensure_local_secret AUTH_SECRET "$(random_value)"
   ensure_local_secret BOOTSTRAP_ADMIN_PASSWORD "$(random_value)"
-  ensure_local_secret DEV_SEED_USER_PASSWORD "$(random_value)"
   chmod 600 "$ENV_FILE"
 }
 
@@ -201,7 +200,7 @@ setup() {
   web_port=$(read_var WEB_HOST_PORT)
   [ -n "$api_port" ] && [ -n "$web_port" ] || die "worktree app ports are incomplete; run 'make dev-setup' to regenerate worktree settings"
   DB_HOST=localhost DB_PORT="$host_db_port" KEYCLOAK_URL="http://localhost:$(read_var KEYCLOAK_HOST_PORT)" \
-    BOOTSTRAP_ADMIN_EMAIL="$DEV_SEED_USER_EMAIL" BOOTSTRAP_ADMIN_PASSWORD="$DEV_SEED_USER_PASSWORD" \
+    BOOTSTRAP_ADMIN_EMAIL="$BOOTSTRAP_ADMIN_EMAIL" BOOTSTRAP_ADMIN_PASSWORD="$BOOTSTRAP_ADMIN_PASSWORD" \
     npm run seed:admin --workspace=apps/api
   DB_HOST=localhost DB_PORT="$host_db_port" npm run migration:run --workspace=apps/api
   LEGACY_DEV_STATE_DIR=${LEGACY_DEV_STATE_DIR:-$WORKTREE_DIR/logs}

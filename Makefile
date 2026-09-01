@@ -131,8 +131,8 @@ deploy-dev-with-user:
 	infra/scripts/fetch-keycloak-dev-secrets.sh
 	set -a && . ./.env && set +a && \
 	KEYCLOAK_URL="http://localhost:8080" \
-	BOOTSTRAP_ADMIN_EMAIL="$${DEV_SEED_USER_EMAIL}" \
-	BOOTSTRAP_ADMIN_PASSWORD="$${DEV_SEED_USER_PASSWORD}" \
+	BOOTSTRAP_ADMIN_EMAIL="$${BOOTSTRAP_ADMIN_EMAIL}" \
+	BOOTSTRAP_ADMIN_PASSWORD="$${BOOTSTRAP_ADMIN_PASSWORD}" \
 	npm run seed:admin --workspace=apps/api
 
 # Same command a developer would run by hand, and the exact one

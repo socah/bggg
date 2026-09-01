@@ -26,6 +26,8 @@ check "host-side generation connects through localhost" \
   "$(grep -q 'DB_HOST=localhost npm run migration:generate' "$MAKEFILE" && printf expected || printf missing)"
 check "API dev command uses worktree port" \
   "$(grep -q 'API_HOST_PORT' package.json && printf expected || printf missing)"
+check "dev targets do not use removed seed variables" \
+  "$( ! grep -q 'DEV_SEED_USER_' "$MAKEFILE" && printf expected || printf present)"
 
 if [ "$failures" -gt 0 ]; then
   printf '\n%s test(s) failed\n' "$failures"
