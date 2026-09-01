@@ -35,11 +35,16 @@ pid_alive() {
 }
 
 # --- start: launches both fakes, records live pids -------------------------
-API_CMD="sleep 30" WEB_CMD="sleep 30" run start >/dev/null
+API_CMD="FOO=expected sh -c 'env > $WORK/env-marker; sleep 30'" WEB_CMD="sleep 30" run start >/dev/null
 api_pid=$(cat "$WORK/pids/api.pid")
 web_pid=$(cat "$WORK/pids/web.pid")
 if pid_alive "$api_pid" && pid_alive "$web_pid"; then check "start: both servers running with pids recorded" expected
 else check "start: both servers running with pids recorded" missing; fi
+if grep -qx 'FOO=expected' "$WORK/env-marker"; then
+  check "start: command environment assignments are applied" expected
+else
+  check "start: command environment assignments are applied" missing
+fi
 
 # --- start twice: must not duplicate ---------------------------------------
 API_CMD="sleep 30" WEB_CMD="sleep 30" run start >/dev/null

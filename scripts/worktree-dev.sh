@@ -13,6 +13,8 @@ BASE_SLOT=${WORKTREE_SLOT_BASE:-100}
 SLOT_COUNT=${WORKTREE_SLOT_COUNT:-100}
 PORT_STEP=${WORKTREE_PORT_STEP:-10}
 
+cd "$WORKTREE_DIR"
+
 die() { printf 'worktree-dev: %s\n' "$*" >&2; exit 1; }
 
 read_var() {
@@ -42,7 +44,14 @@ set_value() {
 
 set_derived() {
   key=$1 value=$2
-  [ "${FRESH_ENV:-0}" = 1 ] || { upsert_if_missing "$key" "$value"; return; }
+  if [ "${FRESH_ENV:-0}" != 1 ]; then
+    current=$(read_var "$key" || true)
+    case "$key:$current" in
+      AUTH_URL:http://localhost:3000|AUTH_URL:http://localhost:3[0-9][0-9][0-9]) ;;
+      AUTH_KEYCLOAK_ISSUER:http://localhost:*/realms/boardgame) ;;
+      *) upsert_if_missing "$key" "$value"; return ;;
+    esac
+  fi
   set_value "$key" "$value"
 }
 
@@ -66,6 +75,7 @@ port_free() {
 slot_ports() {
   slot=$1
   WEB_PORT=$((3000 + slot * PORT_STEP))
+  API_PORT_HOST=$((3001 + slot * PORT_STEP))
   KEYCLOAK_PORT=$((8080 + slot * PORT_STEP))
   DB_PORT_HOST=$((5432 + slot * PORT_STEP))
   VAULT_PORT=$((8200 + slot * PORT_STEP))
@@ -73,7 +83,7 @@ slot_ports() {
 
 ports_available() {
   slot_ports "$1"
-  port_free "$WEB_PORT" && port_free "$KEYCLOAK_PORT" &&
+  port_free "$WEB_PORT" && port_free "$API_PORT_HOST" && port_free "$KEYCLOAK_PORT" &&
     port_free "$DB_PORT_HOST" && port_free "$VAULT_PORT"
 }
 
@@ -106,6 +116,7 @@ init_env() {
   slot=$(read_var WORKTREE_SLOT)
   slot_ports "$slot"
   set_derived WEB_HOST_PORT "$WEB_PORT"
+  set_derived API_HOST_PORT "$API_PORT_HOST"
   set_derived KEYCLOAK_HOST_PORT "$KEYCLOAK_PORT"
   set_derived DB_HOST_PORT "$DB_PORT_HOST"
   set_derived VAULT_HOST_PORT "$VAULT_PORT"
@@ -146,6 +157,17 @@ wait_for() {
   die "$label did not become ready after $retries attempts"
 }
 
+wait_for_server() {
+  label=$1 port=$2
+  retries=${DEV_SERVER_READY_RETRIES:-30}
+  i=0
+  while [ "$i" -lt "$retries" ]; do
+    curl -sS -o /dev/null --max-time 2 "http://localhost:$port" && return 0
+    i=$((i + 1)); sleep 2
+  done
+  die "$label did not start on localhost:$port; check .dev/worktree-$(read_var WORKTREE_SLOT)/$label.log"
+}
+
 up() {
   require_docker
   if ! ports_available "$(read_var WORKTREE_SLOT)"; then
@@ -159,7 +181,7 @@ up() {
 
 sync_secrets() {
   EXEC_CMD="docker compose --project-name $(read_var COMPOSE_PROJECT_NAME) --env-file $ENV_FILE $COMPOSE_FILES exec -T keycloak" \
-    ENV_FILE="$ENV_FILE" sh "$SCRIPT_DIR/sync-dev-secrets.sh"
+    ENV_FILE="$ENV_FILE" WEB_HOST_PORT="$(read_var WEB_HOST_PORT)" sh "$SCRIPT_DIR/sync-dev-secrets.sh"
 }
 
 setup() {
@@ -175,20 +197,36 @@ setup() {
   set -a; . "$ENV_FILE"; set +a
   host_db_port=$(read_var DB_HOST_PORT)
   [ -n "$host_db_port" ] || die "DB_HOST_PORT is empty; run 'make dev-setup' to regenerate worktree settings"
+  api_port=$(read_var API_HOST_PORT)
+  web_port=$(read_var WEB_HOST_PORT)
+  [ -n "$api_port" ] && [ -n "$web_port" ] || die "worktree app ports are incomplete; run 'make dev-setup' to regenerate worktree settings"
   DB_HOST=localhost DB_PORT="$host_db_port" KEYCLOAK_URL="http://localhost:$(read_var KEYCLOAK_HOST_PORT)" \
     BOOTSTRAP_ADMIN_EMAIL="$DEV_SEED_USER_EMAIL" BOOTSTRAP_ADMIN_PASSWORD="$DEV_SEED_USER_PASSWORD" \
     npm run seed:admin --workspace=apps/api
   DB_HOST=localhost DB_PORT="$host_db_port" npm run migration:run --workspace=apps/api
+  LEGACY_DEV_STATE_DIR=${LEGACY_DEV_STATE_DIR:-$WORKTREE_DIR/logs}
+  if [ "$LEGACY_DEV_STATE_DIR" != "$WORKTREE_DIR/.dev/worktree-$(read_var WORKTREE_SLOT)" ] && [ -d "$LEGACY_DEV_STATE_DIR" ]; then
+    DEV_STATE_DIR="$LEGACY_DEV_STATE_DIR" sh "$SCRIPT_DIR/dev-servers.sh" stop >/dev/null 2>&1 || true
+  fi
   DEV_STATE_DIR="$WORKTREE_DIR/.dev/worktree-$(read_var WORKTREE_SLOT)" \
+    API_CMD="DB_HOST=localhost DB_PORT=$host_db_port KEYCLOAK_URL=http://localhost:$(read_var KEYCLOAK_HOST_PORT) PORT=$api_port npm run start:dev --workspace=apps/api" \
+    WEB_CMD="NEXT_PUBLIC_API_URL=http://localhost:$api_port PORT=$web_port npm run dev --workspace=apps/web -- --port $web_port" \
+    KEYCLOAK_HOST_URL="http://localhost:$(read_var KEYCLOAK_HOST_PORT)" \
+    sh "$SCRIPT_DIR/dev-servers.sh" stop >/dev/null 2>&1 || true
+  DEV_STATE_DIR="$WORKTREE_DIR/.dev/worktree-$(read_var WORKTREE_SLOT)" \
+    API_CMD="DB_HOST=localhost DB_PORT=$host_db_port KEYCLOAK_URL=http://localhost:$(read_var KEYCLOAK_HOST_PORT) PORT=$api_port npm run start:dev --workspace=apps/api" \
+    WEB_CMD="NEXT_PUBLIC_API_URL=http://localhost:$api_port PORT=$web_port npm run dev --workspace=apps/web -- --port $web_port" \
     KEYCLOAK_HOST_URL="http://localhost:$(read_var KEYCLOAK_HOST_PORT)" \
     sh "$SCRIPT_DIR/dev-servers.sh" start
+  wait_for_server api "$api_port"
+  wait_for_server web "$web_port"
   status
 }
 
 status() {
-  printf 'worktree: %s\nproject: %s\nports: web=%s keycloak=%s db=%s vault=%s\n' \
+  printf 'worktree: %s\nproject: %s\nweb: http://localhost:%s\nports: web=%s api=%s keycloak=%s db=%s vault=%s\n' \
     "$(basename "$WORKTREE_DIR")" "$(read_var COMPOSE_PROJECT_NAME)" \
-    "$(read_var WEB_HOST_PORT)" "$(read_var KEYCLOAK_HOST_PORT)" "$(read_var DB_HOST_PORT)" "$(read_var VAULT_HOST_PORT)"
+    "$(read_var WEB_HOST_PORT)" "$(read_var WEB_HOST_PORT)" "$(read_var API_HOST_PORT)" "$(read_var KEYCLOAK_HOST_PORT)" "$(read_var DB_HOST_PORT)" "$(read_var VAULT_HOST_PORT)"
   compose ps 2>/dev/null || true
   DEV_STATE_DIR="$WORKTREE_DIR/.dev/worktree-$(read_var WORKTREE_SLOT)" sh "$SCRIPT_DIR/dev-servers.sh" status
   printf 'logs: %s/.dev/worktree-%s\n' "$WORKTREE_DIR" "$(read_var WORKTREE_SLOT)"

@@ -6,7 +6,7 @@
     "packages/*"
   ],
   "scripts": {
-    "dev:api": "set -a && . ./.env && set +a && DB_HOST=localhost DB_PORT=\"${DB_HOST_PORT:-5432}\" KEYCLOAK_URL=\"${KEYCLOAK_HOST_URL:-http://localhost:8080}\" PORT=\"${API_PORT:-3001}\" npm run start:dev --workspace=apps/api",
+    "dev:api": "set -a && . ./.env && set +a && DB_HOST=localhost DB_PORT=\"${DB_HOST_PORT:-5432}\" KEYCLOAK_URL=\"${KEYCLOAK_HOST_URL:-http://localhost:8080}\" PORT=\"${API_HOST_PORT:-3001}\" npm run start:dev --workspace=apps/api",
     "dev:web": "set -a && . ./.env && set +a && PORT=\"${WEB_HOST_PORT:-3000}\" npm run dev --workspace=apps/web"
   },
   "engines": {

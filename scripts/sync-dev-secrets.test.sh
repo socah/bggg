@@ -36,6 +36,8 @@ api_json='[ {
 stub_exec() {
   EXEC_CMD="sh $WORK/fake-exec.sh" \
   ENV_FILE="$1" \
+  WEB_HOST_PORT=3990 \
+  EXEC_LOG="$WORK/exec.log" \
   WEB_JSON="$web_json" API_JSON="$api_json" \
   sh "$UNDER_TEST"
 }
@@ -43,8 +45,11 @@ stub_exec() {
 cat > "$WORK/fake-exec.sh" <<'EOF'
 #!/bin/sh
 case "$*" in
+  *config\ credentials*) printf 'config credentials\n' >>"$EXEC_LOG" ;;
+  *clientId=web*fields\ id*) printf '[ { "id" : "web-client-id" } ]' ;;
   *clientId=web*) printf '%s' "$WEB_JSON" ;;
   *clientId=api-service*) printf '%s' "$API_JSON" ;;
+  *update\ clients/*) printf 'update client\n' >>"$EXEC_LOG" ;;
   *) printf 'unexpected query: %s\n' "$*" >&2; exit 1 ;;
 esac
 EOF
@@ -60,12 +65,16 @@ get_val() { # $1=file $2=var
 # --- 1: missing vars get appended ------------------------------------------
 printf 'DB_NAME=bggg_dev\n' > "$WORK/env1"
 stub_exec "$WORK/env1" >/dev/null
+check "authenticates before reading secrets" \
+  "$( [ "$(head -n1 "$WORK/exec.log")" = 'config credentials' ] && echo expected || echo missing)"
 check "missing: AUTH_KEYCLOAK_SECRET appended" \
   "$( [ "$(get_val "$WORK/env1" AUTH_KEYCLOAK_SECRET)" = "WEBSECRET123" ] && echo expected || echo wrong)"
 check "missing: KEYCLOAK_API_SERVICE_SECRET appended" \
   "$( [ "$(get_val "$WORK/env1" KEYCLOAK_API_SERVICE_SECRET)" = "APISECRET456" ] && echo expected || echo wrong)"
 check "missing: existing unrelated lines preserved" \
   "$( [ "$(head -n1 "$WORK/env1")" = "DB_NAME=bggg_dev" ] && echo expected || echo wrong)"
+check "missing: web redirect URI uses allocated port" \
+  "$( grep -q 'update client' "$WORK/exec.log" && echo expected || echo missing )"
 
 # --- 2: empty values get filled --------------------------------------------
 printf 'AUTH_KEYCLOAK_SECRET=\nKEYCLOAK_API_SERVICE_SECRET=\n' > "$WORK/env2"

@@ -15,6 +15,10 @@ ENV_FILE="${ENV_FILE:-.env}"
 # shellcheck disable=SC2086
 EXEC_CMD=${EXEC_CMD:-docker compose exec -T keycloak}
 
+env_value() {
+  awk -F= -v key="$1" '$1 == key { value=substr($0, index($0, "=") + 1) } END { print value }' "$ENV_FILE"
+}
+
 kcadm() {
   $EXEC_CMD /opt/keycloak/bin/kcadm.sh "$@"
 }
@@ -60,8 +64,32 @@ upsert() { # $1=var $2=value
   exit 1
 }
 
+admin_user=${KEYCLOAK_ADMIN_USER:-$(env_value KEYCLOAK_ADMIN_USER)}
+admin_password=${KEYCLOAK_ADMIN_PASSWORD:-$(env_value KEYCLOAK_ADMIN_PASSWORD)}
+admin_user=${admin_user:-admin}
+admin_password=${admin_password:-admin}
+
+if ! kcadm config credentials \
+    --server "${KEYCLOAK_KCADM_SERVER:-http://localhost:8080}" \
+    --realm master --user "$admin_user" --password "$admin_password" >/dev/null 2>&1; then
+  echo "sync-dev-secrets: could not authenticate to Keycloak — is the stack ready?" >&2
+  exit 1
+fi
+
 web_secret=$(fetch_secret web)
 api_secret=$(fetch_secret api-service)
+
+web_client_id=$(kcadm get clients -r boardgame -q clientId=web --fields id 2>/dev/null \
+  | tr -d ' \t\n\r' \
+  | sed 's/.*"id":"//; s/".*//')
+[ -n "$web_client_id" ] || {
+  echo "sync-dev-secrets: could not find client 'web' — is the realm imported?" >&2
+  exit 1
+}
+web_port=${WEB_HOST_PORT:-3000}
+kcadm update "clients/$web_client_id" -r boardgame \
+  -s "redirectUris=[\"http://localhost:$web_port/*\",\"https://bggg.duckdns.org/*\"]" \
+  -s "webOrigins=[\"http://localhost:$web_port\",\"https://bggg.duckdns.org\"]" >/dev/null
 
 upsert AUTH_KEYCLOAK_SECRET "$web_secret"
 upsert KEYCLOAK_API_SERVICE_SECRET "$api_secret"

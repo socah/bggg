@@ -27,9 +27,9 @@ start_one() { # $1=name $2=cmd
   mkdir -p "$PID_DIR" "$LOG_DIR"
   # shellcheck disable=SC2086 — cmd is deliberately word-split
   if command -v setsid >/dev/null 2>&1; then
-    setsid sh -c "exec $2" >>"$LOG_DIR/$1.log" 2>&1 </dev/null &
+    setsid sh -c "$2" >>"$LOG_DIR/$1.log" 2>&1 </dev/null &
   else
-    sh -c "exec $2" >>"$LOG_DIR/$1.log" 2>&1 </dev/null &
+    sh -c "$2" >>"$LOG_DIR/$1.log" 2>&1 </dev/null &
   fi
   echo $! >"$pidfile"
   echo "$1: started (pid $(cat "$pidfile"), log $LOG_DIR/$1.log)"

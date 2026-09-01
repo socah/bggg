@@ -24,6 +24,8 @@ check "no-change generation is not fatal" \
   "$(grep -q 'No changes in database schema were found' "$MAKEFILE" && printf expected || printf missing)"
 check "host-side generation connects through localhost" \
   "$(grep -q 'DB_HOST=localhost npm run migration:generate' "$MAKEFILE" && printf expected || printf missing)"
+check "API dev command uses worktree port" \
+  "$(grep -q 'API_HOST_PORT' package.json && printf expected || printf missing)"
 
 if [ "$failures" -gt 0 ]; then
   printf '\n%s test(s) failed\n' "$failures"

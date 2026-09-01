@@ -48,6 +48,9 @@ while IFS= read -r path; do
   if [ "$result" = FAIL ]; then
     failures=$((failures + 1))
     printf '%s\n' "$(cat "$WORK/$n.out")" >&2
+  else
+    web_url=$(awk '/^web: http:\/\/localhost:/ { print; exit }' "$WORK/$n.out")
+    [ -z "$web_url" ] || printf '%s: %s\n' "$path" "$web_url"
   fi
 done <"$paths_file"
 [ "$failures" -eq 0 ] || { printf '%s worktree(s) failed\n' "$failures" >&2; exit 1; }
