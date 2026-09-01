@@ -36,6 +36,7 @@ FROM node:22-alpine AS runtime
 WORKDIR /workspace
 ENV NODE_ENV=production
 COPY --from=build /workspace/node_modules ./node_modules
+COPY --from=build /workspace/apps/api/node_modules ./apps/api/node_modules
 COPY --from=build /workspace/apps/api/dist ./apps/api/dist
 COPY --from=build /workspace/apps/api/package.json apps/api/package.json
 
