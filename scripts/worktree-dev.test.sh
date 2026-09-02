@@ -62,6 +62,7 @@ check "stale generated URL follows allocated port" "$( [ "$(get "$WORK/stale-der
 
 status_output=$(PATH="$WORK/bin:$PATH" WORKTREE_DIR="$WORK/first" REPO_ROOT="$ROOT" ENV_FILE="$WORK/first.env" PORT_CHECK_CMD=false sh "$SCRIPT" status)
 check "status displays web URL" "$( printf '%s\n' "$status_output" | grep -q "web: http://localhost:$(get "$WORK/first.env" WEB_HOST_PORT)" && echo expected || echo missing )"
+check "status displays Keycloak URL on its own line" "$( printf '%s\n' "$status_output" | grep -qx "keycloak: http://localhost:$(get "$WORK/first.env" KEYCLOAK_HOST_PORT)" && echo expected || echo missing )"
 
 if WORKTREE_DIR="$WORK/first" REPO_ROOT="$ROOT" ENV_FILE="$WORK/conflict.env" WORKTREE_SLOT_COUNT=1 PORT_CHECK_CMD='test "$1" = 3000' sh "$SCRIPT" init >/dev/null 2>&1; then result=accepted; else result=expected; fi
 check "occupied port block is rejected" "$result"

@@ -224,9 +224,9 @@ setup() {
 }
 
 status() {
-  printf 'worktree: %s\nproject: %s\nweb: http://localhost:%s\nports: web=%s api=%s keycloak=%s db=%s vault=%s\n' \
+  printf 'worktree: %s\nproject: %s\nweb: http://localhost:%s\nkeycloak: http://localhost:%s\nports: web=%s api=%s keycloak=%s db=%s vault=%s\n' \
     "$(basename "$WORKTREE_DIR")" "$(read_var COMPOSE_PROJECT_NAME)" \
-    "$(read_var WEB_HOST_PORT)" "$(read_var WEB_HOST_PORT)" "$(read_var API_HOST_PORT)" "$(read_var KEYCLOAK_HOST_PORT)" "$(read_var DB_HOST_PORT)" "$(read_var VAULT_HOST_PORT)"
+    "$(read_var WEB_HOST_PORT)" "$(read_var KEYCLOAK_HOST_PORT)" "$(read_var WEB_HOST_PORT)" "$(read_var API_HOST_PORT)" "$(read_var KEYCLOAK_HOST_PORT)" "$(read_var DB_HOST_PORT)" "$(read_var VAULT_HOST_PORT)"
   compose ps 2>/dev/null || true
   DEV_STATE_DIR="$WORKTREE_DIR/.dev/worktree-$(read_var WORKTREE_SLOT)" sh "$SCRIPT_DIR/dev-servers.sh" status
   printf 'logs: %s/.dev/worktree-%s\n' "$WORKTREE_DIR" "$(read_var WORKTREE_SLOT)"
