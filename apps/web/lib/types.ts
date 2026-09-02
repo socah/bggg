@@ -68,6 +68,18 @@ export interface GroupMemberInfo {
   role: MemberRole;
 }
 
+export interface GameCardGame {
+  id: number;
+  name: string;
+  image: string | null;
+  thumbnail: string | null;
+  minPlayers: number;
+  maxPlayers: number;
+  playingTime: number;
+  yearPublished: number;
+  rating: number;
+}
+
 // Body of PUT /proposals/:id/rsvp. Times are optional HH:mm (24h) —
 // omitted means the server applies the Decision G default window
 // (10:00–02:00 next day) anchored to the proposal's date.
@@ -78,11 +90,6 @@ export interface RsvpInput {
 }
 
 // One row of GET /groups/:groupId/games — the propose-a-game picker's data.
-export interface GroupLibraryGame {
-  id: number;
+export interface GroupLibraryGame extends GameCardGame {
   bggId: number;
-  name: string;
-  thumbnail: string | null;
-  minPlayers: number;
-  maxPlayers: number;
 }

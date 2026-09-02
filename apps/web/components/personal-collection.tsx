@@ -2,21 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/api';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-
-interface Game {
-  id: number;
-  name: string;
-  image: string;
-  thumbnail: string;
-  minPlayers: number;
-  maxPlayers: number;
-  playingTime: number;
-  yearPublished: number;
-  rating: number;
-}
+import { GameCard } from '@/components/game-card';
+import type { GameCardGame } from '@/lib/types';
 
 interface ImportSummary {
   added: number;
@@ -34,7 +23,7 @@ async function responseError(response: Response): Promise<string> {
 }
 
 export function PersonalCollection() {
-  const [games, setGames] = useState<Game[]>([]);
+  const [games, setGames] = useState<GameCardGame[]>([]);
   const [linked, setLinked] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -52,7 +41,7 @@ export function PersonalCollection() {
     }
     const gamesResponse = await apiFetch('/bgg-account/games');
     if (!gamesResponse.ok) throw new Error(await responseError(gamesResponse));
-    setGames((await gamesResponse.json()) as Game[]);
+    setGames((await gamesResponse.json()) as GameCardGame[]);
   }
 
   useEffect(() => {
@@ -110,23 +99,7 @@ export function PersonalCollection() {
         <Card className="p-6 text-center text-sm text-text-muted">Your collection is empty. Import from BGG to sync it.</Card>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {games.map((game) => (
-            <Card key={game.id} className="flex flex-col">
-              {(game.image || game.thumbnail) && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={game.image || game.thumbnail} alt="" className="aspect-[4/3] w-full object-cover" />
-              )}
-              <div className="flex flex-1 flex-col gap-2 p-4">
-                <h3 className="font-display text-lg">{game.name}</h3>
-                <div className="flex flex-wrap gap-2">
-                  {game.yearPublished > 0 && <Badge>{game.yearPublished}</Badge>}
-                  {game.rating > 0 && <Badge>{game.rating.toFixed(1)} BGG</Badge>}
-                  {game.minPlayers > 0 && <Badge>{game.minPlayers}–{game.maxPlayers} players</Badge>}
-                </div>
-                {game.playingTime > 0 && <p className="mt-auto pt-2 text-sm text-text-muted">{game.playingTime} min</p>}
-              </div>
-            </Card>
-          ))}
+          {games.map((game) => <GameCard key={game.id} game={game} />)}
         </div>
       )}
     </div>

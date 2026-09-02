@@ -1,8 +1,8 @@
 'use client';
 
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { GameCard } from '@/components/game-card';
 import { useGroupLibrary } from '@/hooks/use-group-library';
 
 export function GroupLibrary({ groupId }: { groupId: string }) {
@@ -31,22 +31,7 @@ export function GroupLibrary({ groupId }: { groupId: string }) {
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {games.map((game) => (
-        <Card key={game.id} className="flex flex-col">
-          {game.thumbnail && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={game.thumbnail} alt="" className="aspect-[4/3] w-full object-cover" />
-          )}
-          <div className="flex flex-1 flex-col gap-2 p-4">
-            <h2 className="font-display text-lg">{game.name}</h2>
-            <div className="flex flex-wrap gap-2">
-              {game.minPlayers > 0 && game.maxPlayers > 0 && (
-                <Badge>{game.minPlayers}-{game.maxPlayers} players</Badge>
-              )}
-            </div>
-          </div>
-        </Card>
-      ))}
+      {games.map((game) => <GameCard key={game.id} game={game} />)}
     </div>
   );
 }

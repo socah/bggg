@@ -46,7 +46,8 @@ describe('GroupLibrary', () => {
     mockUseGroupLibrary.mockReturnValue({
       games: [{
         id: 1, bggId: 174430, name: 'Gloomhaven', thumbnail: 'https://example.test/gloomhaven.jpg',
-        minPlayers: 1, maxPlayers: 4,
+        image: 'https://example.test/gloomhaven-large.jpg', minPlayers: 1, maxPlayers: 4,
+        playingTime: 120, yearPublished: 2017, rating: 8.6,
       }],
       loading: false,
       error: null,
@@ -55,8 +56,11 @@ describe('GroupLibrary', () => {
 
     const { container } = render(<GroupLibrary groupId="group-1" />);
 
-    expect(container.querySelector('img')?.getAttribute('src')).toBe('https://example.test/gloomhaven.jpg');
+    expect(container.querySelector('img')?.getAttribute('src')).toBe('https://example.test/gloomhaven-large.jpg');
     expect(screen.getByRole('heading', { name: 'Gloomhaven' })).toBeTruthy();
-    expect(screen.getByText('1-4 players')).toBeTruthy();
+    expect(screen.getByText('1–4 players')).toBeTruthy();
+    expect(screen.getByText('2017')).toBeTruthy();
+    expect(screen.getByText('8.6 BGG')).toBeTruthy();
+    expect(screen.getByText('120 min')).toBeTruthy();
   });
 });
