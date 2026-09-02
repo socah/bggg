@@ -185,6 +185,10 @@ sync_secrets() {
 
 setup() {
   init_env; require_docker
+  if [ -z "$(read_var BGG_API_TOKEN || true)" ] && [ -f "$REPO_ROOT/.env" ]; then
+    root_bgg_token=$(awk -F= '$1 == "BGG_API_TOKEN" { value=substr($0, index($0, "=") + 1) } END { print value }' "$REPO_ROOT/.env")
+    [ -z "$root_bgg_token" ] || set_value BGG_API_TOKEN "$root_bgg_token"
+  fi
   if [ -z "$(read_var BGG_API_TOKEN || true)" ] && command -v infisical >/dev/null 2>&1; then
     if token=$(infisical secrets get BGG_API_TOKEN --path=/ENV_VARS --env="${INFISICAL_ENV:-dev}" --plain </dev/null 2>/dev/null); then
       case "$token" in ''|*[!A-Za-z0-9._~+/=-]*) ;; *) set_value BGG_API_TOKEN "$token" ;; esac

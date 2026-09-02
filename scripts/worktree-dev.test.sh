@@ -6,7 +6,8 @@ WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 failures=0
 check() { if [ "$2" = expected ]; then printf 'ok   %s\n' "$1"; else failures=$((failures + 1)); printf 'FAIL %s (got %s)\n' "$1" "$2"; fi; }
-mkdir -p "$WORK/first" "$WORK/second" "$WORK/bin"
+mkdir -p "$WORK/first" "$WORK/second" "$WORK/root" "$WORK/bin"
+cp "$ROOT/.env.example" "$WORK/root/.env.example"
 cat >"$WORK/bin/docker" <<'EOF'
 #!/bin/sh
 exit 0
@@ -74,6 +75,15 @@ check "unconfigured Infisical does not populate BGG token" "$( [ -z "$(get "$onb
 configured_env="$WORK/configured.env"
 INFISICAL_TEST_MODE=configured PATH="$WORK/bin:$PATH" WORKTREE_DIR="$WORK/first" REPO_ROOT="$ROOT" ENV_FILE="$configured_env" PORT_CHECK_CMD=false sh "$SCRIPT" setup >/dev/null 2>&1 || true
 check "configured Infisical populates BGG token" "$( [ "$(get "$configured_env" BGG_API_TOKEN)" = test-token ] && echo expected || echo missing )"
+
+printf 'BGG_API_TOKEN=root-token._~+/=\n' >"$WORK/root/.env"
+root_token_env="$WORK/root-token.env"
+PATH="$WORK/bin:$PATH" WORKTREE_DIR="$WORK/first" REPO_ROOT="$WORK/root" ENV_FILE="$root_token_env" PORT_CHECK_CMD=false sh "$SCRIPT" setup >/dev/null 2>&1 || true
+check "setup copies BGG token from root env" "$( [ "$(get "$root_token_env" BGG_API_TOKEN)" = root-token._~+/= ] && echo expected || echo missing )"
+
+printf 'BGG_API_TOKEN=worktree-token\n' >"$WORK/preserved-token.env"
+PATH="$WORK/bin:$PATH" WORKTREE_DIR="$WORK/first" REPO_ROOT="$WORK/root" ENV_FILE="$WORK/preserved-token.env" PORT_CHECK_CMD=false sh "$SCRIPT" setup >/dev/null 2>&1 || true
+check "setup preserves existing worktree BGG token" "$( [ "$(get "$WORK/preserved-token.env" BGG_API_TOKEN)" = worktree-token ] && echo expected || echo overwritten )"
 
 [ "$failures" -eq 0 ] || exit 1
 printf '\nall tests passed\n'
