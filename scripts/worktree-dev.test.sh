@@ -61,6 +61,10 @@ printf 'WORKTREE_SLOT=7\nAUTH_URL=http://localhost:3000\n' >"$WORK/stale-derived
 WORKTREE_DIR="$WORK/first" REPO_ROOT="$ROOT" ENV_FILE="$WORK/stale-derived.env" PORT_CHECK_CMD=false sh "$SCRIPT" init >/dev/null
 check "stale generated URL follows allocated port" "$( [ "$(get "$WORK/stale-derived.env" AUTH_URL)" = "http://localhost:3070" ] && echo expected || echo stale )"
 
+printf 'WORKTREE_SLOT=8\nWEB_HOST_PORT=3070\nAPI_HOST_PORT=3071\nKEYCLOAK_HOST_PORT=8150\nDB_HOST_PORT=5502\nVAULT_HOST_PORT=8270\nKEYCLOAK_URL=http://localhost:8150\nKEYCLOAK_HOST_URL=http://localhost:8150\nAUTH_KEYCLOAK_ISSUER=http://localhost:8150/realms/boardgame\nAUTH_URL=http://localhost:3070\n' >"$WORK/reset-slot.env"
+WORKTREE_DIR="$WORK/first" REPO_ROOT="$ROOT" ENV_FILE="$WORK/reset-slot.env" PORT_CHECK_CMD=false sh "$SCRIPT" init >/dev/null
+check "reset slot updates generated port block" "$( [ "$(get "$WORK/reset-slot.env" WEB_HOST_PORT)" = 3080 ] && [ "$(get "$WORK/reset-slot.env" API_HOST_PORT)" = 3081 ] && [ "$(get "$WORK/reset-slot.env" KEYCLOAK_HOST_PORT)" = 8160 ] && [ "$(get "$WORK/reset-slot.env" DB_HOST_PORT)" = 5512 ] && [ "$(get "$WORK/reset-slot.env" VAULT_HOST_PORT)" = 8280 ] && echo expected || echo stale )"
+
 status_output=$(PATH="$WORK/bin:$PATH" WORKTREE_DIR="$WORK/first" REPO_ROOT="$ROOT" ENV_FILE="$WORK/first.env" PORT_CHECK_CMD=false sh "$SCRIPT" status)
 check "status displays web URL" "$( printf '%s\n' "$status_output" | grep -q "web: http://localhost:$(get "$WORK/first.env" WEB_HOST_PORT)" && echo expected || echo missing )"
 check "status displays Keycloak URL on its own line" "$( printf '%s\n' "$status_output" | grep -qx "keycloak: http://localhost:$(get "$WORK/first.env" KEYCLOAK_HOST_PORT)" && echo expected || echo missing )"
