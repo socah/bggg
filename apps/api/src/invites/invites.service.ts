@@ -69,7 +69,7 @@ export class InvitesService {
 
     // The client turns this into a QR code itself (Decision 3) — the
     // backend's job ends at handing back the plain URL.
-    const baseUrl = process.env.CORS_ORIGIN ?? 'http://localhost:3000';
+    const baseUrl = process.env.PUBLIC_APP_URL ?? 'http://localhost:3000';
     return { inviteUrl: `${baseUrl}/invites/${rawToken}` };
   }
 

@@ -108,6 +108,21 @@ describe('InvitesService', () => {
         expect.objectContaining({ action: 'group.invite_created' }),
       );
     });
+
+    it('should use the configured public app URL for the invite link', async () => {
+      mockMembers.findOneBy.mockResolvedValue({ role: 'owner' });
+      mockInvites.create.mockImplementation((entity) => entity);
+      mockInvites.save.mockResolvedValue(undefined);
+      process.env.PUBLIC_APP_URL = 'https://bggg.duckdns.org';
+
+      try {
+        const { inviteUrl } = await service.createInvite(GROUP_ID, 'member', OWNER_ID);
+
+        expect(inviteUrl).toMatch(/^https:\/\/bggg\.duckdns\.org\/invites\//);
+      } finally {
+        delete process.env.PUBLIC_APP_URL;
+      }
+    });
   });
 
   // ── previewInvite ────────────────────────────────────────────────────────
