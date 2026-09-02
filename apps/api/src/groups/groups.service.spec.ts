@@ -407,8 +407,14 @@ describe('GroupsService', () => {
       const result = await service.getLibrary('group-1', 'user-b');
 
       expect(result).toEqual([
-        { id: 7, bggId: 1007, name: 'Azul', thumbnail: 't-7.jpg', minPlayers: 2, maxPlayers: 4 },
-        { id: 42, bggId: 1042, name: 'Gloomhaven', thumbnail: 't-42.jpg', minPlayers: 2, maxPlayers: 4 },
+        {
+          id: 7, bggId: 1007, name: 'Azul', thumbnail: 't-7.jpg', image: '',
+          minPlayers: 2, maxPlayers: 4, playingTime: 90, yearPublished: 2015, rating: 7.5,
+        },
+        {
+          id: 42, bggId: 1042, name: 'Gloomhaven', thumbnail: 't-42.jpg', image: '',
+          minPlayers: 2, maxPlayers: 4, playingTime: 90, yearPublished: 2015, rating: 7.5,
+        },
       ]);
     });
 

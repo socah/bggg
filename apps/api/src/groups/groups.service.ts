@@ -99,7 +99,7 @@ export class GroupsService {
   async getLibrary(
     id: string,
     requestingUserId: string,
-  ): Promise<Array<Pick<Game, 'id' | 'bggId' | 'name' | 'thumbnail' | 'minPlayers' | 'maxPlayers'>>> {
+  ): Promise<Array<Pick<Game, 'id' | 'bggId' | 'name' | 'image' | 'thumbnail' | 'minPlayers' | 'maxPlayers' | 'playingTime' | 'yearPublished' | 'rating'>>> {
     await this.findOne(id, requestingUserId);
 
     const memberships = await this.members.findBy({ groupId: id });
@@ -124,9 +124,13 @@ export class GroupsService {
       id: g.id,
       bggId: g.bggId,
       name: g.name,
+      image: g.image,
       thumbnail: g.thumbnail,
       minPlayers: g.minPlayers,
       maxPlayers: g.maxPlayers,
+      playingTime: g.playingTime,
+      yearPublished: g.yearPublished,
+      rating: g.rating,
     }));
   }
 
