@@ -40,6 +40,7 @@ export function AppearanceSettings() {
               key={option}
               type="button"
               variant={mounted && theme === option ? 'primary' : 'secondary'}
+              aria-pressed={mounted && theme === option}
               onClick={() => setTheme(option)}
               className="capitalize"
             >
@@ -57,6 +58,7 @@ export function AppearanceSettings() {
               key={option}
               type="button"
               variant={style === option ? 'primary' : 'secondary'}
+              aria-pressed={style === option}
               onClick={() => setStyle(option)}
             >
               {STYLE_LABELS[option]}
