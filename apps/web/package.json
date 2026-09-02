@@ -6,7 +6,8 @@
     "dev": "next dev --webpack",
     "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js"
   },
   "dependencies": {
     "@ducanh2912/next-pwa": "^10.2.9",
@@ -26,14 +27,18 @@
     "workbox-window": "^7.4.1"
   },
   "devDependencies": {
+    "@testing-library/react": "^16.3.3",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^26.1.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.3.1",
+    "jest": "^30.5.1",
+    "jest-environment-jsdom": "^30.5.1",
     "postcss": "^8.0.0",
     "tailwindcss": "^4.3.2",
+    "ts-jest": "^29.4.12",
     "typescript": "^6.0.3"
   }
 }
