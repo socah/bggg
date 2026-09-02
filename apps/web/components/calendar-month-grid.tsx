@@ -33,7 +33,6 @@ interface WeekRowExpanderProps {
   groups: Group[];
   defaultGroupId?: string;
   onProposalsChanged?: () => void;
-  onClose: () => void;
 }
 
 function WeekRowExpander({
@@ -45,7 +44,6 @@ function WeekRowExpander({
   groups,
   defaultGroupId,
   onProposalsChanged,
-  onClose,
 }: WeekRowExpanderProps) {
   const [cachedDate, setCachedDate] = useState<string | null>(date);
   const [cachedProposals, setCachedProposals] = useState<CalendarItem[]>(dayProposals);
@@ -95,7 +93,6 @@ function WeekRowExpander({
               draftDate={currentDate}
               groups={groups}
               defaultGroupId={defaultGroupId}
-              onClose={onClose}
               onProposalsChanged={onProposalsChanged}
               onSelectProposal={() => {
                 onProposalsChanged?.();
@@ -109,7 +106,6 @@ function WeekRowExpander({
                   proposalId={proposal.id}
                   groups={groups}
                   defaultGroupId={defaultGroupId}
-                  onClose={onClose}
                   onProposalsChanged={onProposalsChanged}
                 />
               ))}
@@ -120,7 +116,6 @@ function WeekRowExpander({
                   draftDate={currentDate}
                   groups={groups}
                   defaultGroupId={defaultGroupId}
-                  onClose={() => onSetDraftOpen(false)}
                   onProposalsChanged={onProposalsChanged}
                   onSelectProposal={() => {
                     onSetDraftOpen(false);
@@ -278,7 +273,7 @@ export function CalendarMonthGrid({
                       aria-pressed={isSelected}
                       aria-expanded={isSelected}
                       className={cn(
-                        'min-h-20 w-full rounded border p-1 text-left text-xs cursor-pointer transition-colors',
+                        'flex min-h-20 w-full flex-col justify-start rounded border p-1 text-left text-xs cursor-pointer transition-colors',
                         isSelected ? 'border-primary ring-1 ring-primary' : 'border-border',
                         inMonth ? 'bg-surface-raised hover:bg-surface' : 'bg-surface text-text-muted hover:bg-surface-raised/50'
                       )}
@@ -310,10 +305,6 @@ export function CalendarMonthGrid({
                 groups={groups}
                 defaultGroupId={defaultGroupId}
                 onProposalsChanged={onProposalsChanged}
-                onClose={() => {
-                  setActiveDate(null);
-                  setDraftOpen(false);
-                }}
               />
             </div>
           );

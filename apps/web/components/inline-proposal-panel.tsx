@@ -45,7 +45,6 @@ export interface InlineProposalPanelProps {
   draftDate?: string;
   groups: Group[];
   defaultGroupId?: string;
-  onClose: () => void;
   onProposalsChanged?: () => void;
   onSelectProposal?: (proposal: Proposal) => void;
 }
@@ -57,7 +56,6 @@ export function InlineProposalPanel({
   draftDate,
   groups,
   defaultGroupId,
-  onClose,
   onProposalsChanged,
   onSelectProposal,
 }: InlineProposalPanelProps) {
@@ -198,15 +196,6 @@ export function InlineProposalPanel({
           )}
         </div>
 
-        <Button
-          type="button"
-          variant="ghost"
-          onClick={onClose}
-          className="h-6 w-6 p-0 text-text-muted hover:text-text ml-auto"
-          aria-label="Close"
-        >
-          ✕
-        </Button>
       </div>
 
       {/* Loading / Error States for Existing Proposal */}
