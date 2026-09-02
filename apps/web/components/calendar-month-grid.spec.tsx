@@ -54,6 +54,7 @@ describe('CalendarMonthGrid', () => {
     );
 
     const day = screen.getByRole('button', { name: 'May 15, 2026, 1 proposal' });
+    expect(day.className).toContain('justify-start');
     expect(day.getAttribute('aria-pressed')).toBe('false');
     expect(day.getAttribute('aria-expanded')).toBe('false');
 
