@@ -266,35 +266,36 @@ export function CalendarMonthGrid({
                   const shown = dayItems.slice(0, MAX_BADGES_PER_DAY);
                   const overflow = dayItems.length - shown.length;
                   const isSelected = activeDate === key;
+                  const dateLabel = date.toLocaleDateString(undefined, { dateStyle: 'long' });
+                  const proposalCountLabel = `${dayItems.length} ${dayItems.length === 1 ? 'proposal' : 'proposals'}`;
 
                   return (
-                    <div
+                    <button
                       key={key}
+                      type="button"
                       onClick={() => handleSelectDate(key)}
+                      aria-label={dayItems.length > 0 ? `${dateLabel}, ${proposalCountLabel}` : dateLabel}
+                      aria-pressed={isSelected}
+                      aria-expanded={isSelected}
                       className={cn(
-                        'min-h-20 rounded border p-1 text-xs cursor-pointer transition-colors',
+                        'min-h-20 w-full rounded border p-1 text-left text-xs cursor-pointer transition-colors',
                         isSelected ? 'border-primary ring-1 ring-primary' : 'border-border',
                         inMonth ? 'bg-surface-raised hover:bg-surface' : 'bg-surface text-text-muted hover:bg-surface-raised/50'
                       )}
                     >
-                      <div className="flex items-center justify-between font-medium">
+                      <span className="flex items-center justify-between font-medium">
                         <span>{date.getDate()}</span>
-                      </div>
+                      </span>
                       {shown.map((item) => (
-                        <button
+                        <span
                           key={item.id}
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleSelectDate(key);
-                          }}
-                          className="mt-1 block w-full truncate rounded bg-highlight px-1 text-left text-text hover:opacity-80"
+                          className="mt-1 block w-full truncate rounded bg-highlight px-1 text-text hover:opacity-80"
                         >
                           {badgeLabel(item)}
-                        </button>
+                        </span>
                       ))}
-                      {overflow > 0 && <div className="mt-1 text-text-muted">+{overflow} more</div>}
-                    </div>
+                      {overflow > 0 && <span className="mt-1 block text-text-muted">+{overflow} more</span>}
+                    </button>
                   );
                 })}
               </div>
