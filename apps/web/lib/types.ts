@@ -66,6 +66,7 @@ export interface GroupMemberInfo {
   id: string;
   displayName: string;
   role: MemberRole;
+  isCurrentUser?: boolean;
 }
 
 export interface GameCardGame {

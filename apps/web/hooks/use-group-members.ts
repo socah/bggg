@@ -11,11 +11,13 @@ import type { GroupMemberInfo } from '@/lib/types';
 interface GroupMembersResult {
   members: GroupMemberInfo[];
   loading: boolean;
+  reload: () => void;
 }
 
 export function useGroupMembers(groupId: string | null): GroupMembersResult {
   const [members, setMembers] = useState<GroupMemberInfo[]>([]);
   const [loadedGroupId, setLoadedGroupId] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     // Nothing to fetch — the return statement below already yields [] for
@@ -45,10 +47,11 @@ export function useGroupMembers(groupId: string | null): GroupMembersResult {
     return () => {
       cancelled = true;
     };
-  }, [groupId]);
+  }, [groupId, refreshKey]);
 
   return {
     members: groupId && loadedGroupId === groupId ? members : [],
     loading: !!groupId && loadedGroupId !== groupId,
+    reload: () => setRefreshKey((key) => key + 1),
   };
 }

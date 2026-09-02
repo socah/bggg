@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { apiFetch } from '@/lib/api';
 import { parseSpacePath, spaceHref } from '@/lib/space';
 import type { Group } from '@/lib/types';
@@ -78,13 +79,14 @@ export function GroupSwitcher() {
   const activeLabel = activeGroup ? (activeGroup.isSolo ? 'Just Me' : activeGroup.name) : 'Personal (all groups)';
 
   return (
-    <DropdownMenu onOpenChange={(open) => !open && setCreating(false)}>
-      <DropdownMenuTrigger asChild>
-        <Button variant="secondary" aria-label="Select group">
-          {activeLabel}
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start">
+    <div className="flex items-center gap-2">
+      <DropdownMenu onOpenChange={(open) => !open && setCreating(false)}>
+        <DropdownMenuTrigger asChild>
+          <Button variant="secondary" aria-label="Select group">
+            {activeLabel}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
         <DropdownMenuItem onSelect={() => router.push(spaceHref(null, tab))}>
           Personal (all groups)
         </DropdownMenuItem>
@@ -118,7 +120,13 @@ export function GroupSwitcher() {
           </DropdownMenuItem>
         )}
         {error && <p className="px-2 py-1 text-xs text-accent">{error}</p>}
-      </DropdownMenuContent>
-    </DropdownMenu>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {activeGroup && !activeGroup.isSolo && (
+        <Button asChild variant="ghost" aria-label="Group settings">
+          <Link href={`/groups/${activeGroup.id}/settings`}>Settings</Link>
+        </Button>
+      )}
+    </div>
   );
 }

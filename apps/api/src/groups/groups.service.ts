@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/commo
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { Group } from './group.entity';
-import { GroupMember } from './group-member.entity';
+import { GroupMember, GroupRole } from './group-member.entity';
 import { GameOwnership } from '../collections/game-ownership.entity';
 import { Game } from '../games/game.entity';
 import { CreateGroupDto } from './dto/create-group.dto';
@@ -88,6 +88,7 @@ export class GroupsService {
         // join names to proposal creators and RSVPs.
         id: m.userId,
         role: m.role,
+        isCurrentUser: m.userId === requestingUserId,
       })),
     );
   }
@@ -151,7 +152,7 @@ export class GroupsService {
 
   async remove(id: string, requestingUserId: string): Promise<void> {
     const group = await this.findOne(id, requestingUserId);
-    await this.assertCanManage(id, requestingUserId);
+    await this.assertOwner(id, requestingUserId);
 
     await this.groupRepository.remove(group);
 
@@ -161,6 +162,37 @@ export class GroupsService {
       targetType: 'group',
       targetId: id,
       metadata: { name: group.name },
+    });
+  }
+
+  async updateMemberRole(
+    groupId: string,
+    targetUserId: string,
+    role: Exclude<GroupRole, 'owner'>,
+    requestingUserId: string,
+  ): Promise<GroupMember> {
+    const target = await this.assertCanManageMember(groupId, targetUserId, requestingUserId);
+    target.role = role;
+    const saved = await this.members.save(target);
+    await this.auditService.log({
+      actorId: requestingUserId,
+      action: 'group.member_role_changed',
+      targetType: 'group_member',
+      targetId: String(target.id),
+      metadata: { groupId, userId: targetUserId, newRole: role },
+    });
+    return saved;
+  }
+
+  async removeMember(groupId: string, targetUserId: string, requestingUserId: string): Promise<void> {
+    const target = await this.assertCanManageMember(groupId, targetUserId, requestingUserId);
+    await this.members.remove(target);
+    await this.auditService.log({
+      actorId: requestingUserId,
+      action: 'group.member_removed',
+      targetType: 'group_member',
+      targetId: String(target.id),
+      metadata: { groupId, userId: targetUserId },
     });
   }
 
@@ -178,6 +210,27 @@ export class GroupsService {
     if (!membership || membership.role === 'member') {
       throw new ForbiddenException('Only group owners and admins can modify this group');
     }
+  }
+
+  private async assertOwner(groupId: string, requestingUserId: string): Promise<void> {
+    const membership = await this.members.findOneBy({ groupId, userId: requestingUserId });
+    if (!membership || membership.role !== 'owner') {
+      throw new ForbiddenException('Only the group owner can delete this group');
+    }
+  }
+
+  private async assertCanManageMember(
+    groupId: string,
+    targetUserId: string,
+    requestingUserId: string,
+  ): Promise<GroupMember> {
+    const requester = await this.members.findOneBy({ groupId, userId: requestingUserId });
+    const target = await this.members.findOneBy({ groupId, userId: targetUserId });
+    if (!target) throw new NotFoundException('Group member not found');
+    if (!requester || target.role === 'owner' || (requester.role === 'admin' && target.role !== 'member')) {
+      throw new ForbiddenException('You cannot manage this group member');
+    }
+    return target;
   }
 
   // Shared by create() and provisionSoloGroup(): builds a Group row, saves

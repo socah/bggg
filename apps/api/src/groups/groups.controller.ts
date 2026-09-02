@@ -15,6 +15,7 @@ import { GroupsService } from './groups.service';
 import { CreateGroupDto } from './dto/create-group.dto';
 import { UpdateGroupDto } from './dto/update-group.dto';
 import { AuthGuard } from '../auth/auth.guard';
+import { UpdateMemberRoleDto } from './dto/update-member-role.dto';
 
 // AuthGuard attaches the decoded JWT payload to req.user (see auth.guard.ts).
 // Declared here, not imported from 'express', because these handlers only
@@ -47,15 +48,34 @@ export class GroupsController {
     return this.groupsService.findOne(id, req.user.sub);
   }
 
-  // GET /groups/:groupId/members → 200 OK with { id, displayName }[] for
-  // every member. Same 404 (no such group) / 403 (not a member) split as
-  // findOne, since getMembers reuses it.
+  // GET /groups/:groupId/members → 200 OK with display info, roles, and an
+  // isCurrentUser marker for every member. Same 404 (no such group) / 403
+  // (not a member) split as findOne, since getMembers reuses it.
   @Get(':groupId/members')
   getMembers(
     @Param('groupId', ParseUUIDPipe) groupId: string,
     @Request() req: AuthenticatedRequest,
   ) {
     return this.groupsService.getMembers(groupId, req.user.sub);
+  }
+
+  @Patch(':groupId/members/:userId')
+  updateMemberRole(
+    @Param('groupId', ParseUUIDPipe) groupId: string,
+    @Param('userId') userId: string,
+    @Body() dto: UpdateMemberRoleDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.groupsService.updateMemberRole(groupId, userId, dto.role, req.user.sub);
+  }
+
+  @Delete(':groupId/members/:userId')
+  removeMember(
+    @Param('groupId', ParseUUIDPipe) groupId: string,
+    @Param('userId') userId: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.groupsService.removeMember(groupId, userId, req.user.sub);
   }
 
   // GET /groups/:groupId/games → the group's game library: union of all

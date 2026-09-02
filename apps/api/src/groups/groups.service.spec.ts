@@ -36,6 +36,8 @@ describe('GroupsService', () => {
     findOneBy: jest.fn(),
     create: jest.fn(),
     save: jest.fn(),
+    update: jest.fn(),
+    remove: jest.fn(),
   };
 
   const mockOwnershipRepository = {
@@ -340,7 +342,7 @@ describe('GroupsService', () => {
       const result = await service.getMembers('group-1', OWNER_ID);
 
       expect(result).toEqual([
-        { id: 'canonical-user-id', displayName: 'Alice', role: 'member' },
+         { id: 'canonical-user-id', displayName: 'Alice', role: 'member', isCurrentUser: false },
       ]);
     });
 
@@ -362,9 +364,23 @@ describe('GroupsService', () => {
 
       expect(mockRepository.findOneBy).toHaveBeenCalledWith({ id: 'group-1' });
       expect(result).toEqual([
-        { id: 'user-a', displayName: 'Alice', role: 'owner' },
-        { id: 'user-b', displayName: 'Bob', role: 'member' },
+         { id: 'user-a', displayName: 'Alice', role: 'owner', isCurrentUser: false },
+         { id: 'user-b', displayName: 'Bob', role: 'member', isCurrentUser: false },
       ]);
+    });
+
+    it('marks the requesting member so clients do not need to match session identity', async () => {
+      const group: Group = { id: 'group-1', name: 'Chess Club', ownerId: OWNER_ID, isSolo: false, createdAt: new Date() };
+      mockRepository.findOneBy.mockResolvedValue(group);
+      mockMembersRepository.findOneBy.mockResolvedValue({ userId: OWNER_ID, groupId: 'group-1', role: 'owner' });
+      mockMembersRepository.findBy.mockResolvedValue([
+        { id: 1, userId: OWNER_ID, groupId: 'group-1', role: 'owner', joinedAt: new Date() },
+      ]);
+      mockKeycloakAdmin.getUser.mockResolvedValue({ id: OWNER_ID, displayName: 'Alice' });
+
+      const result = await service.getMembers('group-1', OWNER_ID);
+
+      expect(result[0]).toEqual({ id: OWNER_ID, displayName: 'Alice', role: 'owner', isCurrentUser: true });
     });
 
     it('should throw ForbiddenException when the requester is not a member', async () => {
@@ -374,6 +390,65 @@ describe('GroupsService', () => {
 
       await expect(service.getMembers('group-1', 'someone-else')).rejects.toThrow(ForbiddenException);
       expect(mockKeycloakAdmin.getUser).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── updateMemberRole ─────────────────────────────────────────────────────
+
+  describe('updateMemberRole', () => {
+    it('lets the owner change a non-owner member role', async () => {
+      const target = { id: 2, userId: 'member-1', groupId: 'group-1', role: 'member', joinedAt: new Date() };
+      mockMembersRepository.findOneBy
+        .mockResolvedValueOnce({ userId: OWNER_ID, groupId: 'group-1', role: 'owner' })
+        .mockResolvedValueOnce(target);
+      mockMembersRepository.save.mockResolvedValue({ ...target, role: 'admin' });
+
+      const result = await service.updateMemberRole('group-1', 'member-1', 'admin', OWNER_ID);
+
+      expect(mockMembersRepository.save).toHaveBeenCalledWith({ ...target, role: 'admin' });
+      expect(result.role).toBe('admin');
+    });
+
+    it('prevents an admin from changing another admin role', async () => {
+      mockMembersRepository.findOneBy
+        .mockResolvedValueOnce({ userId: 'admin-1', groupId: 'group-1', role: 'admin' })
+        .mockResolvedValueOnce({ userId: 'admin-2', groupId: 'group-1', role: 'admin' });
+
+      await expect(service.updateMemberRole('group-1', 'admin-2', 'member', 'admin-1'))
+        .rejects.toThrow(ForbiddenException);
+      expect(mockMembersRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('prevents changing the owner role', async () => {
+      mockMembersRepository.findOneBy
+        .mockResolvedValueOnce({ userId: 'admin-1', groupId: 'group-1', role: 'admin' })
+        .mockResolvedValueOnce({ userId: OWNER_ID, groupId: 'group-1', role: 'owner' });
+
+      await expect(service.updateMemberRole('group-1', OWNER_ID, 'admin', 'admin-1'))
+        .rejects.toThrow(ForbiddenException);
+    });
+  });
+
+  describe('removeMember', () => {
+    it('lets an owner remove a non-owner member', async () => {
+      const target = { id: 2, userId: 'member-1', groupId: 'group-1', role: 'member', joinedAt: new Date() };
+      mockMembersRepository.findOneBy
+        .mockResolvedValueOnce({ userId: OWNER_ID, groupId: 'group-1', role: 'owner' })
+        .mockResolvedValueOnce(target);
+
+      await service.removeMember('group-1', 'member-1', OWNER_ID);
+
+      expect(mockMembersRepository.remove).toHaveBeenCalledWith(target);
+    });
+
+    it('prevents removing the owner', async () => {
+      mockMembersRepository.findOneBy
+        .mockResolvedValueOnce({ userId: 'admin-1', groupId: 'group-1', role: 'admin' })
+        .mockResolvedValueOnce({ userId: OWNER_ID, groupId: 'group-1', role: 'owner' });
+
+      await expect(service.removeMember('group-1', OWNER_ID, 'admin-1'))
+        .rejects.toThrow(ForbiddenException);
+      expect(mockMembersRepository.remove).not.toHaveBeenCalled();
     });
   });
 
