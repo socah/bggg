@@ -185,9 +185,14 @@ sync_secrets() {
 
 setup() {
   init_env; require_docker
+  if [ -z "$(read_var BGG_API_TOKEN || true)" ] && [ -f "$REPO_ROOT/.env" ]; then
+    root_bgg_token=$(awk -F= '$1 == "BGG_API_TOKEN" { value=substr($0, index($0, "=") + 1) } END { print value }' "$REPO_ROOT/.env")
+    [ -z "$root_bgg_token" ] || set_value BGG_API_TOKEN "$root_bgg_token"
+  fi
   if [ -z "$(read_var BGG_API_TOKEN || true)" ] && command -v infisical >/dev/null 2>&1; then
-    token=$(infisical secrets get BGG_API_TOKEN --path=/ENV_VARS --env="${INFISICAL_ENV:-dev}" --plain 2>/dev/null || true)
-    [ -z "$token" ] || { awk '$1 !~ "^BGG_API_TOKEN=" { print }' "$ENV_FILE" >"$ENV_FILE.tmp"; printf 'BGG_API_TOKEN=%s\n' "$token" >>"$ENV_FILE.tmp"; mv "$ENV_FILE.tmp" "$ENV_FILE"; }
+    if token=$(infisical secrets get BGG_API_TOKEN --path=/ENV_VARS --env="${INFISICAL_ENV:-dev}" --plain </dev/null 2>/dev/null); then
+      case "$token" in ''|*[!A-Za-z0-9._~+/=-]*) ;; *) set_value BGG_API_TOKEN "$token" ;; esac
+    fi
   fi
   [ -n "$(read_var BGG_API_TOKEN || true)" ] || printf 'worktree-dev: warning: BGG_API_TOKEN is unset; BGG features will not work\n' >&2
   up
@@ -223,9 +228,9 @@ setup() {
 }
 
 status() {
-  printf 'worktree: %s\nproject: %s\nweb: http://localhost:%s\nports: web=%s api=%s keycloak=%s db=%s vault=%s\n' \
+  printf 'worktree: %s\nproject: %s\nweb: http://localhost:%s\nkeycloak: http://localhost:%s\nports: web=%s api=%s keycloak=%s db=%s vault=%s\n' \
     "$(basename "$WORKTREE_DIR")" "$(read_var COMPOSE_PROJECT_NAME)" \
-    "$(read_var WEB_HOST_PORT)" "$(read_var WEB_HOST_PORT)" "$(read_var API_HOST_PORT)" "$(read_var KEYCLOAK_HOST_PORT)" "$(read_var DB_HOST_PORT)" "$(read_var VAULT_HOST_PORT)"
+    "$(read_var WEB_HOST_PORT)" "$(read_var KEYCLOAK_HOST_PORT)" "$(read_var WEB_HOST_PORT)" "$(read_var API_HOST_PORT)" "$(read_var KEYCLOAK_HOST_PORT)" "$(read_var DB_HOST_PORT)" "$(read_var VAULT_HOST_PORT)"
   compose ps 2>/dev/null || true
   DEV_STATE_DIR="$WORKTREE_DIR/.dev/worktree-$(read_var WORKTREE_SLOT)" sh "$SCRIPT_DIR/dev-servers.sh" status
   printf 'logs: %s/.dev/worktree-%s\n' "$WORKTREE_DIR" "$(read_var WORKTREE_SLOT)"
