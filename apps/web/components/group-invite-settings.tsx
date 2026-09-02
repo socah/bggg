@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { QRCodeCanvas } from 'qrcode.react';
 import { apiMutate, ApiError } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -64,7 +65,12 @@ export function GroupInviteSettings({ groupId }: GroupInviteSettingsProps) {
         Create a one-time link for someone to join this group as a member. The link expires after 7 days.
       </p>
       {inviteUrl && (
-        <code className="mt-4 block break-all rounded-sm bg-surface p-2 text-xs">{inviteUrl}</code>
+        <div className="mt-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center">
+          <div className="rounded-sm bg-white p-2">
+            <QRCodeCanvas value={inviteUrl} size={176} includeMargin role="img" aria-label="Invite QR code" />
+          </div>
+          <code className="block break-all rounded-sm bg-surface p-2 text-xs">{inviteUrl}</code>
+        </div>
       )}
       <div className="mt-4 flex flex-wrap gap-2">
         {!inviteUrl ? (

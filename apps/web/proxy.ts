@@ -19,11 +19,11 @@ export default auth((req) => {
 });
 
 export const config = {
-  // Matches everything except: the NextAuth routes and '/web/login' itself
+  // Matches everything except: public invite routes, the NextAuth routes and '/web/login' itself
   // (or sign-in becomes an infinite redirect loop), Next.js internals, and
   // the PWA/static assets emitted by next-pwa (sw.js, workbox-*.js,
   // manifest.json) which must load unauthenticated for the app shell to work.
   matcher: [
-    '/((?!web/auth|web/login|_next/static|_next/image|favicon.ico|manifest.json|sw\\.js|workbox-.*\\.js).*)',
+    '/((?!invites|web/auth|web/login|_next/static|_next/image|favicon.ico|manifest.json|sw\\.js|workbox-.*\\.js).*)',
   ],
 };
