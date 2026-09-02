@@ -326,6 +326,24 @@ describe('GroupsService', () => {
   // ── getMembers ───────────────────────────────────────────────────────────
 
   describe('getMembers', () => {
+    it('uses the membership user id even if the identity provider returns a different id', async () => {
+      const group: Group = { id: 'group-1', name: 'Chess Club', ownerId: OWNER_ID, isSolo: false, createdAt: new Date() };
+      mockRepository.findOneBy.mockResolvedValue(group);
+      mockMembersRepository.findOneBy.mockResolvedValue({
+        id: 1, userId: OWNER_ID, groupId: 'group-1', role: 'owner', joinedAt: new Date(),
+      });
+      mockMembersRepository.findBy.mockResolvedValue([
+        { id: 2, userId: 'canonical-user-id', groupId: 'group-1', role: 'member', joinedAt: new Date() },
+      ]);
+      mockKeycloakAdmin.getUser.mockResolvedValue({ id: 'provider-user-id', displayName: 'Alice' });
+
+      const result = await service.getMembers('group-1', OWNER_ID);
+
+      expect(result).toEqual([
+        { id: 'canonical-user-id', displayName: 'Alice', role: 'member' },
+      ]);
+    });
+
     it('should return display names AND group roles for every member, after checking access', async () => {
       const group: Group = { id: 'group-1', name: 'Chess Club', ownerId: OWNER_ID, isSolo: false, createdAt: new Date() };
       mockRepository.findOneBy.mockResolvedValue(group);

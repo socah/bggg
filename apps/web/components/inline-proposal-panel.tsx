@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogSheetContent, DialogClose, DialogTitle } from '@/components/ui/dialog';
 import { TimePickerDialog } from '@/components/ui/time-picker-dialog';
 import { apiMutate } from '@/lib/api';
+import { formatWindowRange } from '@/lib/datetime';
 import type { Group, GroupLibraryGame, Proposal } from '@/lib/types';
 
 function MemberName({
@@ -81,7 +82,7 @@ export function InlineProposalPanel({
   const [draftStart, setDraftStart] = useState('');
   const [draftEnd, setDraftEnd] = useState('');
   const [draftHoursOpen, setDraftHoursOpen] = useState(false);
-  const [draftTimePickerTarget, setDraftTimePickerTarget] = useState<'start' | 'end' | null>(null);
+  const [draftTimePickerOpen, setDraftTimePickerOpen] = useState(false);
   const [draftGames, setDraftGames] = useState<GroupLibraryGame[]>([]);
   const [draftGamePickerOpen, setDraftGamePickerOpen] = useState(false);
   const [draftGameFilter, setDraftGameFilter] = useState('');
@@ -252,7 +253,7 @@ export function InlineProposalPanel({
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
                     <button
                       type="button"
-                      onClick={() => setDraftTimePickerTarget('start')}
+                      onClick={() => setDraftTimePickerOpen(true)}
                       className="rounded border border-border bg-surface px-2 py-1 text-xs hover:border-text-muted"
                       aria-label="Available from"
                     >
@@ -261,7 +262,7 @@ export function InlineProposalPanel({
                     <span>–</span>
                     <button
                       type="button"
-                      onClick={() => setDraftTimePickerTarget('end')}
+                      onClick={() => setDraftTimePickerOpen(true)}
                       className="rounded border border-border bg-surface px-2 py-1 text-xs hover:border-text-muted"
                       aria-label="Available until"
                     >
@@ -290,7 +291,10 @@ export function InlineProposalPanel({
             <div className="font-medium text-xs uppercase tracking-wider text-text-muted mb-1">RSVPs</div>
             <ul className="space-y-1">
               <li className="flex items-center gap-2 text-xs">
-                <span>{myName} — {draftStatus}</span>
+                <span>
+                  {myName} — {draftStatus}
+                  {draftStart && draftEnd && <span className="text-text-muted"> · {draftStart} – {draftEnd} (UTC)</span>}
+                </span>
                 <Badge>Host</Badge>
               </li>
             </ul>
@@ -317,7 +321,12 @@ export function InlineProposalPanel({
                     rsvp.status === 'yes';
                   return (
                     <li key={rsvp.userId} className="flex items-center gap-2 text-xs">
-                      <span><MemberName userId={rsvp.userId} members={members} loading={loadingMembers} /> — {rsvp.status}</span>
+                      <span>
+                        <MemberName userId={rsvp.userId} members={members} loading={loadingMembers} /> — {rsvp.status}
+                        {formatWindowRange(rsvp.availableStart, rsvp.availableEnd) && (
+                          <span className="text-text-muted"> · {formatWindowRange(rsvp.availableStart, rsvp.availableEnd)}</span>
+                        )}
+                      </span>
                       {isHost && <Badge>Host</Badge>}
                       {canManage && rsvp.confirmed && <Badge>Locked in</Badge>}
                       {canMakeHost && !isHost && (
@@ -438,16 +447,15 @@ export function InlineProposalPanel({
 
       {/* Time Picker Dialog (Draft Mode) */}
       <TimePickerDialog
-        open={draftTimePickerTarget !== null}
-        value={draftTimePickerTarget === 'start' ? draftStart : draftEnd}
-        title={draftTimePickerTarget === 'start' ? 'Available from' : 'Available until'}
-        onOpenChange={(open) => {
-          if (!open) setDraftTimePickerTarget(null);
-        }}
-        onConfirm={(timeStr) => {
-          if (draftTimePickerTarget === 'start') setDraftStart(timeStr);
-          else if (draftTimePickerTarget === 'end') setDraftEnd(timeStr);
-          setDraftTimePickerTarget(null);
+        open={draftTimePickerOpen}
+        startValue={draftStart}
+        endValue={draftEnd}
+        title="Choose availability"
+        onOpenChange={setDraftTimePickerOpen}
+        onConfirm={(start, end) => {
+          setDraftStart(start);
+          setDraftEnd(end);
+          setDraftTimePickerOpen(false);
         }}
       />
 

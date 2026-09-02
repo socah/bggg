@@ -161,7 +161,7 @@ wait_for_server() {
   retries=${DEV_SERVER_READY_RETRIES:-30}
   i=0
   while [ "$i" -lt "$retries" ]; do
-    curl -sS -o /dev/null --max-time 2 "http://localhost:$port" && return 0
+    curl -sS -o /dev/null --max-time 2 "http://localhost:$port" 2>/dev/null && return 0
     i=$((i + 1)); sleep 2
   done
   die "$label did not start on localhost:$port; check .dev/worktree-$(read_var WORKTREE_SLOT)/$label.log"

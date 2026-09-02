@@ -1,291 +1,285 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/cn';
+import {
+  clockPositionMinutes,
+  clockToMinutes,
+  formatDuration,
+  intervalDuration,
+  minutesToClock,
+  minutesToTime,
+  timeToMinutes,
+  TIME_STEP_MINUTES,
+  type ClockTime,
+  type Period,
+} from '@/lib/time-interval';
 
 export interface TimePickerDialogProps {
   open: boolean;
-  value?: string;
+  startValue?: string;
+  endValue?: string;
   onOpenChange: (open: boolean) => void;
-  onConfirm: (value: string) => void;
+  onConfirm: (start: string, end: string) => void;
   title?: string;
 }
 
-type PickerMode = 'hours' | 'minutes';
-type Period = 'AM' | 'PM';
-
-function parseTimeString(val?: string): { hour: number; minute: number; period: Period } {
-  if (val) {
-    const match = /^(\d{1,2}):(\d{2})$/.exec(val.trim());
-    if (match) {
-      const h24 = parseInt(match[1], 10);
-      const minute = Math.min(59, Math.max(0, parseInt(match[2], 10)));
-      if (h24 >= 0 && h24 < 24) {
-        const period: Period = h24 >= 12 ? 'PM' : 'AM';
-        const hour = h24 % 12 === 0 ? 12 : h24 % 12;
-        return { hour, minute, period };
-      }
-    }
-  }
-  return { hour: 6, minute: 0, period: 'PM' };
-}
-
-function formatTimeString(hour: number, minute: number, period: Period): string {
-  let h24 = hour % 12;
-  if (period === 'PM') {
-    h24 += 12;
-  }
-  const hh = String(h24).padStart(2, '0');
-  const mm = String(minute).padStart(2, '0');
-  return `${hh}:${mm}`;
-}
-
-const HOURS = [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
-const MINUTES = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
+type PickerStage = 'start' | 'end';
 
 const DIAL_SIZE = 240;
 const DIAL_RADIUS = 90;
 const CENTER = DIAL_SIZE / 2;
+const DEFAULT_INTERVAL_MINUTES = 4 * 60;
+// One analog clock face: 12 hours with four quarter-hour positions per hour.
+// AM/PM is represented by the period controls, not by duplicating the face.
+const TICKS = 12 * 60 / TIME_STEP_MINUTES;
 
-interface TimePickerInnerProps {
-  initialValue?: string;
-  title: string;
-  onClose: () => void;
-  onConfirm: (val: string) => void;
+function parseValue(value: string | undefined, fallback: string): number {
+  return !value || !/^([01]\d|2[0-3]):[0-5]\d$/.test(value) ? timeToMinutes(fallback) : timeToMinutes(value);
 }
 
-function TimePickerInner({ initialValue, title, onClose, onConfirm }: TimePickerInnerProps) {
-  const initial = parseTimeString(initialValue);
-  const [mode, setMode] = useState<PickerMode>('hours');
-  const [hour, setHour] = useState<number>(initial.hour);
-  const [minute, setMinute] = useState<number>(initial.minute);
-  const [period, setPeriod] = useState<Period>(initial.period);
+function parseClock(value: string | undefined, fallback: string): ClockTime {
+  return minutesToClock(parseValue(value, fallback));
+}
+
+function angleForClock(time: ClockTime): number {
+  return (clockPositionMinutes(time) / (12 * 60)) * 360;
+}
+
+function clockFromPosition(position: number, period: Period): ClockTime {
+  const normalized = ((position % (12 * 60)) + 12 * 60) % (12 * 60);
+  return { hour: Math.floor(normalized / 60) || 12, minute: normalized % 60, period };
+}
+
+function displayClock(time: ClockTime): string {
+  return `${String(time.hour).padStart(2, '0')}:${String(time.minute).padStart(2, '0')} ${time.period}`;
+}
+
+function pointForAngle(angle: number, radius: number) {
+  const radians = (angle - 90) * (Math.PI / 180);
+  return { x: CENTER + radius * Math.cos(radians), y: CENTER + radius * Math.sin(radians) };
+}
+
+function arcPaths(start: number, durationMinutes: number): string[] {
+  const radius = DIAL_RADIUS - 16;
+  // The face is one 12-hour revolution. Longer intervals may therefore
+  // contain more than one revolution, which is represented by multiple
+  // fixed-center arc segments.
+  let remaining = Math.min(durationMinutes / (12 * 60) * 360, 720);
+  let current = start;
+  const paths: string[] = [];
+
+  while (remaining > 0) {
+    const segment = Math.min(remaining, 180);
+    const startPoint = pointForAngle(current, radius);
+    const endPoint = pointForAngle(current + segment, radius);
+    paths.push(
+      `M ${startPoint.x} ${startPoint.y} A ${radius} ${radius} 0 0 1 ${endPoint.x} ${endPoint.y}`,
+    );
+    current += segment;
+    remaining -= segment;
+  }
+
+  return paths;
+}
+
+interface TimePickerInnerProps {
+  startValue?: string;
+  endValue?: string;
+  title: string;
+  onClose: () => void;
+  onConfirm: (start: string, end: string) => void;
+}
+
+function TimePickerInner({ startValue, endValue, title, onClose, onConfirm }: TimePickerInnerProps) {
+  const [stage, setStage] = useState<PickerStage>('start');
+  const [start, setStart] = useState(() => parseClock(startValue, '18:00'));
+  const [end, setEnd] = useState(() => parseClock(endValue, '22:00'));
   const [isDragging, setIsDragging] = useState(false);
+  const [animateSelection, setAnimateSelection] = useState(false);
   const dialRef = useRef<HTMLDivElement>(null);
+  const lastEndPositionRef = useRef<number | null>(null);
 
-  const handleDialPointer = useCallback(
-    (clientX: number, clientY: number, isFinalSelection: boolean) => {
-      if (!dialRef.current) return;
-      const rect = dialRef.current.getBoundingClientRect();
-      const x = clientX - rect.left - CENTER;
-      const y = clientY - rect.top - CENTER;
-
-      // Calculate angle from 12 o'clock in radians (0 to 2*PI)
-      let angle = Math.atan2(y, x) + Math.PI / 2;
-      if (angle < 0) {
-        angle += 2 * Math.PI;
+  const selectFromPointer = useCallback((clientX: number, clientY: number, final: boolean) => {
+    if (!dialRef.current) return;
+    const rect = dialRef.current.getBoundingClientRect();
+    const x = clientX - rect.left - CENTER;
+    const y = clientY - rect.top - CENTER;
+    let angle = Math.atan2(y, x) * 180 / Math.PI + 90;
+    if (angle < 0) angle += 360;
+    const selectedPosition =
+      (Math.round(angle / (360 / TICKS)) * TIME_STEP_MINUTES) % (12 * 60);
+    if (stage === 'start') {
+      const nextStart = clockFromPosition(selectedPosition, start.period);
+      const nextEnd = minutesToClock(clockToMinutes(nextStart) + DEFAULT_INTERVAL_MINUTES);
+      setStart(nextStart);
+      setEnd(nextEnd);
+      if (final) {
+        lastEndPositionRef.current = clockPositionMinutes(nextEnd);
+        setAnimateSelection(true);
+        setStage('end');
       }
-
-      if (mode === 'hours') {
-        const step = (2 * Math.PI) / 12;
-        let selectedHour = Math.round(angle / step);
-        if (selectedHour === 0) selectedHour = 12;
-        if (selectedHour > 12) selectedHour = 12;
-        setHour(selectedHour);
-        if (isFinalSelection) {
-          setMode('minutes');
-        }
-      } else {
-        const step = (2 * Math.PI) / 60;
-        let selectedMinute = Math.round(angle / step);
-        if (selectedMinute >= 60) selectedMinute = 0;
-        setMinute(selectedMinute);
+    } else {
+      const previousPosition = lastEndPositionRef.current;
+      let crossedTwelve = false;
+      if (previousPosition !== null) {
+        crossedTwelve =
+          (previousPosition >= 10 * 60 && selectedPosition <= 2 * 60) ||
+          (previousPosition <= 2 * 60 && selectedPosition >= 10 * 60);
       }
-    },
-    [mode]
-  );
-
-  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    e.currentTarget.setPointerCapture(e.pointerId);
-    setIsDragging(true);
-    handleDialPointer(e.clientX, e.clientY, false);
-  };
-
-  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isDragging) return;
-    handleDialPointer(e.clientX, e.clientY, false);
-  };
-
-  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (isDragging) {
-      setIsDragging(false);
-      handleDialPointer(e.clientX, e.clientY, true);
+      lastEndPositionRef.current = selectedPosition;
+      setEnd((current) => {
+        const period = crossedTwelve
+          ? current.period === 'AM' ? 'PM' : 'AM'
+          : current.period;
+        return clockFromPosition(selectedPosition, period);
+      });
     }
-  };
+  }, [stage, start]);
 
-  const currentAngle =
-    mode === 'hours'
-      ? (hour % 12) * (360 / 12)
-      : minute * (360 / 60);
-
-  const handRad = (currentAngle - 90) * (Math.PI / 180);
-  const handX = CENTER + DIAL_RADIUS * Math.cos(handRad);
-  const handY = CENTER + DIAL_RADIUS * Math.sin(handRad);
+  const startMinutes = clockToMinutes(start);
+  const endMinutes = clockToMinutes(end);
+  const duration = intervalDuration(minutesToTime(startMinutes), minutesToTime(endMinutes));
+  const startAngle = angleForClock(start);
+  const startPoint = pointForAngle(startAngle, DIAL_RADIUS);
+  const handAngle = stage === 'end'
+    ? startAngle + duration / (12 * 60) * 360
+    : startAngle;
 
   return (
-    <DialogContent className="max-w-xs p-4 flex flex-col items-center select-none">
-      <DialogTitle className="text-xs font-semibold text-text-muted uppercase tracking-wider self-start mb-2">
+    <DialogContent className="flex max-w-xs flex-col items-center p-4 select-none">
+      <DialogTitle className="mb-2 self-start text-xs font-semibold uppercase tracking-wider text-text-muted">
         {title}
       </DialogTitle>
 
-      {/* Digital display & AM/PM switch */}
-      <div className="flex items-center justify-between w-full mb-4 px-2">
-        <div className="flex items-center text-3xl font-display">
-          <button
-            type="button"
-            onClick={() => setMode('hours')}
-            className={cn(
-              'rounded px-2 py-1 transition-colors',
-              mode === 'hours'
-                ? 'bg-highlight text-text font-bold'
-                : 'bg-surface text-text-muted hover:text-text'
-            )}
-          >
-            {String(hour).padStart(2, '0')}
-          </button>
-          <span className="mx-1 text-text-muted">:</span>
-          <button
-            type="button"
-            onClick={() => setMode('minutes')}
-            className={cn(
-              'rounded px-2 py-1 transition-colors',
-              mode === 'minutes'
-                ? 'bg-highlight text-text font-bold'
-                : 'bg-surface text-text-muted hover:text-text'
-            )}
-          >
-            {String(minute).padStart(2, '0')}
-          </button>
-        </div>
-
-        <div className="flex flex-col rounded border border-border overflow-hidden text-xs">
-          <button
-            type="button"
-            onClick={() => setPeriod('AM')}
-            className={cn(
-              'px-2 py-1 transition-colors',
-              period === 'AM'
-                ? 'bg-highlight text-text font-semibold'
-                : 'bg-surface text-text-muted hover:text-text'
-            )}
-          >
-            AM
-          </button>
-          <button
-            type="button"
-            onClick={() => setPeriod('PM')}
-            className={cn(
-              'px-2 py-1 transition-colors border-t border-border',
-              period === 'PM'
-                ? 'bg-highlight text-text font-semibold'
-                : 'bg-surface text-text-muted hover:text-text'
-            )}
-          >
-            PM
-          </button>
+      <div className="mb-3 flex w-full items-center justify-between px-2">
+        <div className="font-display text-3xl">
+          <span className={cn('rounded px-2 py-1', stage === 'start' ? 'bg-highlight font-bold' : 'text-text-muted')}>
+            {displayClock(start)}
+          </span>
+          <span className="mx-1 text-text-muted">–</span>
+          <span className={cn('rounded px-2 py-1', stage === 'end' ? 'bg-highlight font-bold' : 'text-text-muted')}>
+            {displayClock(end)}
+          </span>
         </div>
       </div>
 
-      {/* Clock Dial Face */}
+      <p className="mb-1 text-xs text-text-muted">
+        {stage === 'start' ? 'Choose the start time' : 'Choose the end time'}
+      </p>
+      {stage === 'end' && (
+        <p className="mb-3 text-sm font-semibold text-text" aria-live="polite">
+          {formatDuration(duration)} selected
+        </p>
+      )}
+
       <div
         ref={dialRef}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        className="relative rounded-full bg-surface cursor-pointer touch-none"
+        onPointerDown={(event) => {
+          event.currentTarget.setPointerCapture(event.pointerId);
+          setIsDragging(true);
+          // Manual rotation should track the pointer without easing.
+          setAnimateSelection(false);
+          selectFromPointer(event.clientX, event.clientY, false);
+        }}
+        onPointerMove={(event) => {
+          if (isDragging) selectFromPointer(event.clientX, event.clientY, false);
+        }}
+        onPointerUp={(event) => {
+          if (isDragging) {
+            setIsDragging(false);
+            selectFromPointer(event.clientX, event.clientY, true);
+          }
+        }}
+        className="relative cursor-pointer rounded-full bg-surface touch-none"
         style={{ width: DIAL_SIZE, height: DIAL_SIZE }}
       >
-        {/* Numbers */}
-        {(mode === 'hours' ? HOURS : MINUTES).map((num, i) => {
-          const angleDeg = i * (360 / 12);
-          const rad = (angleDeg - 90) * (Math.PI / 180);
-          const numX = CENTER + DIAL_RADIUS * Math.cos(rad);
-          const numY = CENTER + DIAL_RADIUS * Math.sin(rad);
-          const isSelected = mode === 'hours' ? hour === num : minute === num;
-
-          return (
+        {Array.from({ length: TICKS }, (_, index) => {
+          const point = pointForAngle(index * (360 / TICKS), DIAL_RADIUS);
+          const label = index % 4 === 0;
+          return label ? (
             <span
-              key={num}
-              className={cn(
-                'absolute -translate-x-1/2 -translate-y-1/2 text-xs font-medium pointer-events-none',
-                isSelected ? 'text-text font-bold z-10' : 'text-text-muted'
-              )}
-              style={{ left: numX, top: numY }}
+              key={index}
+              className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 text-xs font-medium text-text-muted"
+              style={{ left: point.x, top: point.y }}
             >
-              {mode === 'hours' ? num : String(num).padStart(2, '0')}
+              {clockFromPosition(index * TIME_STEP_MINUTES, 'AM').hour}
             </span>
-          );
+          ) : null;
         })}
 
-        {/* SVG pointer line and selector knob */}
-        <svg
-          className="absolute inset-0 pointer-events-none"
-          width={DIAL_SIZE}
-          height={DIAL_SIZE}
-        >
-          {/* Center dot */}
+        <svg className="pointer-events-none absolute inset-0" width={DIAL_SIZE} height={DIAL_SIZE}>
+          <g
+            className="transition-opacity duration-300 ease-out"
+            style={{ opacity: stage === 'end' ? 1 : 0 }}
+          >
+            {arcPaths(startAngle, duration).map((path, index) => (
+              <path key={index} d={path} fill="none" stroke="currentColor" strokeWidth={12} className="text-highlight opacity-25" />
+            ))}
+            <circle cx={startPoint.x} cy={startPoint.y} r={12} fill="currentColor" className="text-text-muted opacity-25" />
+          </g>
+          <g
+            style={{
+              transform: `rotate(${handAngle}deg)`,
+              transformOrigin: `${CENTER}px ${CENTER}px`,
+              transformBox: 'view-box',
+              transition: animateSelection ? 'transform 300ms ease-out' : 'none',
+            }}
+          >
+            <line
+              x1={CENTER}
+              y1={CENTER}
+              x2={CENTER}
+              y2={CENTER - DIAL_RADIUS}
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              className="text-text"
+            />
+            <circle
+              cx={CENTER}
+              cy={CENTER - DIAL_RADIUS}
+              r={14}
+              fill="currentColor"
+              className="text-highlight opacity-70"
+            />
+          </g>
           <circle cx={CENTER} cy={CENTER} r={3} fill="currentColor" className="text-text" />
-          {/* Hand line */}
-          <line
-            x1={CENTER}
-            y1={CENTER}
-            x2={handX}
-            y2={handY}
-            stroke="currentColor"
-            strokeWidth={2}
-            className="text-text"
-          />
-          {/* Knob circle */}
-          <circle
-            cx={handX}
-            cy={handY}
-            r={14}
-            fill="currentColor"
-            className="text-highlight opacity-60"
-          />
         </svg>
       </div>
 
-      {/* Actions */}
-      <div className="flex justify-end gap-2 w-full mt-4">
-        <Button
-          type="button"
-          variant="ghost"
-          className="text-xs"
-          onClick={onClose}
-        >
-          Cancel
-        </Button>
-        <Button
-          type="button"
-          className="text-xs px-4"
-          onClick={() => {
-            onConfirm(formatTimeString(hour, minute, period));
-            onClose();
-          }}
-        >
-          OK
-        </Button>
+      <div className="mt-3 flex gap-2 text-xs">
+        {(['AM', 'PM'] as const).map((period) => (
+          <Button
+            key={`start-${period}`}
+            type="button"
+            variant={start.period === period ? 'primary' : 'secondary'}
+            className="px-2 py-1"
+            onClick={() => setStart((current) => ({ ...current, period }))}
+          >
+            Start {period}
+          </Button>
+        ))}
+      </div>
+
+      <div className="mt-4 flex w-full justify-end gap-2">
+        <Button type="button" variant="ghost" className="text-xs" onClick={onClose}>Cancel</Button>
+        <Button type="button" className="px-4 text-xs" onClick={() => onConfirm(minutesToTime(startMinutes), minutesToTime(endMinutes))}>OK</Button>
       </div>
     </DialogContent>
   );
 }
 
-export function TimePickerDialog({
-  open,
-  value,
-  onOpenChange,
-  onConfirm,
-  title = 'Select time',
-}: TimePickerDialogProps) {
+export function TimePickerDialog({ open, startValue, endValue, onOpenChange, onConfirm, title = 'Select interval' }: TimePickerDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {open && (
         <TimePickerInner
-          key={value || 'default'}
-          initialValue={value}
+          key={`${startValue ?? ''}-${endValue ?? ''}`}
+          startValue={startValue}
+          endValue={endValue}
           title={title}
           onClose={() => onOpenChange(false)}
           onConfirm={onConfirm}

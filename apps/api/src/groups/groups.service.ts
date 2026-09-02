@@ -83,6 +83,10 @@ export class GroupsService {
     return Promise.all(
       memberships.map(async (m) => ({
         ...(await this.keycloakAdmin.getUser(m.userId)),
+        // The membership row is the application's identity source of truth.
+        // Keep the provider response from changing the id used by clients to
+        // join names to proposal creators and RSVPs.
+        id: m.userId,
         role: m.role,
       })),
     );

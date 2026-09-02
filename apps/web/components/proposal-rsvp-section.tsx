@@ -26,7 +26,7 @@ export function ProposalRsvpSection({ proposalId, proposalStatus, myRsvp, action
   const [hoursOpen, setHoursOpen] = useState(false);
   const [startInput, setStartInput] = useState('');
   const [endInput, setEndInput] = useState('');
-  const [timePickerTarget, setTimePickerTarget] = useState<'start' | 'end' | null>(null);
+  const [timePickerOpen, setTimePickerOpen] = useState(false);
 
   // Pre-fill the hour fields from the saved RSVP whenever it changes —
   // adjusted during render (guarded by the previous value) rather than in
@@ -116,7 +116,7 @@ export function ProposalRsvpSection({ proposalId, proposalStatus, myRsvp, action
             <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
               <button
                 type="button"
-                onClick={() => setTimePickerTarget('start')}
+                onClick={() => setTimePickerOpen(true)}
                 className="rounded border border-border bg-surface px-2 py-1 text-xs hover:border-text-muted"
                 aria-label="Available from"
               >
@@ -125,7 +125,7 @@ export function ProposalRsvpSection({ proposalId, proposalStatus, myRsvp, action
               <span>–</span>
               <button
                 type="button"
-                onClick={() => setTimePickerTarget('end')}
+                onClick={() => setTimePickerOpen(true)}
                 className="rounded border border-border bg-surface px-2 py-1 text-xs hover:border-text-muted"
                 aria-label="Available until"
               >
@@ -160,19 +160,15 @@ export function ProposalRsvpSection({ proposalId, proposalStatus, myRsvp, action
               <span className="text-xs text-text-muted">(times in UTC)</span>
 
               <TimePickerDialog
-                open={timePickerTarget !== null}
-                value={timePickerTarget === 'start' ? startInput : endInput}
-                title={timePickerTarget === 'start' ? 'Available from' : 'Available until'}
-                onOpenChange={(open) => {
-                  if (!open) setTimePickerTarget(null);
-                }}
-                onConfirm={(selectedTime) => {
-                  if (timePickerTarget === 'start') {
-                    setStartInput(selectedTime);
-                  } else if (timePickerTarget === 'end') {
-                    setEndInput(selectedTime);
-                  }
-                  setTimePickerTarget(null);
+                open={timePickerOpen}
+                startValue={startInput}
+                endValue={endInput}
+                title="Choose availability"
+                onOpenChange={setTimePickerOpen}
+                onConfirm={(start, end) => {
+                  setStartInput(start);
+                  setEndInput(end);
+                  setTimePickerOpen(false);
                 }}
               />
             </div>
