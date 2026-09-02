@@ -47,6 +47,9 @@ set_derived() {
   if [ "${FRESH_ENV:-0}" != 1 ]; then
     current=$(read_var "$key" || true)
     case "$key:$current" in
+      WEB_HOST_PORT:3[0-9][0-9][0-9]|API_HOST_PORT:3[0-9][0-9][0-9]) ;;
+      KEYCLOAK_HOST_PORT:8[0-9][0-9][0-9]|DB_HOST_PORT:[56][0-9][0-9][0-9]|VAULT_HOST_PORT:[89][0-9][0-9][0-9]) ;;
+      KEYCLOAK_HOST_URL:http://localhost:*|KEYCLOAK_URL:http://localhost:*) ;;
       AUTH_URL:http://localhost:3000|AUTH_URL:http://localhost:3[0-9][0-9][0-9]) ;;
       AUTH_KEYCLOAK_ISSUER:http://localhost:*/realms/boardgame) ;;
       *) upsert_if_missing "$key" "$value"; return ;;
