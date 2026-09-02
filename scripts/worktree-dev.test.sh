@@ -12,6 +12,24 @@ cat >"$WORK/bin/docker" <<'EOF'
 exit 0
 EOF
 chmod +x "$WORK/bin/docker"
+cat >"$WORK/bin/curl" <<'EOF'
+#!/bin/sh
+exit 0
+EOF
+cat >"$WORK/bin/npm" <<'EOF'
+#!/bin/sh
+exit 0
+EOF
+cat >"$WORK/bin/infisical" <<'EOF'
+#!/bin/sh
+if [ "${INFISICAL_TEST_MODE:-}" = configured ]; then
+  printf 'test-token\n'
+  exit 0
+fi
+printf '\033[1mWelcome to Infisical\033[0m\nRun infisical login to continue.\n'
+exit 1
+EOF
+chmod +x "$WORK/bin/curl" "$WORK/bin/npm" "$WORK/bin/infisical"
 
 run_init() { WORKTREE_DIR="$1" REPO_ROOT="$ROOT" ENV_FILE="$2" PORT_CHECK_CMD=false sh "$SCRIPT" init; }
 run_init "$WORK/first" "$WORK/first.env" >/dev/null
@@ -47,6 +65,14 @@ check "status displays web URL" "$( printf '%s\n' "$status_output" | grep -q "we
 
 if WORKTREE_DIR="$WORK/first" REPO_ROOT="$ROOT" ENV_FILE="$WORK/conflict.env" WORKTREE_SLOT_COUNT=1 PORT_CHECK_CMD='test "$1" = 3000' sh "$SCRIPT" init >/dev/null 2>&1; then result=accepted; else result=expected; fi
 check "occupied port block is rejected" "$result"
+
+onboarding_env="$WORK/onboarding.env"
+PATH="$WORK/bin:$PATH" WORKTREE_DIR="$WORK/first" REPO_ROOT="$ROOT" ENV_FILE="$onboarding_env" PORT_CHECK_CMD=false sh "$SCRIPT" setup >/dev/null 2>&1 || true
+check "unconfigured Infisical does not populate BGG token" "$( [ -z "$(get "$onboarding_env" BGG_API_TOKEN)" ] && echo expected || echo corrupted )"
+
+configured_env="$WORK/configured.env"
+INFISICAL_TEST_MODE=configured PATH="$WORK/bin:$PATH" WORKTREE_DIR="$WORK/first" REPO_ROOT="$ROOT" ENV_FILE="$configured_env" PORT_CHECK_CMD=false sh "$SCRIPT" setup >/dev/null 2>&1 || true
+check "configured Infisical populates BGG token" "$( [ "$(get "$configured_env" BGG_API_TOKEN)" = test-token ] && echo expected || echo missing )"
 
 [ "$failures" -eq 0 ] || exit 1
 printf '\nall tests passed\n'

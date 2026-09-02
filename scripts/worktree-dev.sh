@@ -186,8 +186,9 @@ sync_secrets() {
 setup() {
   init_env; require_docker
   if [ -z "$(read_var BGG_API_TOKEN || true)" ] && command -v infisical >/dev/null 2>&1; then
-    token=$(infisical secrets get BGG_API_TOKEN --path=/ENV_VARS --env="${INFISICAL_ENV:-dev}" --plain 2>/dev/null || true)
-    [ -z "$token" ] || { awk '$1 !~ "^BGG_API_TOKEN=" { print }' "$ENV_FILE" >"$ENV_FILE.tmp"; printf 'BGG_API_TOKEN=%s\n' "$token" >>"$ENV_FILE.tmp"; mv "$ENV_FILE.tmp" "$ENV_FILE"; }
+    if token=$(infisical secrets get BGG_API_TOKEN --path=/ENV_VARS --env="${INFISICAL_ENV:-dev}" --plain </dev/null 2>/dev/null); then
+      case "$token" in ''|*[!A-Za-z0-9._~+/=-]*) ;; *) set_value BGG_API_TOKEN "$token" ;; esac
+    fi
   fi
   [ -n "$(read_var BGG_API_TOKEN || true)" ] || printf 'worktree-dev: warning: BGG_API_TOKEN is unset; BGG features will not work\n' >&2
   up
