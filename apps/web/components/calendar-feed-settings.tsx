@@ -12,12 +12,20 @@ export function CalendarFeedSettings() {
   const { feedUrl, pending, error, generate } = useCalendarFeedToken();
   const [confirmRegenerate, setConfirmRegenerate] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState(false);
 
   async function copy() {
     if (!feedUrl) return;
-    await navigator.clipboard.writeText(feedUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setCopied(false);
+    setCopyError(false);
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+      await navigator.clipboard.writeText(feedUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopyError(true);
+    }
   }
 
   return (
@@ -46,6 +54,8 @@ export function CalendarFeedSettings() {
       )}
 
       {error && <p className="mt-2 text-accent">{error}</p>}
+      {copied && <p className="mt-2 text-text-muted" role="status">Feed URL copied to clipboard.</p>}
+      {copyError && <p className="mt-2 text-accent" role="alert">Could not copy the feed URL. Copy it manually.</p>}
 
       <Dialog open={confirmRegenerate} onOpenChange={setConfirmRegenerate}>
         <DialogSheetContent aria-describedby={undefined}>
