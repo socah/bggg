@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiMutate, ApiError } from '@/lib/api';
+import { announceGroupDeleted } from '@/lib/group-events';
 import { useGroupMembers } from '@/hooks/use-group-members';
 import type { GroupMemberInfo, MemberRole } from '@/lib/types';
 import { Button } from '@/components/ui/button';
@@ -51,6 +52,7 @@ export function GroupSettings({ groupId, currentUserId }: { groupId: string; cur
     setMessage(null);
     try {
       await apiMutate(`/groups/${groupId}`, 'DELETE');
+      announceGroupDeleted(groupId);
       router.push('/calendar');
       router.refresh();
     } catch (error: unknown) {

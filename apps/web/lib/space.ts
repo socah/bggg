@@ -4,7 +4,7 @@ const TABS: ViewTab[] = ['calendar', 'collection', 'profile'];
 
 export interface SpacePath {
   groupId: string | null;
-  tab: ViewTab;
+  tab: ViewTab | null;
 }
 
 // The shell has two parallel "spaces" (user-level and group-level) that
@@ -15,13 +15,12 @@ export function parseSpacePath(pathname: string): SpacePath {
   const groupMatch = pathname.match(/^\/groups\/([^/]+)\/([^/]+)/);
   if (groupMatch) {
     const [, groupId, maybeTab] = groupMatch;
-    const tab = (TABS as string[]).includes(maybeTab) ? (maybeTab as ViewTab) : 'calendar';
+    const tab = (TABS as string[]).includes(maybeTab) ? (maybeTab as ViewTab) : null;
     return { groupId, tab };
   }
 
   const userMatch = pathname.match(/^\/([^/]+)/);
-  const tab =
-    userMatch && (TABS as string[]).includes(userMatch[1]) ? (userMatch[1] as ViewTab) : 'calendar';
+  const tab = userMatch && (TABS as string[]).includes(userMatch[1]) ? (userMatch[1] as ViewTab) : null;
   return { groupId: null, tab };
 }
 

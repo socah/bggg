@@ -18,7 +18,7 @@ const USER_ID = 'user-1';
 describe('SchedulingService', () => {
   let service: SchedulingService;
 
-  const mockProposals = { findOneBy: jest.fn(), save: jest.fn() };
+  const mockProposals = { findOneBy: jest.fn(), save: jest.fn(), remove: jest.fn() };
   const mockRsvps = { findBy: jest.fn() };
   const mockSessions = { findOneBy: jest.fn(), remove: jest.fn() };
   const mockProposalGames = { findBy: jest.fn() };
@@ -181,6 +181,53 @@ describe('SchedulingService', () => {
       });
 
       await expect(service.cancel(PROPOSAL_ID, USER_ID)).rejects.toBeInstanceOf(ForbiddenException);
+    });
+  });
+
+  describe('removeProposal', () => {
+    it('allows the proposal creator to delete a proposal without a linked session', async () => {
+      const proposal = baseProposal();
+      mockProposals.findOneBy.mockResolvedValue(proposal);
+      mockSessions.findOneBy.mockResolvedValue(null);
+
+      await service.removeProposal(PROPOSAL_ID, USER_ID);
+
+      expect(mockSessions.findOneBy).toHaveBeenCalledWith({ proposalId: PROPOSAL_ID });
+      expect(mockSessions.remove).not.toHaveBeenCalled();
+      expect(mockProposals.remove).toHaveBeenCalledWith(proposal);
+    });
+
+    it('allows a group admin and deletes the linked session before the proposal', async () => {
+      const proposal = { ...baseProposal(), createdBy: 'someone-else' };
+      const session = {
+        id: 'session-1', groupId: GROUP_ID, playedAt: new Date(),
+        notes: null, proposalId: PROPOSAL_ID, createdAt: new Date(),
+      };
+      mockProposals.findOneBy.mockResolvedValue(proposal);
+      mockMembers.findOneBy.mockResolvedValue({
+        id: 1, userId: USER_ID, groupId: GROUP_ID, role: 'admin', joinedAt: new Date(),
+      });
+      mockSessions.findOneBy.mockResolvedValue(session);
+
+      await service.removeProposal(PROPOSAL_ID, USER_ID);
+
+      expect(mockSessions.remove).toHaveBeenCalledWith(session);
+      expect(mockProposals.remove).toHaveBeenCalledWith(proposal);
+      expect(mockSessions.remove.mock.invocationCallOrder[0]).toBeLessThan(
+        mockProposals.remove.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('forbids a plain member who did not create the proposal', async () => {
+      mockProposals.findOneBy.mockResolvedValue({ ...baseProposal(), createdBy: 'someone-else' });
+      mockMembers.findOneBy.mockResolvedValue({
+        id: 1, userId: USER_ID, groupId: GROUP_ID, role: 'member', joinedAt: new Date(),
+      });
+
+      await expect(service.removeProposal(PROPOSAL_ID, USER_ID))
+        .rejects.toBeInstanceOf(ForbiddenException);
+      expect(mockSessions.findOneBy).not.toHaveBeenCalled();
+      expect(mockProposals.remove).not.toHaveBeenCalled();
     });
   });
 

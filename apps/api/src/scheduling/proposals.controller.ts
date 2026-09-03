@@ -38,6 +38,14 @@ export class ProposalsController {
     return this.schedulingService.getProposal(id, req.user.sub);
   }
 
+  // DELETE /proposals/:id → 204 No Content. The service restricts this to
+  // the proposal creator or a group owner/admin.
+  @Delete(':id')
+  @HttpCode(204)
+  remove(@Param('id', ParseUUIDPipe) id: string, @Request() req: AuthenticatedRequest) {
+    return this.schedulingService.removeProposal(id, req.user.sub);
+  }
+
   // PUT /proposals/:id/rsvp → 200 OK. Upsert: this is always "set my
   // current answer", whether it's the first RSVP or the fifth change of
   // mind — see SchedulingService.rsvp.

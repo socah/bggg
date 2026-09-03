@@ -320,6 +320,17 @@ export class SchedulingService {
     return this.proposals.save(proposal);
   }
 
+  async removeProposal(proposalId: string, requestingUserId: string): Promise<void> {
+    const proposal = await this.findProposalOrThrow(proposalId);
+    await this.assertCanManageProposal(proposal, requestingUserId);
+
+    const session = await this.sessions.findOneBy({ proposalId });
+    if (session) {
+      await this.sessions.remove(session);
+    }
+    await this.proposals.remove(proposal);
+  }
+
   async proposeGame(
     proposalId: string,
     dto: ProposeGameDto,

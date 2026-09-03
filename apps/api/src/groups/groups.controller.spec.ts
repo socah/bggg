@@ -110,12 +110,15 @@ describe('GroupsController', () => {
   // ── remove ───────────────────────────────────────────────────────────────
 
   describe('remove', () => {
-    it('should call the service remove method', async () => {
-      mockGroupsService.remove.mockResolvedValue(undefined);
+    it('should wait for the service to finish removing the group', async () => {
+      const removal = Promise.resolve();
+      mockGroupsService.remove.mockReturnValue(removal);
 
-      await controller.remove('group-1', fakeRequest);
+      const result = controller.remove('group-1', fakeRequest);
 
       expect(mockGroupsService.remove).toHaveBeenCalledWith('group-1', 'user-1');
+      expect(result).toBe(removal);
+      await result;
     });
   });
 

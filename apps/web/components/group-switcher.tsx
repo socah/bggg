@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { apiFetch } from '@/lib/api';
+import { GROUP_DELETED_EVENT } from '@/lib/group-events';
 import { parseSpacePath, spaceHref } from '@/lib/space';
 import type { Group } from '@/lib/types';
 import { Button } from '@/components/ui/button';
@@ -19,12 +20,14 @@ import {
 export function GroupSwitcher() {
   const pathname = usePathname();
   const router = useRouter();
-  const { groupId: activeGroupId, tab } = parseSpacePath(pathname);
+  const { groupId: activeGroupId, tab: activeTab } = parseSpacePath(pathname);
+  const tab = activeTab ?? 'calendar';
 
   const [groups, setGroups] = useState<Group[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [newGroupName, setNewGroupName] = useState('');
   const [creating, setCreating] = useState(false);
+  const deletedGroupIds = useRef(new Set<string>());
 
   useEffect(() => {
     let cancelled = false;
@@ -34,7 +37,7 @@ export function GroupSwitcher() {
         return res.json();
       })
       .then((data: Group[]) => {
-        if (!cancelled) setGroups(data);
+        if (!cancelled) setGroups(data.filter((group) => !deletedGroupIds.current.has(group.id)));
       })
       .catch(() => {
         // Keep whatever list was already loaded (possibly empty on first
@@ -45,6 +48,17 @@ export function GroupSwitcher() {
     return () => {
       cancelled = true;
     };
+  }, [activeGroupId]);
+
+  useEffect(() => {
+    function removeDeletedGroup(event: Event) {
+      const { groupId } = (event as CustomEvent<{ groupId: string }>).detail;
+      deletedGroupIds.current.add(groupId);
+      setGroups((current) => current.filter((group) => group.id !== groupId));
+    }
+
+    window.addEventListener(GROUP_DELETED_EVENT, removeDeletedGroup);
+    return () => window.removeEventListener(GROUP_DELETED_EVENT, removeDeletedGroup);
   }, []);
 
   async function handleCreateGroup(event: FormEvent) {

@@ -38,7 +38,7 @@ export function UserMenu({ name }: { name: string }) {
         <div className="px-2 py-1.5 text-text-muted">{name}</div>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
-          <Link href="/profile">Settings</Link>
+          <Link href="/settings">Settings</Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         {/* No <form> here on purpose. Radix's MenuItem closes (and unmounts)

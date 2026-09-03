@@ -21,10 +21,12 @@ function MemberName({
   userId,
   members,
   loading,
+  fallbackName,
 }: {
   userId: string;
   members: { id: string; displayName: string }[];
   loading: boolean;
+  fallbackName?: string;
 }) {
   if (loading) {
     return (
@@ -35,7 +37,7 @@ function MemberName({
     );
   }
 
-  return members.find((member) => member.id === userId)?.displayName ?? 'Unknown member';
+  return members.find((member) => member.id === userId)?.displayName ?? fallbackName ?? 'Unknown member';
 }
 
 export interface InlineProposalPanelProps {
@@ -50,6 +52,12 @@ export interface InlineProposalPanelProps {
 }
 
 const RSVP_ANSWERS = ['yes', 'maybe', 'no'] as const;
+const STATUS_LABELS: Record<Proposal['status'], string> = {
+  collecting: 'Collecting RSVPs',
+  confirming: 'Awaiting confirmation',
+  confirmed: 'Confirmed',
+  cancelled: 'Cancelled',
+};
 
 export function InlineProposalPanel({
   proposalId,
@@ -186,10 +194,28 @@ export function InlineProposalPanel({
             detail && (
               <span>
                 {activeGroup && <>Group: <strong className="font-medium text-text">{activeGroup.isSolo ? `${activeGroup.name} (solo)` : activeGroup.name}</strong> · </>}
-                Status: <strong className="font-medium text-text">{detail.proposal.status}</strong>
-                {' · '}Proposed by: <strong className="font-medium text-text"><MemberName userId={detail.proposal.createdBy} members={members} loading={loadingMembers} /></strong>
+                Status: <Badge>{STATUS_LABELS[detail.proposal.status]}</Badge>
+                {' · '}Proposed by:{' '}
+                <strong className="font-medium text-text">
+                  <MemberName
+                    userId={detail.proposal.createdBy}
+                    members={members}
+                    loading={loadingMembers}
+                    fallbackName={detail.proposal.createdBy === myId ? myName : undefined}
+                  />
+                </strong>
                 {detail.proposal.hostId && (
-                  <> · Host: <strong className="font-medium text-text"><MemberName userId={detail.proposal.hostId} members={members} loading={loadingMembers} /></strong></>
+                  <>
+                    {' · '}Host:{' '}
+                    <strong className="font-medium text-text">
+                      <MemberName
+                        userId={detail.proposal.hostId}
+                        members={members}
+                        loading={loadingMembers}
+                        fallbackName={detail.proposal.hostId === myId ? myName : undefined}
+                      />
+                    </strong>
+                  </>
                 )}
               </span>
             )
@@ -311,7 +337,13 @@ export function InlineProposalPanel({
                   return (
                     <li key={rsvp.userId} className="flex items-center gap-2 text-xs">
                       <span>
-                        <MemberName userId={rsvp.userId} members={members} loading={loadingMembers} /> — {rsvp.status}
+                        <MemberName
+                          userId={rsvp.userId}
+                          members={members}
+                          loading={loadingMembers}
+                          fallbackName={rsvp.userId === myId ? myName : undefined}
+                        />{' '}
+                        — {rsvp.status}
                         {formatWindowRange(rsvp.availableStart, rsvp.availableEnd) && (
                           <span className="text-text-muted"> · {formatWindowRange(rsvp.availableStart, rsvp.availableEnd)}</span>
                         )}

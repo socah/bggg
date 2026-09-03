@@ -1,6 +1,5 @@
-import { redirect } from 'next/navigation';
+import { ComingSoon } from '@/components/coming-soon';
 
-export default async function GroupProfilePage({ params }: { params: Promise<{ groupId: string }> }) {
-  const { groupId } = await params;
-  redirect(`/groups/${groupId}/settings`);
+export default function GroupProfilePage() {
+  return <ComingSoon label="Group profile" />;
 }

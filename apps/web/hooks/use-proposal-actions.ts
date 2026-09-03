@@ -66,6 +66,10 @@ export function useProposalActions(onChanged?: () => void) {
     (proposalId: string) => run('cancel', () => apiMutate(`/proposals/${proposalId}/cancel`, 'POST')),
     [run],
   );
+  const deleteProposal = useCallback(
+    (proposalId: string) => run('delete', () => apiMutate(`/proposals/${proposalId}`, 'DELETE')),
+    [run],
+  );
   const setHost = useCallback(
     (proposalId: string, userId: string) =>
       run('set-host', () => apiMutate(`/proposals/${proposalId}/host`, 'PUT', { userId })),
@@ -87,6 +91,7 @@ export function useProposalActions(onChanged?: () => void) {
     finalize,
     undo,
     cancel,
+    delete: deleteProposal,
     setHost,
     clearHost,
   };

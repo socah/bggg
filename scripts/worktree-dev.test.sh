@@ -40,6 +40,7 @@ run_init "$WORK/second" "$WORK/second.env" >/dev/null
 get() { awk -F= -v key="$2" '$1 == key { print substr($0, index($0, "=") + 1) }' "$1"; }
 check "fresh init creates env" "$( [ -f "$WORK/first.env" ] && echo expected || echo missing )"
 check "fresh init derives selected web URL" "$( [ "$(get "$WORK/first.env" AUTH_URL)" = "http://localhost:$(get "$WORK/first.env" WEB_HOST_PORT)" ] && echo expected || echo wrong )"
+check "fresh init derives public app URL" "$( [ "$(get "$WORK/first.env" PUBLIC_APP_URL)" = "http://localhost:$(get "$WORK/first.env" WEB_HOST_PORT)" ] && echo expected || echo wrong )"
 check "fresh init allocates an API port" "$( [ -n "$(get "$WORK/first.env" API_HOST_PORT)" ] && echo expected || echo missing )"
 check "same path keeps slot" "$( [ "$first_slot" = "$(get "$WORK/first.env" WORKTREE_SLOT)" ] && echo expected || echo changed )"
 check "different paths get project names" "$( [ "$(get "$WORK/first.env" COMPOSE_PROJECT_NAME)" != "$(get "$WORK/second.env" COMPOSE_PROJECT_NAME)" ] && echo expected || echo same )"
@@ -52,14 +53,16 @@ check "setup cleans legacy server state" "$( grep -q 'LEGACY_DEV_STATE_DIR' "$SC
 check "web dev command targets allocated API" "$( grep -q 'NEXT_PUBLIC_API_URL=http://localhost:\$api_port' "$SCRIPT" && echo expected || echo missing )"
 check "auth cookies are isolated per worktree" "$( grep -q 'cookieSuffix' "$ROOT/apps/web/auth.ts" && echo expected || echo missing )"
 
-printf 'DB_PASSWORD=my-password\nAUTH_URL=http://custom.example\n' >"$WORK/preserved.env"
+printf 'DB_PASSWORD=my-password\nAUTH_URL=http://custom.example\nPUBLIC_APP_URL=https://public.example\n' >"$WORK/preserved.env"
 WORKTREE_DIR="$WORK/first" REPO_ROOT="$ROOT" ENV_FILE="$WORK/preserved.env" PORT_CHECK_CMD=false sh "$SCRIPT" init >/dev/null
 check "existing user secret preserved" "$( [ "$(get "$WORK/preserved.env" DB_PASSWORD)" = my-password ] && echo expected || echo overwritten )"
 check "existing user URL preserved" "$( [ "$(get "$WORK/preserved.env" AUTH_URL)" = http://custom.example ] && echo expected || echo overwritten )"
+check "existing public app URL preserved" "$( [ "$(get "$WORK/preserved.env" PUBLIC_APP_URL)" = https://public.example ] && echo expected || echo overwritten )"
 
-printf 'WORKTREE_SLOT=7\nAUTH_URL=http://localhost:3000\n' >"$WORK/stale-derived.env"
+printf 'WORKTREE_SLOT=7\nAUTH_URL=http://localhost:3000\nPUBLIC_APP_URL=http://localhost:4567\n' >"$WORK/stale-derived.env"
 WORKTREE_DIR="$WORK/first" REPO_ROOT="$ROOT" ENV_FILE="$WORK/stale-derived.env" PORT_CHECK_CMD=false sh "$SCRIPT" init >/dev/null
 check "stale generated URL follows allocated port" "$( [ "$(get "$WORK/stale-derived.env" AUTH_URL)" = "http://localhost:3070" ] && echo expected || echo stale )"
+check "stale public app URL follows allocated port" "$( [ "$(get "$WORK/stale-derived.env" PUBLIC_APP_URL)" = "http://localhost:3070" ] && echo expected || echo stale )"
 
 printf 'WORKTREE_SLOT=8\nWEB_HOST_PORT=3070\nAPI_HOST_PORT=3071\nKEYCLOAK_HOST_PORT=8150\nDB_HOST_PORT=5502\nVAULT_HOST_PORT=8270\nKEYCLOAK_URL=http://localhost:8150\nKEYCLOAK_HOST_URL=http://localhost:8150\nAUTH_KEYCLOAK_ISSUER=http://localhost:8150/realms/boardgame\nAUTH_URL=http://localhost:3070\n' >"$WORK/reset-slot.env"
 WORKTREE_DIR="$WORK/first" REPO_ROOT="$ROOT" ENV_FILE="$WORK/reset-slot.env" PORT_CHECK_CMD=false sh "$SCRIPT" init >/dev/null
@@ -73,11 +76,11 @@ if WORKTREE_DIR="$WORK/first" REPO_ROOT="$ROOT" ENV_FILE="$WORK/conflict.env" WO
 check "occupied port block is rejected" "$result"
 
 onboarding_env="$WORK/onboarding.env"
-PATH="$WORK/bin:$PATH" WORKTREE_DIR="$WORK/first" REPO_ROOT="$ROOT" ENV_FILE="$onboarding_env" PORT_CHECK_CMD=false sh "$SCRIPT" setup >/dev/null 2>&1 || true
+PATH="$WORK/bin:$PATH" WORKTREE_DIR="$WORK/first" REPO_ROOT="$WORK/root" ENV_FILE="$onboarding_env" PORT_CHECK_CMD=false sh "$SCRIPT" setup >/dev/null 2>&1 || true
 check "unconfigured Infisical does not populate BGG token" "$( [ -z "$(get "$onboarding_env" BGG_API_TOKEN)" ] && echo expected || echo corrupted )"
 
 configured_env="$WORK/configured.env"
-INFISICAL_TEST_MODE=configured PATH="$WORK/bin:$PATH" WORKTREE_DIR="$WORK/first" REPO_ROOT="$ROOT" ENV_FILE="$configured_env" PORT_CHECK_CMD=false sh "$SCRIPT" setup >/dev/null 2>&1 || true
+INFISICAL_TEST_MODE=configured PATH="$WORK/bin:$PATH" WORKTREE_DIR="$WORK/first" REPO_ROOT="$WORK/root" ENV_FILE="$configured_env" PORT_CHECK_CMD=false sh "$SCRIPT" setup >/dev/null 2>&1 || true
 check "configured Infisical populates BGG token" "$( [ "$(get "$configured_env" BGG_API_TOKEN)" = test-token ] && echo expected || echo missing )"
 
 printf 'BGG_API_TOKEN=root-token._~+/=\n' >"$WORK/root/.env"

@@ -109,6 +109,6 @@ export class GroupsController {
   @Delete(':id')
   @HttpCode(204)
   remove(@Param('id', ParseUUIDPipe) id: string, @Request() req: AuthenticatedRequest) {
-    this.groupsService.remove(id, req.user.sub);
+    return this.groupsService.remove(id, req.user.sub);
   }
 }

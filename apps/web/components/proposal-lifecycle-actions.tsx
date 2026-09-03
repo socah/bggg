@@ -18,9 +18,10 @@ interface ProposalLifecycleActionsProps {
 export function ProposalLifecycleActions({ proposal, canManage, actions }: ProposalLifecycleActionsProps) {
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [confirmingUndo, setConfirmingUndo] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const busy = actions.pendingAction !== null;
 
-  if (!canManage || proposal.status === 'cancelled') return null;
+  if (!canManage) return null;
 
   return (
     <div className="flex flex-wrap gap-2 border-t border-border pt-3">
@@ -61,6 +62,9 @@ export function ProposalLifecycleActions({ proposal, canManage, actions }: Propo
           </Button>
         </>
       )}
+      <Button type="button" variant="ghost" disabled={busy} onClick={() => setConfirmingDelete(true)}>
+        Delete proposal
+      </Button>
 
       <Dialog open={confirmingCancel} onOpenChange={setConfirmingCancel}>
         <DialogSheetContent aria-describedby={undefined}>
@@ -103,6 +107,28 @@ export function ProposalLifecycleActions({ proposal, canManage, actions }: Propo
               Undo it
             </Button>
             <DialogClose className="text-sm text-text-muted underline">Keep it</DialogClose>
+          </div>
+        </DialogSheetContent>
+      </Dialog>
+
+      <Dialog open={confirmingDelete} onOpenChange={setConfirmingDelete}>
+        <DialogSheetContent aria-describedby={undefined}>
+          <DialogTitle>Permanently delete this proposal?</DialogTitle>
+          <p className="mt-2 text-sm text-text-muted">
+            This permanently removes the proposal and cannot be undone.
+          </p>
+          <div className="mt-4 flex gap-2">
+            <Button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                setConfirmingDelete(false);
+                void actions.delete(proposal.id);
+              }}
+            >
+              Delete permanently
+            </Button>
+            <DialogClose className="text-sm text-text-muted underline">Keep proposal</DialogClose>
           </div>
         </DialogSheetContent>
       </Dialog>

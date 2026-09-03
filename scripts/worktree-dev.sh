@@ -51,6 +51,7 @@ set_derived() {
       KEYCLOAK_HOST_PORT:8[0-9][0-9][0-9]|DB_HOST_PORT:[56][0-9][0-9][0-9]|VAULT_HOST_PORT:[89][0-9][0-9][0-9]) ;;
       KEYCLOAK_HOST_URL:http://localhost:*|KEYCLOAK_URL:http://localhost:*) ;;
       AUTH_URL:http://localhost:3000|AUTH_URL:http://localhost:3[0-9][0-9][0-9]) ;;
+      PUBLIC_APP_URL:http://localhost:*) ;;
       AUTH_KEYCLOAK_ISSUER:http://localhost:*/realms/boardgame) ;;
       *) upsert_if_missing "$key" "$value"; return ;;
     esac
@@ -128,6 +129,7 @@ init_env() {
   set_derived KEYCLOAK_URL "http://localhost:$KEYCLOAK_PORT"
   set_derived AUTH_KEYCLOAK_ISSUER "http://localhost:$KEYCLOAK_PORT/realms/boardgame"
   set_derived AUTH_URL "http://localhost:$WEB_PORT"
+  set_derived PUBLIC_APP_URL "http://localhost:$WEB_PORT"
   ensure_local_secret DB_PASSWORD "$(random_value)"
   ensure_local_secret VAULT_DEV_ROOT_TOKEN "$(random_value)"
   ensure_local_secret KEYCLOAK_ADMIN_PASSWORD "$(random_value)"

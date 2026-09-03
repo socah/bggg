@@ -21,7 +21,7 @@ export function ViewTabs() {
 
   return (
     <nav aria-label="Sections" className="flex gap-4 font-body text-sm font-medium">
-      {TABS.filter(({ tab }) => !(groupId && tab === 'profile')).map(({ tab, label }) => (
+      {TABS.map(({ tab, label }) => (
         <Link
           key={tab}
           href={spaceHref(groupId, tab)}

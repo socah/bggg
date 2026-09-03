@@ -3,6 +3,7 @@
 import { useAggregateProposals } from '@/hooks/use-proposals';
 import { useGroups } from '@/hooks/use-groups';
 import { CalendarMonthGrid } from '@/components/calendar-month-grid';
+import { CalendarMonthSkeleton } from '@/components/calendar-month-skeleton';
 
 export default function PersonalCalendarPage() {
   const { proposals, loading, error, retry } = useAggregateProposals();
@@ -14,7 +15,6 @@ export default function PersonalCalendarPage() {
         <h2 className="font-display text-lg">My schedule</h2>
       </div>
 
-      {loading && <p>Loading your schedule…</p>}
       {error && (
         <p className="text-accent">
           {error}{' '}
@@ -23,11 +23,15 @@ export default function PersonalCalendarPage() {
           </button>
         </p>
       )}
-      <CalendarMonthGrid
-        proposals={proposals}
-        groups={groups}
-        onProposalsChanged={retry}
-      />
+      {loading ? (
+        <CalendarMonthSkeleton label="Loading your schedule" />
+      ) : (
+        <CalendarMonthGrid
+          proposals={proposals}
+          groups={groups}
+          onProposalsChanged={retry}
+        />
+      )}
     </div>
   );
 }
