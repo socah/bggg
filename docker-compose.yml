@@ -145,6 +145,10 @@ services:
       # this file and redeploying re-applies it — no manual admin-console
       # steps to reproduce on a fresh clone, in any environment.
       - ./infra/keycloak/boardgame-realm.json:/opt/keycloak/data/import/boardgame-realm.json
+      # Unlike the realm import above, this policy is also applied to an
+      # existing realm by sync-user-profile.sh after Keycloak starts.
+      - ./infra/keycloak/user-profile.json:/opt/keycloak/data/import/user-profile.json:ro
+      - ./infra/keycloak/sync-user-profile.sh:/sync-user-profile.sh:ro
     labels:
       # Same StripPrefix pattern as 'api's 'api-stripprefix' below: the
       # browser's OIDC redirects hit Traefik at '/auth/...', Traefik

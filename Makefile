@@ -2,13 +2,14 @@
 # already tells plain 'docker compose' which override file to merge in, so no
 # '-f'/'--env-file' flags are needed here the way deploy-prod below needs both.
 .DEFAULT_GOAL := help
-.PHONY: help deploy-dev deploy-prod dev-setup dev-setup-all dev-status-all dev-stop-all dev-down-all dev-clean-all seed-user sync-secrets db-migrate migration-generate dev-up dev-stop dev-status dev-down devcontainer-up devcontainer-run deploy-dev-with-user
+.PHONY: help deploy-dev deploy-prod dev-setup dev-setup-all dev-status-all dev-stop-all dev-down-all dev-clean-all seed-user sync-keycloak-profile sync-secrets db-migrate migration-generate dev-up dev-stop dev-status dev-down devcontainer-up devcontainer-run deploy-dev-with-user
 
 help:
-	@echo "Available targets: deploy-dev deploy-prod dev-setup dev-setup-all dev-status-all dev-stop-all dev-down-all dev-clean-all dev-down dev-stop dev-status seed-user sync-secrets db-migrate migration-generate dev-up devcontainer-up devcontainer-run deploy-dev-with-user"
+	@echo "Available targets: deploy-dev deploy-prod dev-setup dev-setup-all dev-status-all dev-stop-all dev-down-all dev-clean-all dev-down dev-stop dev-status seed-user sync-keycloak-profile sync-secrets db-migrate migration-generate dev-up devcontainer-up devcontainer-run deploy-dev-with-user"
 
 deploy-dev:
 	docker compose up -d --build
+	docker compose exec -T keycloak /bin/sh /sync-user-profile.sh
 
 # Stops the whole Docker Compose stack (traefik, keycloak, vault, db, api/web
 # containers) and removes its containers/networks. Volumes are kept, so the
@@ -49,6 +50,11 @@ dev-clean-all:
 # re-run any time — it waits for Keycloak to accept admin logins first.
 seed-user:
 	docker compose exec -T keycloak /bin/sh /seed-dev-user.sh
+
+# Re-applies the versioned user-profile policy even when the realm already
+# exists (Keycloak's --import-realm intentionally skips existing realms).
+sync-keycloak-profile:
+	docker compose exec -T keycloak /bin/sh /sync-user-profile.sh
 
 # Pulls the realm-generated client secrets ('web', 'api-service') into .env,
 # so the OIDC login works without a manual admin-console copy step. Also safe

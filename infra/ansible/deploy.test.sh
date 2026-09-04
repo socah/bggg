@@ -19,11 +19,15 @@ check() {
 check "deploy wrapper forwards BGG_API_TOKEN" \
   "$(grep -q -- '-e bgg_api_token=' "$DEPLOY_SCRIPT" && printf expected || printf missing)"
 check "compose task exports BGG_API_TOKEN" \
-  "$(grep -c '^    BGG_API_TOKEN:' "$TASKS_FILE" | grep -q '^4$' && printf expected || printf missing)"
+  "$(grep -c '^    BGG_API_TOKEN:' "$TASKS_FILE" | grep -q '^5$' && printf expected || printf missing)"
 check "migration task exports database Compose variables" \
-  "$(grep -c '^    DB_USER:' "$TASKS_FILE" | grep -q '^3$' && grep -c '^    DB_NAME:' "$TASKS_FILE" | grep -q '^3$' && grep -c '^    DB_PASSWORD:' "$TASKS_FILE" | grep -q '^4$' && printf expected || printf missing)"
+  "$(grep -c '^    DB_USER:' "$TASKS_FILE" | grep -q '^4$' && grep -c '^    DB_NAME:' "$TASKS_FILE" | grep -q '^4$' && grep -c '^    DB_PASSWORD:' "$TASKS_FILE" | grep -q '^5$' && printf expected || printf missing)"
 check "migration task does not require a running api service" \
   "$(grep -A4 -- '- name: Run database migrations' "$TASKS_FILE" | grep -q ' run --rm --no-deps api ' && printf expected || printf missing)"
+check "deploy verifies API service-account authentication" \
+  "$(grep -A75 -- '- name: Verify API service-account authentication' "$TASKS_FILE" | grep -q "grant_type: 'client_credentials'" && printf expected || printf missing)"
+check "deploy reconciles the Keycloak user profile" \
+  "$(grep -A5 -- '- name: Reconcile Keycloak user profile' "$TASKS_FILE" | grep -q '/sync-user-profile.sh' && printf expected || printf missing)"
 check "api runtime image includes workspace dependencies" \
   "$(grep -c '^COPY --from=build /workspace/apps/api/node_modules ./apps/api/node_modules$' "$DOCKERFILE" | grep -q '^1$' && printf expected || printf missing)"
 

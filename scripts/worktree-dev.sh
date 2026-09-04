@@ -201,6 +201,7 @@ setup() {
   fi
   [ -n "$(read_var BGG_API_TOKEN || true)" ] || printf 'worktree-dev: warning: BGG_API_TOKEN is unset; BGG features will not work\n' >&2
   up
+  compose exec -T keycloak /bin/sh /sync-user-profile.sh
   sync_secrets
   compose exec -T keycloak /bin/sh /seed-dev-user.sh
   set -a; . "$ENV_FILE"; set +a
