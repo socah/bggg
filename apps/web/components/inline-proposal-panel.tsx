@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useProposalDetail } from '@/hooks/use-proposal-detail';
 import { useGroupMembers } from '@/hooks/use-group-members';
@@ -105,13 +105,25 @@ export function InlineProposalPanel({
   const library = useGroupLibrary(effectiveGroupId || null);
   const existingGames = useProposalGames(proposalId, onProposalsChanged);
 
-  const myRole = myId ? members.find((m) => m.id === myId)?.role : undefined;
-  const canManage =
-    !!detail &&
-    ((myId !== null && detail.proposal.createdBy === myId) ||
-      (myId !== null && activeGroup?.ownerId === myId) ||
-      myRole === 'owner' ||
-      myRole === 'admin');
+  const canManage = detail?.canManage ?? false;
+
+  const gameRowRefs = useRef(new Map<string, HTMLLIElement>());
+  const previousGamePositions = useRef(new Map<string, number>());
+  useLayoutEffect(() => {
+    const nextPositions = new Map<string, number>();
+    for (const [id, element] of gameRowRefs.current) {
+      const top = element.getBoundingClientRect().top;
+      nextPositions.set(id, top);
+      const previousTop = previousGamePositions.current.get(id);
+      if (previousTop !== undefined && previousTop !== top) {
+        element.animate(
+          [{ transform: `translateY(${previousTop - top}px)` }, { transform: 'translateY(0)' }],
+          { duration: 280, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
+        );
+      }
+    }
+    previousGamePositions.current = nextPositions;
+  }, [existingGames.rows]);
 
   // Filtered games for draft game picker
   const filteredLibraryGames = useMemo(() => {
@@ -424,22 +436,33 @@ export function InlineProposalPanel({
             <ul className="mt-2 flex flex-col gap-1">
               {existingGames.loading && <p className="text-text-muted">Loading games…</p>}
               {existingGames.rows.map(({ proposalGameId, game, voteCount, votedByMe }) => (
-                <li key={proposalGameId} className="flex items-center gap-2 text-xs">
+                <li
+                  key={proposalGameId}
+                  ref={(element) => {
+                    if (element) gameRowRefs.current.set(proposalGameId, element);
+                    else gameRowRefs.current.delete(proposalGameId);
+                  }}
+                  className="flex items-center gap-3 rounded-sm border border-border bg-surface px-3 py-2 text-sm"
+                >
                   {detail.proposal.status === 'collecting' && (
                     <button
                       type="button"
                       aria-label={votedByMe ? 'Remove your vote' : 'Vote for this game'}
-                      className={`text-lg leading-none ${votedByMe ? 'text-accent' : 'text-text-muted'}`}
+                      className={`inline-flex min-w-12 items-center justify-center gap-1 rounded-full border px-2 py-1 font-semibold transition-colors ${votedByMe ? 'border-accent bg-accent text-accent-ink' : 'border-border-strong bg-surface-raised text-text hover:border-accent'}`}
                       disabled={existingGames.pendingAction !== null}
                       onClick={() => void (votedByMe ? existingGames.unvote(proposalGameId) : existingGames.vote(proposalGameId))}
                     >
-                      ▲
+                      <span aria-hidden="true">▲</span>
+                      <span>{voteCount}</span>
                     </button>
                   )}
-                  <span>{game.name}</span>
-                  <Badge>
-                    {voteCount} vote{voteCount === 1 ? '' : 's'}
-                  </Badge>
+                  {detail.proposal.status !== 'collecting' && (
+                    <span className="inline-flex min-w-12 items-center justify-center gap-1 rounded-full bg-highlight px-2 py-1 font-semibold text-text">
+                      <span aria-hidden="true">▲</span>
+                      <span>{voteCount}</span>
+                    </span>
+                  )}
+                  <span className="font-medium">{game.name}</span>
                 </li>
               ))}
             </ul>

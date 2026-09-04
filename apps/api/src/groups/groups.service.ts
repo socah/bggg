@@ -76,7 +76,7 @@ export class GroupsService {
   async getMembers(
     id: string,
     requestingUserId: string,
-  ): Promise<Array<KeycloakUserInfo & { role: string }>> {
+  ): Promise<Array<Pick<KeycloakUserInfo, 'id' | 'displayName'> & { role: string; isCurrentUser: boolean }>> {
     await this.findOne(id, requestingUserId);
 
     const memberships = await this.members.findBy({ groupId: id });

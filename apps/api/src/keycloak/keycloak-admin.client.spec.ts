@@ -9,6 +9,7 @@ describe('KeycloakAdminClient', () => {
   const mockHttpService = {
     get: jest.fn(),
     post: jest.fn(),
+    put: jest.fn(),
     delete: jest.fn(),
   };
 
@@ -136,7 +137,25 @@ describe('KeycloakAdminClient', () => {
 
       const result = await client.getUser('user-1');
 
-      expect(result).toEqual({ id: 'user-1', displayName: 'Alice' });
+      expect(result).toEqual({
+        id: 'user-1',
+        displayName: 'Alice',
+        username: 'alice',
+        email: '',
+        firstName: 'Alice',
+        lastName: '',
+      });
+    });
+
+    it('uses both first and last name for the display name', async () => {
+      mockHttpService.post.mockReturnValue(
+        of({ status: 200, data: { access_token: 'service-token', expires_in: 60 } }),
+      );
+      mockHttpService.get.mockReturnValue(
+        of({ status: 200, data: { id: 'user-1', username: 'alice', firstName: 'Alice', lastName: 'Anderson' } }),
+      );
+
+      await expect(client.getUser('user-1')).resolves.toMatchObject({ displayName: 'Alice Anderson' });
     });
 
     it('should fall back to username when firstName is unset', async () => {
@@ -149,7 +168,14 @@ describe('KeycloakAdminClient', () => {
 
       const result = await client.getUser('user-2');
 
-      expect(result).toEqual({ id: 'user-2', displayName: 'bob' });
+      expect(result).toEqual({
+        id: 'user-2',
+        displayName: 'bob',
+        username: 'bob',
+        email: '',
+        firstName: '',
+        lastName: '',
+      });
     });
 
     it('should fall back to username when firstName is blank', async () => {
@@ -160,7 +186,50 @@ describe('KeycloakAdminClient', () => {
         of({ status: 200, data: { id: 'user-3', username: 'carol', firstName: '' } }),
       );
 
-      await expect(client.getUser('user-3')).resolves.toEqual({ id: 'user-3', displayName: 'carol' });
+      await expect(client.getUser('user-3')).resolves.toEqual({
+        id: 'user-3',
+        displayName: 'carol',
+        username: 'carol',
+        email: '',
+        firstName: '',
+        lastName: '',
+      });
+    });
+  });
+
+  describe('updateUser', () => {
+    it('preserves the username and updates optional profile fields', async () => {
+      mockHttpService.post.mockReturnValue(
+        of({ status: 200, data: { access_token: 'service-token', expires_in: 60 } }),
+      );
+      mockHttpService.get
+        .mockReturnValueOnce(of({
+          status: 200,
+          data: { id: 'user-1', username: 'alice', email: '', firstName: '', lastName: '' },
+        }))
+        .mockReturnValueOnce(of({
+          status: 200,
+          data: { id: 'user-1', username: 'alice', email: 'alice@example.com', firstName: 'Alice', lastName: '' },
+        }));
+      mockHttpService.put.mockReturnValue(of({ status: 204 }));
+
+      const result = await client.updateUser('user-1', {
+        email: 'alice@example.com',
+        firstName: 'Alice',
+      });
+
+      expect(mockHttpService.put).toHaveBeenCalledWith(
+        expect.stringContaining('/users/user-1'),
+        {
+          username: 'alice',
+          email: 'alice@example.com',
+          firstName: 'Alice',
+          lastName: '',
+          enabled: true,
+        },
+        expect.any(Object),
+      );
+      expect(result).toMatchObject({ email: 'alice@example.com', displayName: 'Alice' });
     });
   });
 });

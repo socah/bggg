@@ -56,6 +56,7 @@ export interface ProposalDetail {
   proposal: Proposal;
   rsvps: Rsvp[];
   games: ProposalGameSummary[];
+  canManage: boolean;
 }
 
 export type MemberRole = 'owner' | 'admin' | 'member';

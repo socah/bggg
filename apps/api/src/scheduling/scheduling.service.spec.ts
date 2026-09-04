@@ -78,6 +78,7 @@ describe('SchedulingService', () => {
       expect(result).toEqual({
         proposal,
         rsvps,
+        canManage: true,
         games: [{
           proposalGameId: 'pg-1',
           game: { id: 42, name: 'Gloomhaven' },
@@ -114,6 +115,31 @@ describe('SchedulingService', () => {
         votedByMe: true,
       }]);
       expect(mockGameVotes.existsBy).toHaveBeenCalledWith({ proposalGameId: 'pg-1', userId: USER_ID });
+    });
+
+    it('orders proposed games by vote count, then by name', async () => {
+      const proposal = baseProposal();
+      mockProposals.findOneBy.mockResolvedValue(proposal);
+      mockGroupsService.findOne.mockResolvedValue({ id: GROUP_ID });
+      mockProposalGames.findBy.mockResolvedValue([
+        { id: 'pg-1', proposalId: PROPOSAL_ID, gameId: 1, proposedBy: USER_ID, createdAt: new Date() },
+        { id: 'pg-2', proposalId: PROPOSAL_ID, gameId: 2, proposedBy: USER_ID, createdAt: new Date() },
+        { id: 'pg-3', proposalId: PROPOSAL_ID, gameId: 3, proposedBy: USER_ID, createdAt: new Date() },
+      ]);
+      mockGames.findBy.mockResolvedValue([
+        { id: 1, name: 'Catan' },
+        { id: 2, name: 'Azul' },
+        { id: 3, name: 'Brass' },
+      ]);
+      mockGameVotes.countBy
+        .mockResolvedValueOnce(1)
+        .mockResolvedValueOnce(3)
+        .mockResolvedValueOnce(3);
+      mockGameVotes.existsBy.mockResolvedValue(false);
+
+      const result = await service.listProposalGames(PROPOSAL_ID, USER_ID);
+
+      expect(result.map((row) => row.game.name)).toEqual(['Azul', 'Brass', 'Catan']);
     });
   });
 

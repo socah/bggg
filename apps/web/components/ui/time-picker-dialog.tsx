@@ -216,7 +216,7 @@ function TimePickerInner({ startValue, endValue, title, onClose, onConfirm }: Ti
             style={{ opacity: stage === 'end' ? 1 : 0 }}
           >
             {arcPaths(startAngle, duration).map((path, index) => (
-              <path key={index} d={path} fill="none" stroke="currentColor" strokeWidth={12} className="text-highlight opacity-25" />
+              <path key={index} d={path} fill="none" stroke="currentColor" strokeWidth={12} className="text-text-muted" />
             ))}
             <circle cx={startPoint.x} cy={startPoint.y} r={12} fill="currentColor" className="text-text-muted opacity-25" />
           </g>
@@ -243,7 +243,9 @@ function TimePickerInner({ startValue, endValue, title, onClose, onConfirm }: Ti
               cy={CENTER - DIAL_RADIUS}
               r={14}
               fill="currentColor"
-              className="text-highlight opacity-70"
+              stroke="var(--text)"
+              strokeWidth={3}
+              className="text-highlight"
             />
           </g>
           <circle cx={CENTER} cy={CENTER} r={3} fill="currentColor" className="text-text" />

@@ -111,15 +111,11 @@ export class InvitesService {
     // or been redeemed by someone else in the meantime.
     const invite = await this.findValidInvite(rawToken);
 
-    // class-validator can check each field's own shape but not "at least
-    // one of these two", so that rule lives here instead.
-    if (!dto.username && !dto.email) {
-      throw new BadRequestException('Either a username or an email is required');
-    }
+    if (!dto.username?.trim()) throw new BadRequestException('A username is required');
 
     const newUserId = await this.keycloakAdmin.createUser({
       email: dto.email,
-      username: dto.username,
+      username: dto.username.trim(),
       firstName: dto.firstName,
       lastName: dto.lastName,
       password: dto.password,

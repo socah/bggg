@@ -400,7 +400,7 @@ export class SchedulingService {
     // column — so there's a query per game here rather than a join. Fine
     // at this project's scale; would become a single GROUP BY if the
     // number of proposed games per proposal ever got large.
-    return Promise.all(
+    const rows = await Promise.all(
       proposalGames.map(async (proposalGame) => ({
         proposalGameId: proposalGame.id,
         game: {
@@ -413,6 +413,12 @@ export class SchedulingService {
           userId: requestingUserId,
         }),
       })),
+    );
+    return rows.sort(
+      (left, right) =>
+        right.voteCount - left.voteCount ||
+        left.game.name.localeCompare(right.game.name) ||
+        left.proposalGameId.localeCompare(right.proposalGameId),
     );
   }
 
@@ -428,6 +434,7 @@ export class SchedulingService {
     proposal: PlaySessionProposal;
     rsvps: PlaySessionRsvp[];
     games: ProposalGameWithVotes[];
+    canManage: boolean;
   }> {
     const proposal = await this.findProposalOrThrow(proposalId);
     await this.groupsService.findOne(proposal.groupId, requestingUserId);
@@ -438,7 +445,8 @@ export class SchedulingService {
     // is cheap at this project's scale and keeps this a one-line call
     // instead of extracting a shared private helper for one caller.
     const games = await this.listProposalGames(proposalId, requestingUserId);
-    return { proposal, rsvps, games };
+    const canManage = await this.canManageProposal(proposal, requestingUserId);
+    return { proposal, rsvps, games, canManage };
   }
 
   private async findProposalOrThrow(proposalId: string): Promise<PlaySessionProposal> {
@@ -456,16 +464,23 @@ export class SchedulingService {
     proposal: PlaySessionProposal,
     requestingUserId: string,
   ): Promise<void> {
-    if (proposal.createdBy === requestingUserId) return;
+    if (!(await this.canManageProposal(proposal, requestingUserId))) {
+      throw new ForbiddenException(
+        'Only the proposal creator or a group owner/admin can do this',
+      );
+    }
+  }
+
+  private async canManageProposal(
+    proposal: PlaySessionProposal,
+    requestingUserId: string,
+  ): Promise<boolean> {
+    if (proposal.createdBy === requestingUserId) return true;
 
     const membership = await this.members.findOneBy({
       groupId: proposal.groupId,
       userId: requestingUserId,
     });
-    if (!membership || membership.role === 'member') {
-      throw new ForbiddenException(
-        'Only the proposal creator or a group owner/admin can do this',
-      );
-    }
+    return membership?.role === 'owner' || membership?.role === 'admin';
   }
 }

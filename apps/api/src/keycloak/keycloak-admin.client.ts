@@ -24,6 +24,16 @@ export interface CreateKeycloakUserInput {
 export interface KeycloakUserInfo {
   id: string;
   displayName: string;
+  username: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+}
+
+export interface UpdateKeycloakUserInput {
+  email?: string;
+  firstName?: string;
+  lastName?: string;
 }
 
 // Wraps the two Keycloak Admin API calls InvitesService needs. Uses
@@ -112,10 +122,45 @@ export class KeycloakAdminClient {
       throw new HttpException(`Keycloak user lookup failed (${response.status})`, 502);
     }
 
+    const firstName = response.data.firstName?.trim() ?? '';
+    const lastName = response.data.lastName?.trim() ?? '';
     return {
       id: response.data.id,
-      displayName: response.data.firstName?.trim() || response.data.username,
+      displayName: [firstName, lastName].filter(Boolean).join(' ') || response.data.username,
+      username: response.data.username,
+      email: response.data.email ?? '',
+      firstName,
+      lastName,
     };
+  }
+
+  async updateUser(userId: string, input: UpdateKeycloakUserInput): Promise<KeycloakUserInfo> {
+    const token = await this.getServiceToken();
+    const current = await this.getUser(userId);
+    const response = await firstValueFrom(
+      this.http.put(
+        `${KEYCLOAK_URL}/admin/realms/${REALM}/users/${userId}`,
+        {
+          username: current.username,
+          email: input.email ?? current.email,
+          firstName: input.firstName ?? current.firstName,
+          lastName: input.lastName ?? current.lastName,
+          enabled: true,
+        },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          validateStatus: () => true,
+        },
+      ),
+    );
+
+    if (response.status === 409) {
+      throw new HttpException('An account with this email already exists', 409);
+    }
+    if (response.status !== 204) {
+      throw new HttpException(`Keycloak user update failed (${response.status})`, 502);
+    }
+    return this.getUser(userId);
   }
 
   // Compensating action for InvitesService.registerAndAcceptInvite: if

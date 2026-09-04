@@ -32,7 +32,7 @@ export function InvitePage({ token }: InvitePageProps) {
   const [preview, setPreview] = useState<InvitePreview | null>(null);
   const [status, setStatus] = useState<'loading' | 'idle' | 'submitting'>('loading');
   const [message, setMessage] = useState<string | null>(null);
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
 
   useEffect(() => {
@@ -77,7 +77,7 @@ export function InvitePage({ token }: InvitePageProps) {
       const response = await fetch(`/api/invites/${encodeURIComponent(token)}/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ username: username.trim(), password }),
       });
       if (!response.ok) throw new Error(await responseMessage(response));
 
@@ -95,7 +95,7 @@ export function InvitePage({ token }: InvitePageProps) {
       <Card className="w-full max-w-md p-6">
         <p className="font-display text-sm uppercase tracking-wide text-text-muted">Group invitation</p>
         {status === 'loading' && <p className="mt-4 text-text-muted">Checking this invite…</p>}
-        {message && <p className="mt-4 text-accent" role="alert">{message}</p>}
+        {message && <p className="mt-4 rounded-sm border border-accent bg-surface px-3 py-2 text-text" role="alert">{message}</p>}
         {preview && (
           <>
             <h1 className="mt-2 font-display text-3xl">Join {preview.groupName}</h1>
@@ -105,18 +105,33 @@ export function InvitePage({ token }: InvitePageProps) {
                 {!session?.user && (
                   <>
                     <label className="flex flex-col gap-1 text-sm font-semibold">
-                      Email
-                      <Input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} />
+                      Username
+                      <Input
+                        required
+                        minLength={3}
+                        maxLength={64}
+                        autoComplete="username"
+                        value={username}
+                        onChange={(event) => setUsername(event.target.value)}
+                      />
                     </label>
                     <label className="flex flex-col gap-1 text-sm font-semibold">
                       Password
-                      <Input required minLength={8} type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
+                      <Input required minLength={8} type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} />
                     </label>
-                </>
+                  </>
                 )}
                 <Button type="submit">
                   {session?.user ? 'Join group' : 'Create account and join'}
                 </Button>
+                {!session?.user && (
+                  <a
+                    href={`/web/login?callbackUrl=${encodeURIComponent(`/invites/${token}`)}`}
+                    className="text-center text-sm font-semibold text-text underline decoration-accent underline-offset-4"
+                  >
+                    Already have an account? Sign in to accept
+                  </a>
+                )}
               </form>
             )}
           </>

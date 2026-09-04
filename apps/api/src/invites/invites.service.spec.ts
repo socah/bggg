@@ -237,7 +237,7 @@ describe('InvitesService', () => {
 
   describe('registerAndAcceptInvite', () => {
     const rawToken = 'register-token';
-    const dto = { email: 'new@example.com', password: 'hunter2222' };
+    const dto = { username: 'newperson', password: 'hunter2222' };
     const validInvite = {
       tokenHash: hash(rawToken),
       groupId: GROUP_ID,
@@ -255,8 +255,8 @@ describe('InvitesService', () => {
       const result = await service.registerAndAcceptInvite(rawToken, dto);
 
       expect(mockKeycloakAdmin.createUser).toHaveBeenCalledWith({
-        email: dto.email,
-        username: undefined,
+        email: undefined,
+        username: dto.username,
         firstName: undefined,
         lastName: undefined,
         password: dto.password,
@@ -310,11 +310,11 @@ describe('InvitesService', () => {
       expect(mockKeycloakAdmin.createUser).not.toHaveBeenCalled();
     });
 
-    it('should reject registration with neither a username nor an email', async () => {
+    it('should reject registration without a username', async () => {
       mockInvites.findOneBy.mockResolvedValue(validInvite);
 
       await expect(
-        service.registerAndAcceptInvite(rawToken, { password: 'hunter2222' }),
+        service.registerAndAcceptInvite(rawToken, { email: 'new@example.com', password: 'hunter2222' } as never),
       ).rejects.toThrow(BadRequestException);
       expect(mockKeycloakAdmin.createUser).not.toHaveBeenCalled();
     });
