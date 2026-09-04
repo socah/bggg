@@ -1,7 +1,7 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { render, screen, waitFor } from '@testing-library/react';
 
-const apiFetch = jest.fn(() => Promise.resolve({
+const apiFetch = jest.fn((..._args: unknown[]) => Promise.resolve({
   ok: true,
   json: async () => ({
     username: 'alice',
