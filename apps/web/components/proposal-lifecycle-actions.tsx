@@ -13,10 +13,8 @@ interface ProposalLifecycleActionsProps {
 }
 
 // Creator / owner-admin lifecycle controls, contextual to the current
-// status. Undo from 'confirmed' also deletes the recorded play_sessions
-// row server-side, so it gets the same confirmation dialog as cancel.
+// status. Undo from 'confirmed' also deletes the recorded play_sessions row.
 export function ProposalLifecycleActions({ proposal, canManage, actions }: ProposalLifecycleActionsProps) {
-  const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [confirmingUndo, setConfirmingUndo] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const busy = actions.pendingAction !== null;
@@ -26,18 +24,13 @@ export function ProposalLifecycleActions({ proposal, canManage, actions }: Propo
   return (
     <div className="flex flex-wrap gap-2 border-t border-border pt-3">
       {proposal.status === 'collecting' && (
-        <>
-          <Button
-            type="button"
-            disabled={busy}
-            onClick={() => actions.requestConfirmation(proposal.id)}
-          >
-            Request confirmation
-          </Button>
-          <Button type="button" variant="ghost" disabled={busy} onClick={() => setConfirmingCancel(true)}>
-            Cancel proposal
-          </Button>
-        </>
+        <Button
+          type="button"
+          disabled={busy}
+          onClick={() => actions.requestConfirmation(proposal.id)}
+        >
+          Request confirmation
+        </Button>
       )}
       {proposal.status === 'confirming' && (
         <>
@@ -47,9 +40,6 @@ export function ProposalLifecycleActions({ proposal, canManage, actions }: Propo
           <Button type="button" variant="secondary" disabled={busy} onClick={() => actions.undo(proposal.id)}>
             Undo
           </Button>
-          <Button type="button" variant="ghost" disabled={busy} onClick={() => setConfirmingCancel(true)}>
-            Cancel proposal
-          </Button>
         </>
       )}
       {proposal.status === 'confirmed' && (
@@ -57,36 +47,11 @@ export function ProposalLifecycleActions({ proposal, canManage, actions }: Propo
           <Button type="button" variant="secondary" disabled={busy} onClick={() => setConfirmingUndo(true)}>
             Undo confirmation
           </Button>
-          <Button type="button" variant="ghost" disabled={busy} onClick={() => setConfirmingCancel(true)}>
-            Cancel session
-          </Button>
         </>
       )}
       <Button type="button" variant="ghost" disabled={busy} onClick={() => setConfirmingDelete(true)}>
-        Delete proposal
+        Remove proposal
       </Button>
-
-      <Dialog open={confirmingCancel} onOpenChange={setConfirmingCancel}>
-        <DialogSheetContent aria-describedby={undefined}>
-          <DialogTitle>Cancel this proposal?</DialogTitle>
-          <p className="mt-2 text-sm text-text-muted">
-            Everyone will see it was cancelled. This cannot be undone — create a new proposal instead.
-          </p>
-          <div className="mt-4 flex gap-2">
-            <Button
-              type="button"
-              disabled={busy}
-              onClick={() => {
-                setConfirmingCancel(false);
-                void actions.cancel(proposal.id);
-              }}
-            >
-              Yes, cancel it
-            </Button>
-            <DialogClose className="text-sm text-text-muted underline">Keep it</DialogClose>
-          </div>
-        </DialogSheetContent>
-      </Dialog>
 
       <Dialog open={confirmingUndo} onOpenChange={setConfirmingUndo}>
         <DialogSheetContent aria-describedby={undefined}>
@@ -113,7 +78,7 @@ export function ProposalLifecycleActions({ proposal, canManage, actions }: Propo
 
       <Dialog open={confirmingDelete} onOpenChange={setConfirmingDelete}>
         <DialogSheetContent aria-describedby={undefined}>
-          <DialogTitle>Permanently delete this proposal?</DialogTitle>
+          <DialogTitle>Remove this proposal?</DialogTitle>
           <p className="mt-2 text-sm text-text-muted">
             This permanently removes the proposal and cannot be undone.
           </p>
@@ -126,7 +91,7 @@ export function ProposalLifecycleActions({ proposal, canManage, actions }: Propo
                 void actions.delete(proposal.id);
               }}
             >
-              Delete permanently
+              Remove proposal
             </Button>
             <DialogClose className="text-sm text-text-muted underline">Keep proposal</DialogClose>
           </div>

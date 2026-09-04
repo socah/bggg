@@ -28,10 +28,7 @@ function proposalActions(): ProposalActions {
     requestConfirmation: jest.fn<ProposalActions['requestConfirmation']>(),
     finalize: jest.fn<ProposalActions['finalize']>(),
     undo: jest.fn<ProposalActions['undo']>(),
-    cancel: jest.fn<ProposalActions['cancel']>(),
     delete: jest.fn<ProposalActions['delete']>(),
-    setHost: jest.fn<ProposalActions['setHost']>(),
-    clearHost: jest.fn<ProposalActions['clearHost']>(),
   };
 }
 
@@ -47,7 +44,8 @@ describe('ProposalLifecycleActions', () => {
         />,
       );
 
-      expect(screen.getByRole('button', { name: 'Delete proposal' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Remove proposal' })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: /cancel/i })).toBeNull();
     },
   );
 
@@ -60,7 +58,7 @@ describe('ProposalLifecycleActions', () => {
       />,
     );
 
-    expect(screen.queryByRole('button', { name: 'Delete proposal' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Remove proposal' })).toBeNull();
   });
 
   it('permanently deletes the proposal only after explicit confirmation', () => {
@@ -73,15 +71,14 @@ describe('ProposalLifecycleActions', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Delete proposal' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove proposal' }));
 
-    expect(screen.getByRole('heading', { name: 'Permanently delete this proposal?' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Remove this proposal?' })).toBeTruthy();
     expect(screen.getByText(/cannot be undone/i)).toBeTruthy();
     expect(actions.delete).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Delete permanently' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove proposal' }));
 
     expect(actions.delete).toHaveBeenCalledWith('proposal-1');
-    expect(actions.cancel).not.toHaveBeenCalled();
   });
 });

@@ -5,6 +5,7 @@ import { buildMonthGrid, placementDateKey, toDateKey, type CalendarDay } from '@
 import type { Group, Proposal, ProposalWithGroup } from '@/lib/types';
 import { InlineProposalPanel } from '@/components/inline-proposal-panel';
 import { Button } from '@/components/ui/button';
+import { proposalStatusClasses } from '@/components/proposal-status-badge';
 import { cn } from '@/lib/cn';
 
 const MAX_BADGES_PER_DAY = 3;
@@ -286,7 +287,10 @@ export function CalendarMonthGrid({
                       {shown.map((item) => (
                         <span
                           key={item.id}
-                          className="mt-1 block w-full truncate rounded bg-highlight px-1 text-text hover:opacity-80"
+                          className={cn(
+                            'mt-1 block w-full truncate rounded px-1 font-medium hover:opacity-80',
+                            proposalStatusClasses(item.status),
+                          )}
                         >
                           {badgeLabel(item)}
                         </span>

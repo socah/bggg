@@ -23,47 +23,51 @@ export class NoOverlapError extends Error {
 // is very often empty once 3+ people are involved even though plenty of
 // individual pairs overlap fine.
 //
-// With a host: the host's window is mandatory in every overlap considered
-// — "the host and at least one other specific person," not "any two
-// people" — since the session is happening at the host's place and can't
-// run outside the host's own availability.
+// With hosts: every valid portion must involve at least two attendees and at
+// least one owner of a suggested place. The returned range is the outer
+// envelope of all such portions, matching the existing no-host semantics.
 export function computeOverlapWindow(
   windows: AvailabilityWindow[],
-  hostUserId: string | null,
+  hostUserIds: readonly string[],
 ): { start: Date; end: Date } {
-  if (hostUserId) {
-    return computeHostAnchoredWindow(windows, hostUserId);
+  if (hostUserIds.length > 0) {
+    return computeHostInvolvingWindow(windows, new Set(hostUserIds));
   }
   return computeAnyPairWindow(windows);
 }
 
-function computeHostAnchoredWindow(
+function computeHostInvolvingWindow(
   windows: AvailabilityWindow[],
-  hostUserId: string,
+  hostUserIds: Set<string>,
 ): { start: Date; end: Date } {
-  const host = windows.find((w) => w.userId === hostUserId);
-  if (!host) {
-    throw new NoOverlapError('Host has no yes RSVP with a window');
+  type SweepEvent = { time: number; starts: boolean; userId: string };
+  const events: SweepEvent[] = windows.flatMap((window) => [
+    { time: window.start.getTime(), starts: true, userId: window.userId },
+    { time: window.end.getTime(), starts: false, userId: window.userId },
+  ]);
+  events.sort((a, b) => a.time - b.time || Number(a.starts) - Number(b.starts));
+
+  const active = new Set<string>();
+  let validFrom: number | null = null;
+  let firstOverlap: number | null = null;
+  let lastOverlap: number | null = null;
+  for (const event of events) {
+    const wasValid = active.size >= 2 && [...active].some((id) => hostUserIds.has(id));
+    if (event.starts) active.add(event.userId);
+    else active.delete(event.userId);
+    const isValid = active.size >= 2 && [...active].some((id) => hostUserIds.has(id));
+    if (!wasValid && isValid) validFrom = event.time;
+    if (wasValid && !isValid && validFrom !== null) {
+      firstOverlap ??= validFrom;
+      lastOverlap = event.time;
+      validFrom = null;
+    }
   }
 
-  // Clamp each other window into the host's — the overlap can never extend
-  // past whichever of the two boundaries is tighter.
-  const clamped = windows
-    .filter((w) => w.userId !== hostUserId)
-    .filter((w) => w.start.getTime() < host.end.getTime() && w.end.getTime() > host.start.getTime())
-    .map((w) => ({
-      start: new Date(Math.max(host.start.getTime(), w.start.getTime())),
-      end: new Date(Math.min(host.end.getTime(), w.end.getTime())),
-    }));
-
-  if (clamped.length === 0) {
-    throw new NoOverlapError("No RSVP window overlaps with the host's window");
+  if (firstOverlap === null || lastOverlap === null) {
+    throw new NoOverlapError('No RSVP overlap involves an owner of a suggested place');
   }
-
-  return {
-    start: new Date(Math.min(...clamped.map((w) => w.start.getTime()))),
-    end: new Date(Math.max(...clamped.map((w) => w.end.getTime()))),
-  };
+  return { start: new Date(firstOverlap), end: new Date(lastOverlap) };
 }
 
 function computeAnyPairWindow(windows: AvailabilityWindow[]): { start: Date; end: Date } {

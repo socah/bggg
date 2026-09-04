@@ -36,6 +36,8 @@ jest.unstable_mockModule('@/hooks/use-proposal-detail', () => ({
         },
       ],
       games: [],
+      places: [],
+      canManage: false,
     },
     loading: false,
     notFound: false,
@@ -63,6 +65,20 @@ jest.unstable_mockModule('@/hooks/use-proposal-games', () => ({
     error: null,
     pendingAction: null,
     actionError: null,
+  }),
+}));
+
+jest.unstable_mockModule('@/hooks/use-proposal-places', () => ({
+  useProposalPlaces: () => ({
+    rows: [],
+    available: [],
+    loading: false,
+    error: null,
+    pendingAction: null,
+    suggest: jest.fn(),
+    vote: jest.fn(),
+    unvote: jest.fn(),
+    setOwned: jest.fn(),
   }),
 }));
 
@@ -100,7 +116,7 @@ describe('InlineProposalPanel', () => {
       />,
     );
 
-    expect(screen.getByText(label).className).toContain('bg-highlight');
+    expect(screen.getByText(label).className).toMatch(/bg-(amber|sky|emerald|slate)-/);
   });
 
   it('uses the session name for the current user when member data cannot resolve it', () => {

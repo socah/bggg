@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { ConflictException, ForbiddenException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { SchedulingService } from './scheduling.service';
 import { PlaySessionProposal } from './play-session-proposal.entity';
 import { PlaySessionRsvp } from './play-session-rsvp.entity';
@@ -10,6 +10,12 @@ import { PlaySessionProposalGameVote } from './play-session-proposal-game-vote.e
 import { GroupMember } from '../groups/group-member.entity';
 import { Game } from '../games/game.entity';
 import { GroupsService } from '../groups/groups.service';
+import { Place } from './place.entity';
+import { PlaceOwner } from './place-owner.entity';
+import { PlaceVisibility } from './place-visibility.entity';
+import { ProposalPlace } from './proposal-place.entity';
+import { ProposalPlaceVote } from './proposal-place-vote.entity';
+import { PlaySessionHost } from './play-session-host.entity';
 
 const GROUP_ID = 'group-1';
 const PROPOSAL_ID = 'proposal-1';
@@ -18,13 +24,27 @@ const USER_ID = 'user-1';
 describe('SchedulingService', () => {
   let service: SchedulingService;
 
-  const mockProposals = { findOneBy: jest.fn(), save: jest.fn(), remove: jest.fn() };
+  const mockProposals = { findOneBy: jest.fn(), findBy: jest.fn(), save: jest.fn(), remove: jest.fn() };
   const mockRsvps = { findBy: jest.fn() };
-  const mockSessions = { findOneBy: jest.fn(), remove: jest.fn() };
+  const mockSessions = {
+    findOneBy: jest.fn(), remove: jest.fn(), create: jest.fn(), save: jest.fn(), countBy: jest.fn(),
+  };
   const mockProposalGames = { findBy: jest.fn() };
   const mockGameVotes = { countBy: jest.fn(), existsBy: jest.fn() };
   const mockGames = { findBy: jest.fn() };
-  const mockMembers = { findOneBy: jest.fn() };
+  const mockPlaces = { findOneBy: jest.fn(), findBy: jest.fn(), create: jest.fn(), save: jest.fn() };
+  const mockPlaceOwners = { findBy: jest.fn(), upsert: jest.fn(), delete: jest.fn() };
+  const mockPlaceVisibility = { findBy: jest.fn(), upsert: jest.fn() };
+  const mockProposalPlaces = {
+    findBy: jest.fn(), findOneBy: jest.fn(), countBy: jest.fn(), create: jest.fn(), save: jest.fn(),
+  };
+  const mockPlaceVotes = {
+    countBy: jest.fn(), existsBy: jest.fn(), create: jest.fn(), save: jest.fn(), delete: jest.fn(),
+  };
+  const mockSessionHosts = {
+    create: jest.fn(), save: jest.fn(), countBy: jest.fn(), createQueryBuilder: jest.fn(),
+  };
+  const mockMembers = { findOneBy: jest.fn(), findBy: jest.fn() };
   const mockGroupsService = { findOne: jest.fn() };
 
   beforeEach(async () => {
@@ -37,6 +57,12 @@ describe('SchedulingService', () => {
         { provide: getRepositoryToken(PlaySessionProposalGame), useValue: mockProposalGames },
         { provide: getRepositoryToken(PlaySessionProposalGameVote), useValue: mockGameVotes },
         { provide: getRepositoryToken(Game), useValue: mockGames },
+        { provide: getRepositoryToken(Place), useValue: mockPlaces },
+        { provide: getRepositoryToken(PlaceOwner), useValue: mockPlaceOwners },
+        { provide: getRepositoryToken(PlaceVisibility), useValue: mockPlaceVisibility },
+        { provide: getRepositoryToken(ProposalPlace), useValue: mockProposalPlaces },
+        { provide: getRepositoryToken(ProposalPlaceVote), useValue: mockPlaceVotes },
+        { provide: getRepositoryToken(PlaySessionHost), useValue: mockSessionHosts },
         { provide: getRepositoryToken(GroupMember), useValue: mockMembers },
         { provide: GroupsService, useValue: mockGroupsService },
       ],
@@ -72,6 +98,7 @@ describe('SchedulingService', () => {
       mockGameVotes.countBy.mockResolvedValue(2);
       // The requesting user has NOT voted on this game.
       mockGameVotes.existsBy.mockResolvedValue(false);
+      mockProposalPlaces.findBy.mockResolvedValue([]);
 
       const result = await service.getProposal(PROPOSAL_ID, USER_ID);
 
@@ -79,6 +106,7 @@ describe('SchedulingService', () => {
         proposal,
         rsvps,
         canManage: true,
+        places: [],
         games: [{
           proposalGameId: 'pg-1',
           game: { id: 42, name: 'Gloomhaven' },
@@ -148,65 +176,144 @@ describe('SchedulingService', () => {
     hostId: null, status: 'collecting', confirmedStart: null, confirmedEnd: null, createdAt: new Date(),
   });
 
-  describe('cancel', () => {
-    it('cancels a collecting proposal without touching play_sessions', async () => {
+  describe('places', () => {
+    it('synchronizes newly accessible places and sorts owned places before global frequency', async () => {
       mockProposals.findOneBy.mockResolvedValue(baseProposal());
-      mockProposals.save.mockImplementation(async (p: PlaySessionProposal) => p);
+      mockGroupsService.findOne.mockResolvedValue({ id: GROUP_ID });
+      mockPlaceOwners.findBy.mockResolvedValue([{ placeId: 'owned', userId: USER_ID }]);
+      mockPlaceVisibility.findBy.mockResolvedValue([{ placeId: 'seen', userId: USER_ID }]);
+      mockMembers.findBy.mockResolvedValue([{ groupId: GROUP_ID, userId: USER_ID }]);
+      mockProposals.findBy.mockResolvedValue([{ id: 'accessible-proposal' }]);
+      mockProposalPlaces.findBy.mockResolvedValue([{ placeId: 'discovered' }]);
+      mockPlaces.findBy.mockResolvedValue([
+        { id: 'seen', name: 'Alpha' },
+        { id: 'discovered', name: 'Beta' },
+        { id: 'owned', name: 'Zulu' },
+      ]);
+      mockProposalPlaces.countBy
+        .mockResolvedValueOnce(2)
+        .mockResolvedValueOnce(5)
+        .mockResolvedValueOnce(1);
 
-      const result = await service.cancel(PROPOSAL_ID, USER_ID);
+      const result = await service.listAvailablePlaces(PROPOSAL_ID, USER_ID);
 
-      expect(result.status).toBe('cancelled');
-      expect(mockSessions.findOneBy).not.toHaveBeenCalled();
-    });
-
-    it('deletes the linked session BEFORE flipping a confirmed proposal to cancelled', async () => {
-      const proposal = {
-        ...baseProposal(),
-        status: 'confirmed' as const,
-        confirmedStart: new Date('2026-08-30T18:00:00Z'),
-        confirmedEnd: new Date('2026-08-30T23:00:00Z'),
-      };
-      mockProposals.findOneBy.mockResolvedValue(proposal);
-      mockProposals.save.mockImplementation(async (p: PlaySessionProposal) => p);
-      const session = {
-        id: 'session-1', groupId: GROUP_ID, playedAt: new Date(),
-        notes: null, proposalId: PROPOSAL_ID, createdAt: new Date(),
-      };
-      mockSessions.findOneBy.mockResolvedValue(session);
-
-      await service.cancel(PROPOSAL_ID, USER_ID);
-
-      expect(mockSessions.remove).toHaveBeenCalledWith(session);
-      // Delete-before-flip: the session must be gone before the proposal row
-      // loses its 'confirmed' status — same ordering guarantee undo() relies on.
-      expect(mockSessions.remove.mock.invocationCallOrder[0]).toBeLessThan(
-        mockProposals.save.mock.invocationCallOrder[0],
+      expect(result.map((row) => row.place.id)).toEqual(['owned', 'discovered', 'seen']);
+      expect(mockPlaceVisibility.upsert).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          { placeId: 'owned', userId: USER_ID },
+          { placeId: 'discovered', userId: USER_ID },
+        ]),
+        ['placeId', 'userId'],
       );
     });
 
-    it('cancels a confirming proposal without touching play_sessions', async () => {
-      mockProposals.findOneBy.mockResolvedValue({ ...baseProposal(), status: 'confirming' as const });
-      mockProposals.save.mockImplementation(async (p: PlaySessionProposal) => p);
+    it('rejects a nested place action when the join row belongs to another proposal', async () => {
+      mockProposals.findOneBy.mockResolvedValue(baseProposal());
+      mockProposalPlaces.findOneBy.mockResolvedValue(null);
 
-      const result = await service.cancel(PROPOSAL_ID, USER_ID);
-
-      expect(result.status).toBe('cancelled');
-      expect(mockSessions.findOneBy).not.toHaveBeenCalled();
-    });
-
-    it('rejects cancelling an already-cancelled proposal', async () => {
-      mockProposals.findOneBy.mockResolvedValue({ ...baseProposal(), status: 'cancelled' });
-
-      await expect(service.cancel(PROPOSAL_ID, USER_ID)).rejects.toBeInstanceOf(ConflictException);
-    });
-
-    it('forbids a plain member who is neither creator nor owner/admin', async () => {
-      mockProposals.findOneBy.mockResolvedValue({ ...baseProposal(), createdBy: 'someone-else' });
-      mockMembers.findOneBy.mockResolvedValue({
-        id: 1, userId: USER_ID, groupId: GROUP_ID, role: 'member', joinedAt: new Date(),
+      await expect(service.voteForPlace(PROPOSAL_ID, 'other-row', USER_ID))
+        .rejects.toBeInstanceOf(NotFoundException);
+      expect(mockProposalPlaces.findOneBy).toHaveBeenCalledWith({
+        id: 'other-row',
+        proposalId: PROPOSAL_ID,
       });
+      expect(mockPlaceVotes.save).not.toHaveBeenCalled();
+    });
+  });
 
-      await expect(service.cancel(PROPOSAL_ID, USER_ID)).rejects.toBeInstanceOf(ForbiddenException);
+  describe('requestConfirmation', () => {
+    it('derives all hosts from owners of places suggested on the proposal', async () => {
+      const proposal = baseProposal();
+      mockProposals.findOneBy.mockResolvedValue(proposal);
+      mockProposals.save.mockImplementation(async (value: PlaySessionProposal) => value);
+      mockRsvps.findBy.mockResolvedValue([
+        { userId: 'host-1', availableStart: new Date('2026-08-30T10:00:00Z'), availableEnd: new Date('2026-08-30T12:00:00Z') },
+        { userId: 'guest', availableStart: new Date('2026-08-30T11:00:00Z'), availableEnd: new Date('2026-08-30T13:00:00Z') },
+      ]);
+      mockProposalPlaces.findBy.mockResolvedValue([{ placeId: 'place-1' }]);
+      mockPlaceOwners.findBy.mockResolvedValue([{ placeId: 'place-1', userId: 'host-1' }]);
+
+      const result = await service.requestConfirmation(PROPOSAL_ID, USER_ID);
+
+      expect(result.status).toBe('confirming');
+      expect(result.confirmedStart).toEqual(new Date('2026-08-30T11:00:00Z'));
+      expect(result.confirmedEnd).toEqual(new Date('2026-08-30T12:00:00Z'));
+    });
+  });
+
+  describe('finalize', () => {
+    it('snapshots all distinct current owners of suggested places', async () => {
+      const proposal = {
+        ...baseProposal(),
+        status: 'confirming' as const,
+        confirmedStart: new Date('2026-08-30T11:00:00Z'),
+      };
+      const session = { id: 'session-1', groupId: GROUP_ID, proposalId: PROPOSAL_ID };
+      mockProposals.findOneBy.mockResolvedValue(proposal);
+      mockProposals.save.mockImplementation(async (value: PlaySessionProposal) => value);
+      mockSessions.create.mockReturnValue(session);
+      mockSessions.save.mockResolvedValue(session);
+      mockProposalPlaces.findBy.mockResolvedValue([{ placeId: 'place-1' }, { placeId: 'place-2' }]);
+      mockPlaceOwners.findBy.mockResolvedValue([
+        { placeId: 'place-1', userId: 'host-1' },
+        { placeId: 'place-2', userId: 'host-1' },
+        { placeId: 'place-2', userId: 'host-2' },
+      ]);
+      mockSessionHosts.create.mockImplementation((value) => value);
+
+      await service.finalize(PROPOSAL_ID, USER_ID);
+
+      expect(mockSessionHosts.save).toHaveBeenCalledWith([
+        { sessionId: 'session-1', userId: 'host-1' },
+        { sessionId: 'session-1', userId: 'host-2' },
+      ]);
+    });
+  });
+
+  describe('hosting stats', () => {
+    it('counts the authenticated user from host snapshots', async () => {
+      mockSessionHosts.countBy.mockResolvedValue(3);
+
+      await expect(service.getMyHostingStats(USER_ID)).resolves.toEqual({ hostedSessionCount: 3 });
+      expect(mockSessionHosts.countBy).toHaveBeenCalledWith({ userId: USER_ID });
+    });
+
+    it('checks membership and returns group totals with sorted host snapshot counts', async () => {
+      const queryBuilder = {
+        innerJoin: jest.fn(), select: jest.fn(), addSelect: jest.fn(), where: jest.fn(),
+        groupBy: jest.fn(), orderBy: jest.fn(), addOrderBy: jest.fn(), getRawMany: jest.fn(),
+      };
+      for (const method of ['innerJoin', 'select', 'addSelect', 'where', 'groupBy', 'orderBy', 'addOrderBy'] as const) {
+        queryBuilder[method].mockReturnValue(queryBuilder);
+      }
+      mockGroupsService.findOne.mockResolvedValue({ id: GROUP_ID });
+      mockSessions.countBy.mockResolvedValue(5);
+      queryBuilder.getRawMany.mockResolvedValue([
+        { userId: 'host-b', hostedSessionCount: '3' },
+        { userId: 'host-a', hostedSessionCount: '2' },
+      ]);
+      mockSessionHosts.createQueryBuilder.mockReturnValue(queryBuilder);
+
+      await expect(service.getGroupHostingStats(GROUP_ID, USER_ID)).resolves.toEqual({
+        totalSessionCount: 5,
+        hosts: [
+          { userId: 'host-b', hostedSessionCount: 3 },
+          { userId: 'host-a', hostedSessionCount: 2 },
+        ],
+      });
+      expect(mockGroupsService.findOne).toHaveBeenCalledWith(GROUP_ID, USER_ID);
+      expect(mockSessions.countBy).toHaveBeenCalledWith({ groupId: GROUP_ID });
+      expect(queryBuilder.orderBy).toHaveBeenCalledWith('COUNT(*)', 'DESC');
+      expect(queryBuilder.addOrderBy).toHaveBeenCalledWith('host.user_id', 'ASC');
+    });
+
+    it('does not query group stats when the membership check fails', async () => {
+      mockGroupsService.findOne.mockRejectedValue(new ForbiddenException());
+
+      await expect(service.getGroupHostingStats(GROUP_ID, USER_ID))
+        .rejects.toBeInstanceOf(ForbiddenException);
+      expect(mockSessions.countBy).not.toHaveBeenCalled();
+      expect(mockSessionHosts.createQueryBuilder).not.toHaveBeenCalled();
     });
   });
 

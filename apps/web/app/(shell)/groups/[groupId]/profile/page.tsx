@@ -1,5 +1,6 @@
-import { ComingSoon } from '@/components/coming-soon';
+import { GroupHostingStats } from '@/components/hosting-stats';
 
-export default function GroupProfilePage() {
-  return <ComingSoon label="Group profile" />;
+export default async function GroupProfilePage({ params }: { params: Promise<{ groupId: string }> }) {
+  const { groupId } = await params;
+  return <GroupHostingStats groupId={groupId} />;
 }

@@ -52,10 +52,26 @@ export interface ProposalGameSummary {
   votedByMe: boolean;
 }
 
+export interface ProposalPlaceSummary {
+  proposalPlaceId: string;
+  place: { id: string; name: string };
+  voteCount: number;
+  votedByMe: boolean;
+  ownedByMe: boolean;
+  ownerIds: string[];
+}
+
+export interface AvailablePlace {
+  place: { id: string; name: string };
+  ownedByMe: boolean;
+  suggestionCount: number;
+}
+
 export interface ProposalDetail {
   proposal: Proposal;
   rsvps: Rsvp[];
   games: ProposalGameSummary[];
+  places: ProposalPlaceSummary[];
   canManage: boolean;
 }
 

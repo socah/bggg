@@ -193,19 +193,16 @@ CREATE TABLE IF NOT EXISTS reviews (
 -- full design discussion).
 -- id: UUID — public-facing (returned to and referenced by the client, e.g.
 --   GET /proposals/:id), same convention as groups.id and invites.
--- host_id: nullable Keycloak sub of the RSVP holder hosting the session
---   (e.g. "at my place"). Not a FK to group_members — same "plain column,
---   no relation" pattern as everywhere else in this file. When set, the
---   overlap-window computation in SchedulingService anchors to the host's
---   own availability window rather than any pair of members (Decision D in
---   notes/3_scheduling.md).
+-- host_id: legacy nullable column retained for compatibility with persisted
+--   rows. New scheduling never writes or reads it; hosts are derived from all
+--   owners of places suggested on the proposal.
 -- status: the confirmation state machine (Decision B).
 --   'collecting'  — RSVPs are being gathered, nothing computed yet.
 --   'confirming'  — creator requested confirmation; confirmed_start/end
 --                   below are now populated, and RSVP holders can lock in.
 --   'confirmed'   — creator finalized; a play_sessions row now exists with
 --                   this row's id as its proposal_id.
---   'cancelled'   — proposal abandoned; no play_sessions row will follow.
+--   'cancelled'   — legacy compatibility only; no API action enters it.
 -- confirmed_start / confirmed_end: the trimmed overlap window (Decision D),
 --   computed once at the 'collecting' -> 'confirming' transition and stored
 --   rather than recomputed on every read, so it can't silently shift while
@@ -276,6 +273,44 @@ CREATE TABLE IF NOT EXISTS play_session_proposal_game_votes (
   PRIMARY KEY (proposal_game_id, user_id)
 );
 
+-- ── PLACES AND PROPOSAL PLACE POLLS ───────────────────────────────────────
+-- Places are reusable across groups. Ownership and durable visibility are
+-- independent many-to-many facts keyed by raw Keycloak subjects. A suggested
+-- place is scoped to one proposal; votes are derived from their join rows.
+CREATE TABLE IF NOT EXISTS places (
+  id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  name        TEXT         NOT NULL,
+  created_by  TEXT         NOT NULL,
+  created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS place_owners (
+  place_id  UUID  NOT NULL REFERENCES places(id) ON DELETE CASCADE,
+  user_id   TEXT  NOT NULL,
+  PRIMARY KEY (place_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS place_visibility (
+  place_id  UUID  NOT NULL REFERENCES places(id) ON DELETE CASCADE,
+  user_id   TEXT  NOT NULL,
+  PRIMARY KEY (place_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS proposal_places (
+  id           UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  proposal_id  UUID         NOT NULL REFERENCES play_session_proposals(id) ON DELETE CASCADE,
+  place_id     UUID         NOT NULL REFERENCES places(id) ON DELETE CASCADE,
+  proposed_by  TEXT         NOT NULL,
+  created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  UNIQUE (proposal_id, place_id)
+);
+
+CREATE TABLE IF NOT EXISTS proposal_place_votes (
+  proposal_place_id  UUID  NOT NULL REFERENCES proposal_places(id) ON DELETE CASCADE,
+  user_id             TEXT  NOT NULL,
+  PRIMARY KEY (proposal_place_id, user_id)
+);
+
 -- ── CALENDAR FEED TOKENS ──────────────────────────────────────────────────
 -- One opaque, long-lived token per user, backing the personal iCal
 -- subscription feed (Phase 3 — scheduling topic; Decision C in
@@ -317,6 +352,14 @@ CREATE TABLE IF NOT EXISTS play_sessions (
   notes        TEXT,                   -- session-level notes (e.g. "hosted at Alice's")
   proposal_id  UUID         REFERENCES play_session_proposals(id),
   created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+-- Hosts are snapshotted when a proposal is finalized so later ownership
+-- changes do not rewrite hosting history. A session may have multiple hosts.
+CREATE TABLE IF NOT EXISTS play_session_hosts (
+  session_id  UUID  NOT NULL REFERENCES play_sessions(id) ON DELETE CASCADE,
+  user_id     TEXT  NOT NULL,
+  PRIMARY KEY (session_id, user_id)
 );
 
 -- ── PLAY SESSION GAMES ────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
-import { ComingSoon } from '@/components/coming-soon';
+import { PersonalHostingStats } from '@/components/hosting-stats';
 
 export default function PersonalProfilePage() {
-  return <ComingSoon label="Profile" />;
+  return <PersonalHostingStats />;
 }

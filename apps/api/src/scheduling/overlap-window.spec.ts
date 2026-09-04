@@ -15,7 +15,7 @@ describe('computeOverlapWindow', () => {
     it('returns the first/last moment two windows overlap', () => {
       const windows = [window('a', 9, 11), window('b', 10, 12)];
 
-      const result = computeOverlapWindow(windows, null);
+      const result = computeOverlapWindow(windows, []);
 
       expect(result).toEqual({ start: hour(10), end: hour(11) });
     });
@@ -27,13 +27,13 @@ describe('computeOverlapWindow', () => {
       // 10:00, so the open count never reaches 2.
       const windows = [window('a', 9, 10), window('b', 10, 11)];
 
-      expect(() => computeOverlapWindow(windows, null)).toThrow(NoOverlapError);
+      expect(() => computeOverlapWindow(windows, [])).toThrow(NoOverlapError);
     });
 
     it('throws when no two windows overlap at all', () => {
       const windows = [window('a', 9, 10), window('b', 12, 13)];
 
-      expect(() => computeOverlapWindow(windows, null)).toThrow(NoOverlapError);
+      expect(() => computeOverlapWindow(windows, [])).toThrow(NoOverlapError);
     });
 
     it('returns the outer envelope across a staggered three-way overlap', () => {
@@ -44,7 +44,7 @@ describe('computeOverlapWindow', () => {
       // not a guarantee of continuous 2+ coverage throughout.
       const windows = [window('a', 1, 5), window('b', 3, 7), window('c', 6, 9)];
 
-      const result = computeOverlapWindow(windows, null);
+      const result = computeOverlapWindow(windows, []);
 
       expect(result).toEqual({ start: hour(3), end: hour(7) });
     });
@@ -52,16 +52,16 @@ describe('computeOverlapWindow', () => {
     it('throws when only a single window is given', () => {
       const windows = [window('a', 9, 17)];
 
-      expect(() => computeOverlapWindow(windows, null)).toThrow(NoOverlapError);
+      expect(() => computeOverlapWindow(windows, [])).toThrow(NoOverlapError);
     });
   });
 
-  describe('with a designated host', () => {
+  describe('with owners of suggested places', () => {
     it('clamps the window to where the host overlaps another single person', () => {
       const host = window('host', 10, 14);
       const other = window('other', 13, 16);
 
-      const result = computeOverlapWindow([host, other], 'host');
+      const result = computeOverlapWindow([host, other], ['host']);
 
       expect(result).toEqual({ start: hour(13), end: hour(14) });
     });
@@ -71,7 +71,7 @@ describe('computeOverlapWindow', () => {
       const overlapping = window('other', 13, 16);
       const distant = window('bystander', 16, 18); // starts exactly when host ends
 
-      const result = computeOverlapWindow([host, overlapping, distant], 'host');
+      const result = computeOverlapWindow([host, overlapping, distant], ['host']);
 
       // Same result as the two-person case above — 'bystander' contributes
       // nothing because their window doesn't overlap the host's at all.
@@ -82,7 +82,7 @@ describe('computeOverlapWindow', () => {
       const host = window('host', 10, 14);
       const distant = window('other', 16, 18);
 
-      expect(() => computeOverlapWindow([host, distant], 'host')).toThrow(NoOverlapError);
+      expect(() => computeOverlapWindow([host, distant], ['host'])).toThrow(NoOverlapError);
     });
 
     it('throws when the designated host has no window in the list', () => {
@@ -91,7 +91,21 @@ describe('computeOverlapWindow', () => {
       // passes 'yes' RSVPs with a real window in).
       const other = window('other', 13, 16);
 
-      expect(() => computeOverlapWindow([other], 'host')).toThrow(NoOverlapError);
+      expect(() => computeOverlapWindow([other], ['host'])).toThrow(NoOverlapError);
+    });
+
+    it('uses the widest valid overlap involving any derived host', () => {
+      const windows = [
+        window('host-a', 9, 12),
+        window('guest-a', 10, 11),
+        window('host-b', 14, 18),
+        window('guest-b', 15, 17),
+      ];
+
+      expect(computeOverlapWindow(windows, ['host-a', 'host-b'])).toEqual({
+        start: hour(10),
+        end: hour(17),
+      });
     });
   });
 });

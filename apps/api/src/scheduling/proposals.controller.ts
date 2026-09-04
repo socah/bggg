@@ -15,8 +15,8 @@ import {
 import { SchedulingService } from './scheduling.service';
 import { RsvpDto } from './dto/rsvp.dto';
 import { LockInDto } from './dto/lock-in.dto';
-import { DesignateHostDto } from './dto/designate-host.dto';
 import { ProposeGameDto } from './dto/propose-game.dto';
+import { SuggestPlaceDto } from './dto/suggest-place.dto';
 import { AuthGuard } from '../auth/auth.guard';
 
 interface AuthenticatedRequest {
@@ -70,23 +70,6 @@ export class ProposalsController {
     return this.schedulingService.lockIn(id, req.user.sub, dto.confirmed);
   }
 
-  // PUT /proposals/:id/host → creator or group owner/admin only (checked
-  // in the service). Body names WHICH yes-RSVP holder is hosting.
-  @Put(':id/host')
-  setHost(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: DesignateHostDto,
-    @Request() req: AuthenticatedRequest,
-  ) {
-    return this.schedulingService.setHost(id, dto.userId, req.user.sub);
-  }
-
-  // DELETE /proposals/:id/host → clears the host designation, if any.
-  @Delete(':id/host')
-  clearHost(@Param('id', ParseUUIDPipe) id: string, @Request() req: AuthenticatedRequest) {
-    return this.schedulingService.clearHost(id, req.user.sub);
-  }
-
   // POST /proposals/:id/request-confirmation → 'collecting' -> 'confirming'.
   @Post(':id/request-confirmation')
   requestConfirmation(@Param('id', ParseUUIDPipe) id: string, @Request() req: AuthenticatedRequest) {
@@ -105,14 +88,6 @@ export class ProposalsController {
   @Post(':id/undo')
   undo(@Param('id', ParseUUIDPipe) id: string, @Request() req: AuthenticatedRequest) {
     return this.schedulingService.undo(id, req.user.sub);
-  }
-
-  // POST /proposals/:id/cancel → terminal state from ANY active status. A
-  // confirmed game night can still be called off in real life; if a
-  // play_sessions row exists it is deleted first (see SchedulingService.cancel).
-  @Post(':id/cancel')
-  cancel(@Param('id', ParseUUIDPipe) id: string, @Request() req: AuthenticatedRequest) {
-    return this.schedulingService.cancel(id, req.user.sub);
   }
 
   // POST /proposals/:id/games → 201 Created, or returns the existing row if
@@ -153,5 +128,68 @@ export class ProposalsController {
     @Request() req: AuthenticatedRequest,
   ) {
     return this.schedulingService.unvoteForGame(proposalGameId, req.user.sub);
+  }
+
+  @Get(':id/places')
+  listPlaces(@Param('id', ParseUUIDPipe) id: string, @Request() req: AuthenticatedRequest) {
+    return this.schedulingService.listProposalPlaces(id, req.user.sub);
+  }
+
+  @Post(':id/places')
+  @HttpCode(201)
+  suggestPlace(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: SuggestPlaceDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.schedulingService.suggestPlace(id, dto, req.user.sub);
+  }
+
+  @Get(':id/places/available')
+  listAvailablePlaces(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.schedulingService.listAvailablePlaces(id, req.user.sub);
+  }
+
+  @Post(':id/places/:proposalPlaceId/votes')
+  @HttpCode(204)
+  voteForPlace(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('proposalPlaceId', ParseUUIDPipe) proposalPlaceId: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.schedulingService.voteForPlace(id, proposalPlaceId, req.user.sub);
+  }
+
+  @Delete(':id/places/:proposalPlaceId/votes')
+  @HttpCode(204)
+  unvoteForPlace(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('proposalPlaceId', ParseUUIDPipe) proposalPlaceId: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.schedulingService.unvoteForPlace(id, proposalPlaceId, req.user.sub);
+  }
+
+  @Put(':id/places/:proposalPlaceId/ownership')
+  @HttpCode(204)
+  markPlaceOwned(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('proposalPlaceId', ParseUUIDPipe) proposalPlaceId: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.schedulingService.markPlaceOwned(id, proposalPlaceId, req.user.sub);
+  }
+
+  @Delete(':id/places/:proposalPlaceId/ownership')
+  @HttpCode(204)
+  unmarkPlaceOwned(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('proposalPlaceId', ParseUUIDPipe) proposalPlaceId: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.schedulingService.unmarkPlaceOwned(id, proposalPlaceId, req.user.sub);
   }
 }

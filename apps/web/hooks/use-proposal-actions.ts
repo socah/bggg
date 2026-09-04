@@ -62,25 +62,10 @@ export function useProposalActions(onChanged?: () => void) {
     (proposalId: string) => run('undo', () => apiMutate(`/proposals/${proposalId}/undo`, 'POST')),
     [run],
   );
-  const cancel = useCallback(
-    (proposalId: string) => run('cancel', () => apiMutate(`/proposals/${proposalId}/cancel`, 'POST')),
-    [run],
-  );
   const deleteProposal = useCallback(
     (proposalId: string) => run('delete', () => apiMutate(`/proposals/${proposalId}`, 'DELETE')),
     [run],
   );
-  const setHost = useCallback(
-    (proposalId: string, userId: string) =>
-      run('set-host', () => apiMutate(`/proposals/${proposalId}/host`, 'PUT', { userId })),
-    [run],
-  );
-  const clearHost = useCallback(
-    (proposalId: string) =>
-      run('clear-host', () => apiMutate(`/proposals/${proposalId}/host`, 'DELETE')),
-    [run],
-  );
-
   return {
     pendingAction,
     error,
@@ -90,10 +75,7 @@ export function useProposalActions(onChanged?: () => void) {
     requestConfirmation,
     finalize,
     undo,
-    cancel,
     delete: deleteProposal,
-    setHost,
-    clearHost,
   };
 }
 

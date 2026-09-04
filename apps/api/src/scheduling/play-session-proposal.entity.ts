@@ -42,12 +42,8 @@ export class PlaySessionProposal {
   @Column({ name: 'proposed_date', type: 'date' })
   proposedDate!: string;
 
-  // Keycloak sub of the RSVP holder hosting the session (e.g. "at my
-  // place"), or null if nobody is hosting. Nullable, not a relation, same
-  // reasoning as every other identity column here. When set, this changes
-  // how SchedulingService computes the trimmed overlap window (Decision D):
-  // the window is anchored to THIS person's availability rather than any
-  // pair of members.
+  // Legacy compatibility only. New scheduling derives all hosts from the
+  // owners of places suggested on the proposal and never writes this column.
   // Explicit 'type' required — 'string | null' reflects as a bare
   // 'Object' at runtime (reflect-metadata can't represent union types),
   // which Postgres's driver rejects (same fix as Invite.usedBy).

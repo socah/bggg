@@ -7,7 +7,9 @@ import { useGroupMembers } from '@/hooks/use-group-members';
 import { useProposalActions } from '@/hooks/use-proposal-actions';
 import { useGroupLibrary } from '@/hooks/use-group-library';
 import { useProposalGames } from '@/hooks/use-proposal-games';
+import { useProposalPlaces } from '@/hooks/use-proposal-places';
 import { ProposalLifecycleActions } from '@/components/proposal-lifecycle-actions';
+import { ProposalStatusBadge } from '@/components/proposal-status-badge';
 import { ProposalRsvpSection } from '@/components/proposal-rsvp-section';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -52,13 +54,6 @@ export interface InlineProposalPanelProps {
 }
 
 const RSVP_ANSWERS = ['yes', 'maybe', 'no'] as const;
-const STATUS_LABELS: Record<Proposal['status'], string> = {
-  collecting: 'Collecting RSVPs',
-  confirming: 'Awaiting confirmation',
-  confirmed: 'Confirmed',
-  cancelled: 'Cancelled',
-};
-
 export function InlineProposalPanel({
   proposalId,
   draftDate,
@@ -92,6 +87,8 @@ export function InlineProposalPanel({
   const [draftGames, setDraftGames] = useState<GroupLibraryGame[]>([]);
   const [draftGamePickerOpen, setDraftGamePickerOpen] = useState(false);
   const [draftGameFilter, setDraftGameFilter] = useState('');
+  const [placePickerOpen, setPlacePickerOpen] = useState(false);
+  const [placeFilter, setPlaceFilter] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -104,6 +101,7 @@ export function InlineProposalPanel({
   // Group Library (for game suggestions)
   const library = useGroupLibrary(effectiveGroupId || null);
   const existingGames = useProposalGames(proposalId, onProposalsChanged);
+  const existingPlaces = useProposalPlaces(proposalId, onProposalsChanged);
 
   const canManage = detail?.canManage ?? false;
 
@@ -131,6 +129,18 @@ export function InlineProposalPanel({
     if (!q) return library.games;
     return library.games.filter((g) => g.name.toLowerCase().includes(q));
   }, [library.games, draftGameFilter]);
+
+  const filteredPlaces = useMemo(() => {
+    const suggestedIds = new Set(existingPlaces.rows.map((row) => row.place.id));
+    const query = placeFilter.trim().toLowerCase();
+    return existingPlaces.available.filter(
+      ({ place }) => !suggestedIds.has(place.id) && place.name.toLowerCase().includes(query),
+    );
+  }, [existingPlaces.available, existingPlaces.rows, placeFilter]);
+
+  const placeNameExists = existingPlaces.available.some(
+    ({ place }) => place.name.toLowerCase() === placeFilter.trim().toLowerCase(),
+  );
 
   async function handleSaveDraft(e: React.FormEvent) {
     e.preventDefault();
@@ -207,7 +217,7 @@ export function InlineProposalPanel({
             detail && (
               <span>
                 {activeGroup && <>Group: <strong className="font-medium text-text">{activeGroup.isSolo ? `${activeGroup.name} (solo)` : activeGroup.name}</strong> · </>}
-                Status: <Badge>{STATUS_LABELS[detail.proposal.status]}</Badge>
+                Status: <ProposalStatusBadge status={detail.proposal.status} />
                 {' · '}Proposed by:{' '}
                 <strong className="font-medium text-text">
                   <MemberName
@@ -217,19 +227,6 @@ export function InlineProposalPanel({
                     fallbackName={detail.proposal.createdBy === myId ? myName : undefined}
                   />
                 </strong>
-                {detail.proposal.hostId && (
-                  <>
-                    {' · '}Host:{' '}
-                    <strong className="font-medium text-text">
-                      <MemberName
-                        userId={detail.proposal.hostId}
-                        members={members}
-                        loading={loadingMembers}
-                        fallbackName={detail.proposal.hostId === myId ? myName : undefined}
-                      />
-                    </strong>
-                  </>
-                )}
               </span>
             )
           )}
@@ -323,7 +320,6 @@ export function InlineProposalPanel({
                   {myName} — {draftStatus}
                   {draftStart && draftEnd && <span className="text-text-muted"> · {draftStart} – {draftEnd} (UTC)</span>}
                 </span>
-                <Badge>Host</Badge>
               </li>
             </ul>
           </div>
@@ -342,11 +338,6 @@ export function InlineProposalPanel({
               <div className="font-medium text-xs uppercase tracking-wider text-text-muted mb-1">RSVPs</div>
               <ul className="space-y-1">
                 {detail.rsvps.map((rsvp) => {
-                  const isHost = detail.proposal.hostId === rsvp.userId;
-                  const canMakeHost =
-                    canManage &&
-                    detail.proposal.status !== 'cancelled' &&
-                    rsvp.status === 'yes';
                   return (
                     <li key={rsvp.userId} className="flex items-center gap-2 text-xs">
                       <span>
@@ -361,28 +352,7 @@ export function InlineProposalPanel({
                           <span className="text-text-muted"> · {formatWindowRange(rsvp.availableStart, rsvp.availableEnd)}</span>
                         )}
                       </span>
-                      {isHost && <Badge>Host</Badge>}
                       {canManage && rsvp.confirmed && <Badge>Locked in</Badge>}
-                      {canMakeHost && !isHost && (
-                        <button
-                          type="button"
-                          className="text-text-muted underline hover:text-text"
-                          disabled={actions.pendingAction !== null}
-                          onClick={() => void actions.setHost(detail.proposal.id, rsvp.userId)}
-                        >
-                          Make host
-                        </button>
-                      )}
-                      {canManage && isHost && detail.proposal.status !== 'cancelled' && (
-                        <button
-                          type="button"
-                          className="text-text-muted underline hover:text-text"
-                          disabled={actions.pendingAction !== null}
-                          onClick={() => void actions.clearHost(detail.proposal.id)}
-                        >
-                          Clear host
-                        </button>
-                      )}
                     </li>
                   );
                 })}
@@ -470,7 +440,85 @@ export function InlineProposalPanel({
         )}
       </div>
 
-      {/* 4. Footer Actions */}
+      {/* 4. Suggested Places Section */}
+      {!isDraft && detail && (
+        <div className="border-t border-border pt-3 mt-3">
+          <div className="flex items-center justify-between">
+            <div className="font-medium">Suggested places</div>
+            {detail.proposal.status === 'collecting' && (
+              <Button
+                type="button"
+                variant="secondary"
+                className="px-2 py-1 text-xs"
+                disabled={existingPlaces.pendingAction !== null}
+                onClick={() => setPlacePickerOpen(true)}
+              >
+                Add place
+              </Button>
+            )}
+          </div>
+
+          {existingPlaces.loading && <p className="mt-2 text-text-muted">Loading places...</p>}
+          {existingPlaces.error && <p className="mt-2 text-accent" role="alert">{existingPlaces.error}</p>}
+          {!existingPlaces.loading && existingPlaces.rows.length === 0 && (
+            <p className="mt-2 text-text-muted">No places suggested yet.</p>
+          )}
+          <ul className="mt-2 flex flex-col gap-1">
+            {existingPlaces.rows.map((row) => (
+              <li key={row.proposalPlaceId} className="rounded-sm border border-border bg-surface px-3 py-2 text-sm">
+                <div className="flex flex-wrap items-center gap-3">
+                  {detail.proposal.status === 'collecting' ? (
+                    <button
+                      type="button"
+                      aria-label={row.votedByMe ? 'Remove your vote' : 'Vote for this place'}
+                      className={`inline-flex min-w-12 items-center justify-center gap-1 rounded-full border px-2 py-1 font-semibold transition-colors ${row.votedByMe ? 'border-accent bg-accent text-accent-ink' : 'border-border-strong bg-surface-raised text-text hover:border-accent'}`}
+                      disabled={existingPlaces.pendingAction !== null}
+                      onClick={() => void (row.votedByMe ? existingPlaces.unvote(row.proposalPlaceId) : existingPlaces.vote(row.proposalPlaceId))}
+                    >
+                      <span aria-hidden="true">▲</span>
+                      <span>{row.voteCount}</span>
+                    </button>
+                  ) : (
+                    <span className="inline-flex min-w-12 items-center justify-center gap-1 rounded-full bg-highlight px-2 py-1 font-semibold text-text">
+                      <span aria-hidden="true">▲</span>
+                      <span>{row.voteCount}</span>
+                    </span>
+                  )}
+                  <span className="font-medium">{row.place.name}</span>
+                  {row.ownerIds.length > 0 && (
+                    <span className="text-xs text-text-muted">
+                      Hosted by{' '}
+                      {row.ownerIds.map((ownerId, index) => (
+                        <span key={ownerId}>
+                          {index > 0 && ', '}
+                          <MemberName
+                            userId={ownerId}
+                            members={members}
+                            loading={loadingMembers}
+                            fallbackName={ownerId === myId ? myName : undefined}
+                          />
+                        </span>
+                      ))}
+                    </span>
+                  )}
+                  {detail.proposal.status === 'collecting' && (
+                    <button
+                      type="button"
+                      className="ml-auto text-xs text-text-muted underline hover:text-text"
+                      disabled={existingPlaces.pendingAction !== null}
+                      onClick={() => void existingPlaces.setOwned(row.proposalPlaceId, !row.ownedByMe)}
+                    >
+                      {row.ownedByMe ? 'This is no longer my place' : 'This is my place'}
+                    </button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* 5. Footer Actions */}
       {isDraft ? (
         <div className="border-t border-border pt-3 mt-3">
           {saveError && <p className="text-xs text-accent mb-2">{saveError}</p>}
@@ -550,6 +598,58 @@ export function InlineProposalPanel({
                 </button>
               </li>
             ))}
+          </ul>
+        </DialogSheetContent>
+      </Dialog>
+
+      <Dialog open={placePickerOpen} onOpenChange={setPlacePickerOpen}>
+        <DialogSheetContent aria-describedby={undefined}>
+          <DialogTitle>Suggest a place</DialogTitle>
+          <DialogClose className="mb-2 mt-1 block text-sm text-text-muted">Close ✕</DialogClose>
+          <input
+            type="search"
+            placeholder="Filter or enter a new place..."
+            value={placeFilter}
+            onChange={(event) => setPlaceFilter(event.target.value)}
+            className="mb-2 w-full rounded-sm border border-border bg-surface px-2 py-1 text-sm"
+          />
+          {filteredPlaces.length === 0 && !placeFilter.trim() && (
+            <p className="text-sm text-text-muted">No places available yet. Enter a name to add one.</p>
+          )}
+          <ul className="flex flex-col gap-1">
+            {filteredPlaces.map(({ place, ownedByMe, suggestionCount }) => (
+              <li key={place.id}>
+                <button
+                  type="button"
+                  className="block w-full rounded-sm bg-surface px-2 py-1 text-left text-sm hover:bg-surface-raised"
+                  onClick={() => {
+                    void existingPlaces.suggest({ placeId: place.id });
+                    setPlacePickerOpen(false);
+                    setPlaceFilter('');
+                  }}
+                >
+                  {place.name}
+                  <span className="ml-2 text-xs text-text-muted">
+                    {ownedByMe ? 'Your place' : `${suggestionCount} previous suggestion${suggestionCount === 1 ? '' : 's'}`}
+                  </span>
+                </button>
+              </li>
+            ))}
+            {placeFilter.trim() && !placeNameExists && (
+              <li>
+                <button
+                  type="button"
+                  className="block w-full rounded-sm border border-dashed border-border-strong px-2 py-1 text-left text-sm hover:bg-surface-raised"
+                  onClick={() => {
+                    void existingPlaces.suggest({ name: placeFilter.trim() });
+                    setPlacePickerOpen(false);
+                    setPlaceFilter('');
+                  }}
+                >
+                  Add new place: <strong>{placeFilter.trim()}</strong>
+                </button>
+              </li>
+            )}
           </ul>
         </DialogSheetContent>
       </Dialog>

@@ -14,7 +14,7 @@ const fakeRequest = { user: { sub: 'user-1' } };
 describe('ProposalsController', () => {
   let controller: ProposalsController;
 
-  const mockSchedulingService = { removeProposal: jest.fn() };
+  const mockSchedulingService = { removeProposal: jest.fn(), voteForPlace: jest.fn() };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -45,5 +45,23 @@ describe('ProposalsController', () => {
     await remove.call(controller, PROPOSAL_ID, fakeRequest);
 
     expect(mockSchedulingService.removeProposal).toHaveBeenCalledWith(PROPOSAL_ID, 'user-1');
+  });
+
+  it('passes both nested ids when voting for a place', async () => {
+    mockSchedulingService.voteForPlace.mockResolvedValue(undefined);
+
+    await controller.voteForPlace(PROPOSAL_ID, 'proposal-place-1', fakeRequest);
+
+    expect(mockSchedulingService.voteForPlace).toHaveBeenCalledWith(
+      PROPOSAL_ID,
+      'proposal-place-1',
+      'user-1',
+    );
+  });
+
+  it('does not expose legacy singular-host or cancel actions', () => {
+    expect((controller as unknown as { setHost?: unknown }).setHost).toBeUndefined();
+    expect((controller as unknown as { clearHost?: unknown }).clearHost).toBeUndefined();
+    expect((controller as unknown as { cancel?: unknown }).cancel).toBeUndefined();
   });
 });
