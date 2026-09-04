@@ -349,7 +349,7 @@
 # Invite registration is the first path that needs the API's Keycloak
 # service account, so a missing or stale client secret can otherwise survive
 # a deploy unnoticed until a real invitee submits the registration form.
-# Exercise the exact client-credentials grant here, from the running API
+# Exercise the exact client-credentials grant here, from a one-shot API
 # container, and fail the deploy while the cause is still in front of the
 # operator. The response body is deliberately never printed: Keycloak may
 # include credential diagnostics in errors and returns a bearer token on
@@ -365,7 +365,9 @@
       - docker-compose.prod.yml
       - --env-file
       - .env.prod
-      - exec
+      - run
+      - --rm
+      - --no-deps
       - -T
       - api
       - node
