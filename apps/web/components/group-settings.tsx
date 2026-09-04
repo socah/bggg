@@ -12,7 +12,7 @@ import { GroupInviteSettings } from '@/components/group-invite-settings';
 
 export function GroupSettings({ groupId, currentUserId }: { groupId: string; currentUserId: string }) {
   const router = useRouter();
-  const { members, loading, reload } = useGroupMembers(groupId);
+  const { members, loading, error, reload } = useGroupMembers(groupId);
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const currentMember = members.find((member) => member.isCurrentUser) ??
@@ -66,6 +66,12 @@ export function GroupSettings({ groupId, currentUserId }: { groupId: string; cur
         <h2 className="font-display text-xl">Members</h2>
         <Card className="mt-4 divide-y divide-border p-0">
           {loading && <p className="p-4 text-sm text-text-muted">Loading members…</p>}
+          {!loading && error && (
+            <div className="p-4 text-sm text-accent" role="alert">
+              {error}.{' '}
+              <button type="button" onClick={reload} className="underline">Retry</button>
+            </div>
+          )}
           {!loading && members.map((member) => {
             const canManage = member.id !== currentUserId && member.role !== 'owner' &&
               (isOwner || (currentMember?.role === 'admin' && member.role === 'member'));

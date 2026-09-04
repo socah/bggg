@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { apiFetch } from '@/lib/api';
 import type { Group, Proposal, ProposalWithGroup } from '@/lib/types';
 
@@ -30,12 +30,17 @@ export function useGroupProposals(groupId: string): ProposalsResult<Proposal> {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const loadedGroupId = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- starting a new fetch always needs to reset loading/error synchronously; this hook intentionally implements manual fetch-in-effect rather than pulling in a data-fetching library.
-    setLoading(true);
+    /* eslint-disable react-hooks/set-state-in-effect -- changing groups resets stale data before the request starts. */
+    if (loadedGroupId.current !== groupId) {
+      setProposals([]);
+      setLoading(true);
+    }
     setError(null);
+    /* eslint-enable react-hooks/set-state-in-effect */
     fetchGroupProposals(groupId)
       .then((data) => {
         if (!cancelled) setProposals(data);
@@ -44,7 +49,10 @@ export function useGroupProposals(groupId: string): ProposalsResult<Proposal> {
         if (!cancelled) setError("Could not load this month's schedule");
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          loadedGroupId.current = groupId;
+          setLoading(false);
+        }
       });
     return () => {
       cancelled = true;
@@ -61,12 +69,14 @@ export function useAggregateProposals(): ProposalsResult<ProposalWithGroup> {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const hasLoaded = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- starting a new fetch always needs to reset loading/error synchronously; this hook intentionally implements manual fetch-in-effect rather than pulling in a data-fetching library.
-    setLoading(true);
+    /* eslint-disable react-hooks/set-state-in-effect -- the initial request resets request state synchronously. */
+    if (!hasLoaded.current) setLoading(true);
     setError(null);
+    /* eslint-enable react-hooks/set-state-in-effect */
 
     apiFetch('/groups')
       .then((res) => res.json())
@@ -83,7 +93,10 @@ export function useAggregateProposals(): ProposalsResult<ProposalWithGroup> {
         if (!cancelled) setError('Could not load your schedule');
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          hasLoaded.current = true;
+          setLoading(false);
+        }
       });
 
     return () => {

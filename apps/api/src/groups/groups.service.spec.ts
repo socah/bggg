@@ -383,6 +383,24 @@ describe('GroupsService', () => {
       expect(result[0]).toEqual({ id: OWNER_ID, displayName: 'Alice', role: 'owner', isCurrentUser: true });
     });
 
+    it('keeps membership and role data when an identity lookup fails', async () => {
+      const group: Group = { id: 'group-1', name: 'Chess Club', ownerId: OWNER_ID, isSolo: false, createdAt: new Date() };
+      mockRepository.findOneBy.mockResolvedValue(group);
+      mockMembersRepository.findOneBy.mockResolvedValue({ userId: OWNER_ID, groupId: 'group-1', role: 'owner' });
+      mockMembersRepository.findBy.mockResolvedValue([
+        { id: 1, userId: OWNER_ID, groupId: 'group-1', role: 'owner', joinedAt: new Date() },
+        { id: 2, userId: 'stale-user', groupId: 'group-1', role: 'member', joinedAt: new Date() },
+      ]);
+      mockKeycloakAdmin.getUser
+        .mockResolvedValueOnce({ id: OWNER_ID, displayName: 'Alice' })
+        .mockRejectedValueOnce(new Error('not found'));
+
+      await expect(service.getMembers('group-1', OWNER_ID)).resolves.toEqual([
+        { id: OWNER_ID, displayName: 'Alice', role: 'owner', isCurrentUser: true },
+        { id: 'stale-user', displayName: 'Unknown member', role: 'member', isCurrentUser: false },
+      ]);
+    });
+
     it('should throw ForbiddenException when the requester is not a member', async () => {
       const group: Group = { id: 'group-1', name: 'Chess Club', ownerId: OWNER_ID, isSolo: false, createdAt: new Date() };
       mockRepository.findOneBy.mockResolvedValue(group);

@@ -6,6 +6,7 @@ import {
   GoneException,
   ForbiddenException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, IsNull } from 'typeorm';
@@ -184,6 +185,14 @@ export class InvitesService {
   // unused AT THE MOMENT OF THE WRITE, and only the caller whose UPDATE
   // actually changes a row is allowed to proceed to the membership insert.
   private async redeem(invite: Invite, userId: string): Promise<void> {
+    const existingMembership = await this.members.findOneBy({
+      userId,
+      groupId: invite.groupId,
+    });
+    if (existingMembership) {
+      throw new ConflictException('You are already a member of this group');
+    }
+
     const result = await this.invites.update(
       { tokenHash: invite.tokenHash, usedAt: IsNull() },
       { usedAt: new Date(), usedBy: userId },

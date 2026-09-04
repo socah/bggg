@@ -63,4 +63,26 @@ describe('CalendarMonthGrid', () => {
     expect(day.getAttribute('aria-pressed')).toBe('true');
     expect(day.getAttribute('aria-expanded')).toBe('true');
   });
+
+  it.each([
+    ['collecting', 'Collecting RSVPs'],
+    ['confirming', 'Awaiting confirmation'],
+    ['confirmed', 'Confirmed session'],
+  ] as const)('labels a %s proposal with its lifecycle stage', (status, label) => {
+    render(
+      <CalendarMonthGrid proposals={[{
+        id: `proposal-${status}`,
+        groupId: 'group-1',
+        createdBy: 'user-1',
+        proposedDate: '2026-05-15',
+        hostId: null,
+        status,
+        confirmedStart: null,
+        confirmedEnd: null,
+        createdAt: '2026-04-01T00:00:00.000Z',
+      }]} />,
+    );
+
+    expect(screen.getByText(label)).toBeTruthy();
+  });
 });

@@ -37,7 +37,7 @@ function MemberName({
     );
   }
 
-  return members.find((member) => member.id === userId)?.displayName ?? fallbackName ?? 'Unknown member';
+  return fallbackName ?? members.find((member) => member.id === userId)?.displayName ?? 'Unknown member';
 }
 
 export interface InlineProposalPanelProps {
@@ -109,6 +109,7 @@ export function InlineProposalPanel({
   const canManage =
     !!detail &&
     ((myId !== null && detail.proposal.createdBy === myId) ||
+      (myId !== null && activeGroup?.ownerId === myId) ||
       myRole === 'owner' ||
       myRole === 'admin');
 
@@ -461,6 +462,7 @@ export function InlineProposalPanel({
       ) : (
         detail && (
           <div className="border-t border-border pt-3 mt-3">
+            {actions.error && <p className="mb-2 text-xs text-accent" role="alert">{actions.error}</p>}
             <ProposalLifecycleActions proposal={detail.proposal} canManage={canManage} actions={actions} />
           </div>
         )

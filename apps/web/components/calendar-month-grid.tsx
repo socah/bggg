@@ -20,7 +20,13 @@ function hasGroupName(item: CalendarItem): item is ProposalWithGroup {
 }
 
 function badgeLabel(item: CalendarItem): string {
-  const base = item.status === 'confirmed' ? 'Confirmed session' : 'Proposal';
+  const labels: Record<CalendarItem['status'], string> = {
+    collecting: 'Collecting RSVPs',
+    confirming: 'Awaiting confirmation',
+    confirmed: 'Confirmed session',
+    cancelled: 'Cancelled',
+  };
+  const base = labels[item.status];
   return hasGroupName(item) ? `${base} — ${item.groupName}` : base;
 }
 
@@ -94,9 +100,6 @@ function WeekRowExpander({
               groups={groups}
               defaultGroupId={defaultGroupId}
               onProposalsChanged={onProposalsChanged}
-              onSelectProposal={() => {
-                onProposalsChanged?.();
-              }}
             />
           ) : (
             <div className="flex flex-col gap-3">
@@ -119,7 +122,6 @@ function WeekRowExpander({
                   onProposalsChanged={onProposalsChanged}
                   onSelectProposal={() => {
                     onSetDraftOpen(false);
-                    onProposalsChanged?.();
                   }}
                 />
               ) : (

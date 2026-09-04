@@ -28,7 +28,7 @@ describe('KeycloakAdminClient', () => {
   describe('createUser', () => {
     const mockCreated = (locationId = 'new-user-id') =>
       mockHttpService.post
-        .mockReturnValueOnce(of({ data: { access_token: 'service-token', expires_in: 60 } }))
+        .mockReturnValueOnce(of({ status: 200, data: { access_token: 'service-token', expires_in: 60 } }))
         .mockReturnValueOnce(
           of({
             status: 201,
@@ -114,7 +114,7 @@ describe('KeycloakAdminClient', () => {
 
     it('should throw a 409 mentioning both username and email when either is already taken', async () => {
       mockHttpService.post
-        .mockReturnValueOnce(of({ data: { access_token: 'service-token', expires_in: 60 } }))
+        .mockReturnValueOnce(of({ status: 200, data: { access_token: 'service-token', expires_in: 60 } }))
         .mockReturnValueOnce(of({ status: 409, headers: {} }));
 
       await expect(
@@ -128,7 +128,7 @@ describe('KeycloakAdminClient', () => {
       // getUser first needs a service-account token (same private
       // getServiceToken() every other method here already goes through).
       mockHttpService.post.mockReturnValue(
-        of({ data: { access_token: 'service-token', expires_in: 60 } }),
+        of({ status: 200, data: { access_token: 'service-token', expires_in: 60 } }),
       );
       mockHttpService.get.mockReturnValue(
         of({ status: 200, data: { id: 'user-1', username: 'alice', firstName: 'Alice' } }),
@@ -141,7 +141,7 @@ describe('KeycloakAdminClient', () => {
 
     it('should fall back to username when firstName is unset', async () => {
       mockHttpService.post.mockReturnValue(
-        of({ data: { access_token: 'service-token', expires_in: 60 } }),
+        of({ status: 200, data: { access_token: 'service-token', expires_in: 60 } }),
       );
       mockHttpService.get.mockReturnValue(
         of({ status: 200, data: { id: 'user-2', username: 'bob' } }),
@@ -150,6 +150,17 @@ describe('KeycloakAdminClient', () => {
       const result = await client.getUser('user-2');
 
       expect(result).toEqual({ id: 'user-2', displayName: 'bob' });
+    });
+
+    it('should fall back to username when firstName is blank', async () => {
+      mockHttpService.post.mockReturnValue(
+        of({ status: 200, data: { access_token: 'service-token', expires_in: 60 } }),
+      );
+      mockHttpService.get.mockReturnValue(
+        of({ status: 200, data: { id: 'user-3', username: 'carol', firstName: '' } }),
+      );
+
+      await expect(client.getUser('user-3')).resolves.toEqual({ id: 'user-3', displayName: 'carol' });
     });
   });
 });

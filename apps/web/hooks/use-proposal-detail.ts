@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { apiFetch } from '@/lib/api';
 import type { ProposalDetail } from '@/lib/types';
 
@@ -22,6 +22,7 @@ export function useProposalDetail(proposalId: string | null): UseProposalDetailR
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const loadedProposalId = useRef<string | null>(null);
 
   useEffect(() => {
     // No reset needed here — the consuming panel returns early on a null
@@ -30,16 +31,17 @@ export function useProposalDetail(proposalId: string | null): UseProposalDetailR
     if (!proposalId) return;
 
     let cancelled = false;
-    // Clearing detail here is load-bearing: without it, the previously loaded
-    // proposal's detail flashes in the panel while the newly selected one is
-    // still in flight. Like use-proposals.ts, this hook intentionally
-    // implements manual fetch-in-effect rather than pulling in a
-    // data-fetching library, so the synchronous reset is unavoidable.
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- see above
-    setDetail(null);
-    setLoading(true);
+    // Clear detail only when selecting a different proposal. A refresh keeps
+    // the current card mounted until replacement data arrives.
+    /* eslint-disable react-hooks/set-state-in-effect -- selecting a new resource resets stale request state before fetching it. */
+    const isInitialLoad = loadedProposalId.current !== proposalId;
+    if (isInitialLoad) {
+      setDetail(null);
+      setLoading(true);
+    }
     setNotFound(false);
     setError(null);
+    /* eslint-enable react-hooks/set-state-in-effect */
 
     apiFetch(`/proposals/${proposalId}`)
       .then((response) => {
@@ -53,7 +55,10 @@ export function useProposalDetail(proposalId: string | null): UseProposalDetailR
         return response.json();
       })
       .then((data: ProposalDetail | null) => {
-        if (!cancelled && data) setDetail(data);
+        if (!cancelled && data) {
+          loadedProposalId.current = proposalId;
+          setDetail(data);
+        }
       })
       .catch(() => {
         if (!cancelled) setError('Could not load this proposal');

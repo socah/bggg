@@ -60,6 +60,7 @@ describe('InvitesService', () => {
     }).compile();
 
     service = module.get<InvitesService>(InvitesService);
+    mockMembers.findOneBy.mockResolvedValue(null);
   });
 
   afterEach(() => jest.clearAllMocks());
@@ -218,6 +219,17 @@ describe('InvitesService', () => {
         GoneException,
       );
       expect(mockMembers.save).not.toHaveBeenCalled();
+    });
+
+    it('should reject an existing member without consuming the invite', async () => {
+      mockInvites.findOneBy.mockResolvedValue(validInvite);
+      mockMembers.findOneBy.mockResolvedValue({ userId: 'existing-user', groupId: GROUP_ID });
+
+      await expect(service.acceptInvite(rawToken, 'existing-user')).rejects.toMatchObject({
+        message: 'You are already a member of this group',
+        status: 409,
+      });
+      expect(mockInvites.update).not.toHaveBeenCalled();
     });
   });
 

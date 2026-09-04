@@ -82,7 +82,10 @@ export class GroupsService {
     const memberships = await this.members.findBy({ groupId: id });
     return Promise.all(
       memberships.map(async (m) => ({
-        ...(await this.keycloakAdmin.getUser(m.userId)),
+        ...(await this.keycloakAdmin.getUser(m.userId).catch(() => ({
+          id: m.userId,
+          displayName: m.userId === requestingUserId ? 'You' : 'Unknown member',
+        }))),
         // The membership row is the application's identity source of truth.
         // Keep the provider response from changing the id used by clients to
         // join names to proposal creators and RSVPs.

@@ -114,7 +114,7 @@ export class KeycloakAdminClient {
 
     return {
       id: response.data.id,
-      displayName: response.data.firstName ?? response.data.username,
+      displayName: response.data.firstName?.trim() || response.data.username,
     };
   }
 
@@ -152,13 +152,25 @@ export class KeycloakAdminClient {
       client_secret: CLIENT_SECRET ?? '',
     });
 
-    const response = await firstValueFrom(
-      this.http.post<{ access_token: string; expires_in: number }>(
-        `${KEYCLOAK_URL}/realms/${REALM}/protocol/openid-connect/token`,
-        body.toString(),
-        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
-      ),
-    );
+    let response;
+    try {
+      response = await firstValueFrom(
+        this.http.post<{ access_token: string; expires_in: number }>(
+          `${KEYCLOAK_URL}/realms/${REALM}/protocol/openid-connect/token`,
+          body.toString(),
+          {
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            validateStatus: () => true,
+          },
+        ),
+      );
+    } catch {
+      throw new HttpException('Identity service is unavailable', 502);
+    }
+
+    if (response.status !== 200 || !response.data.access_token) {
+      throw new HttpException('Identity service authentication failed', 502);
+    }
 
     this.cachedToken = {
       accessToken: response.data.access_token,

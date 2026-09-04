@@ -11,6 +11,7 @@ import type { GroupMemberInfo } from '@/lib/types';
 interface GroupMembersResult {
   members: GroupMemberInfo[];
   loading: boolean;
+  error: string | null;
   reload: () => void;
 }
 
@@ -18,6 +19,7 @@ export function useGroupMembers(groupId: string | null): GroupMembersResult {
   const [members, setMembers] = useState<GroupMemberInfo[]>([]);
   const [loadedGroupId, setLoadedGroupId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     // Nothing to fetch — the return statement below already yields [] for
@@ -35,12 +37,14 @@ export function useGroupMembers(groupId: string | null): GroupMembersResult {
       .then((data: GroupMemberInfo[]) => {
         if (!cancelled) {
           setMembers(data);
+          setError(null);
           setLoadedGroupId(groupId);
         }
       })
       .catch(() => {
         if (!cancelled) {
           setMembers([]);
+          setError('Unable to load group members');
           setLoadedGroupId(groupId);
         }
       });
@@ -52,6 +56,7 @@ export function useGroupMembers(groupId: string | null): GroupMembersResult {
   return {
     members: groupId && loadedGroupId === groupId ? members : [],
     loading: !!groupId && loadedGroupId !== groupId,
+    error: groupId && loadedGroupId === groupId ? error : null,
     reload: () => setRefreshKey((key) => key + 1),
   };
 }
