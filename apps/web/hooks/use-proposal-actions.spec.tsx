@@ -1,7 +1,8 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { act, renderHook } from '@testing-library/react';
+import type { apiMutate as apiMutateType } from '@/lib/api';
 
-const apiMutate = jest.fn<() => Promise<Response>>();
+const apiMutate = jest.fn<typeof apiMutateType>();
 
 jest.unstable_mockModule('@/lib/api', () => ({
   ApiError: class ApiError extends Error {
