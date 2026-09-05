@@ -20,6 +20,10 @@ check "deploy wrapper forwards BGG_API_TOKEN" \
   "$(grep -q -- '-e bgg_api_token=' "$DEPLOY_SCRIPT" && printf expected || printf missing)"
 check "compose task exports BGG_API_TOKEN" \
   "$(grep -c '^    BGG_API_TOKEN:' "$TASKS_FILE" | grep -q '^4$' && printf expected || printf missing)"
+check "deploy wrapper forwards Keycloak database password" \
+  "$(grep -q -- '-e keycloak_db_password=' "$DEPLOY_SCRIPT" && printf expected || printf missing)"
+check "all Compose tasks export Keycloak database password" \
+  "$(grep -c '^    KEYCLOAK_DB_PASSWORD:' "$TASKS_FILE" | grep -q '^5$' && printf expected || printf missing)"
 check "migration task exports database Compose variables" \
   "$(grep -c '^    DB_USER:' "$TASKS_FILE" | grep -q '^3$' && grep -c '^    DB_NAME:' "$TASKS_FILE" | grep -q '^3$' && grep -c '^    DB_PASSWORD:' "$TASKS_FILE" | grep -q '^4$' && printf expected || printf missing)"
 check "migration task does not require a running api service" \

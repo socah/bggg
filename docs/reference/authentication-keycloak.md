@@ -52,21 +52,32 @@ must match: `.../web/auth/callback/keycloak`, not `.../api/auth/callback/keycloa
 `docker-compose.yml`'s `--import-realm` only imports a realm that doesn't
 already exist — it silently skips import when the `boardgame` realm is
 already present, which it is on every deploy after the very first one
-(Keycloak has no volume of its own here; its state is whatever's on the
-running container's disk, and `docker compose up` doesn't recreate a
-container just because a bind-mounted file changed). Editing this JSON and
-redeploying `web`/`api` therefore does **not** propagate the change to the
-live realm — reproduced directly: `redirectUris` was updated here to add
+(Keycloak stores its state in the dedicated `keycloak-db` PostgreSQL service
+and `keycloak_db_data` named volume). Editing this JSON and redeploying
+`web`/`api` therefore does **not** propagate the change to the live realm —
+reproduced directly: `redirectUris` was updated here to add
 `https://bggg.duckdns.org/*` (commit `f998624`), but the running Keycloak
 container had started *before* that commit and kept its stale
 `http://localhost:3000/*`-only client, so every login attempt in prod
 failed Keycloak's own validation with `Invalid parameter: redirect_uri`
 until the live client was patched by hand via `kcadm.sh update clients/<id>
 -r boardgame -s 'redirectUris=[...]' -s 'webOrigins=[...]'` (or the
-Keycloak container is fully recreated, e.g. after wiping its disk).
+persisted Keycloak database is intentionally rebuilt).
 Whenever `boardgame-realm.json` changes, check the live value actually
 matches (`kcadm.sh get clients -r boardgame -q clientId=<id>`) — don't
 assume a normal deploy applied it.
+
+Keycloak's database password must remain stable for the lifetime of
+`keycloak_db_data`. Production stores it as `KEYCLOAK_DB_PASSWORD` in
+Infisical; development worktrees generate it in their local `.env`. Backups
+must include both `db_data` and `keycloak_db_data` because application data
+and identities are deliberately isolated.
+
+Deploying the PostgreSQL-backed configuration over an older installation
+that still uses Keycloak's container-local H2 database requires an export and
+import first. Preserve `/opt/keycloak/data` from the old stopped container and
+complete that migration before allowing Compose to recreate it; otherwise the
+existing realms and users will be lost.
 
 ## The one-hop login redirect (`apps/web`)
 

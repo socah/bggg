@@ -267,6 +267,7 @@
     # Secrets/PII, never in .env.prod — see defaults/main.yml's own comment
     # on these for where they actually come from (Infisical, via '-e').
     KEYCLOAK_ADMIN_PASSWORD: "{{ keycloak_admin_password }}"
+    KEYCLOAK_DB_PASSWORD: "{{ keycloak_db_password }}"
     KEYCLOAK_API_SERVICE_SECRET: "{{ keycloak_api_service_secret }}"
     LETSENCRYPT_EMAIL: "{{ letsencrypt_email }}"
     AUTH_SECRET: "{{ auth_secret }}"
@@ -325,6 +326,7 @@
     VAULT_KMS_MANAGEMENT_ENDPOINT: "{{ vault_kms_management_endpoint }}"
     # Same reasoning, same secrets/PII, as the main 'up' task above.
     KEYCLOAK_ADMIN_PASSWORD: "{{ keycloak_admin_password }}"
+    KEYCLOAK_DB_PASSWORD: "{{ keycloak_db_password }}"
     KEYCLOAK_API_SERVICE_SECRET: "{{ keycloak_api_service_secret }}"
     LETSENCRYPT_EMAIL: "{{ letsencrypt_email }}"
     AUTH_SECRET: "{{ auth_secret }}"
@@ -343,6 +345,8 @@
   command: docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.prod exec -T keycloak /bin/sh /sync-user-profile.sh
   args:
     chdir: "{{ deploy_dir }}"
+  environment:
+    KEYCLOAK_DB_PASSWORD: "{{ keycloak_db_password }}"
   changed_when: false
   no_log: true
 
@@ -363,6 +367,7 @@
     VAULT_KMS_CRYPTO_ENDPOINT: "{{ vault_kms_crypto_endpoint }}"
     VAULT_KMS_MANAGEMENT_ENDPOINT: "{{ vault_kms_management_endpoint }}"
     KEYCLOAK_ADMIN_PASSWORD: "{{ keycloak_admin_password }}"
+    KEYCLOAK_DB_PASSWORD: "{{ keycloak_db_password }}"
     KEYCLOAK_API_SERVICE_SECRET: "{{ keycloak_api_service_secret }}"
     LETSENCRYPT_EMAIL: "{{ letsencrypt_email }}"
     AUTH_SECRET: "{{ auth_secret }}"
@@ -406,6 +411,7 @@
     VAULT_KMS_CRYPTO_ENDPOINT: "{{ vault_kms_crypto_endpoint }}"
     VAULT_KMS_MANAGEMENT_ENDPOINT: "{{ vault_kms_management_endpoint }}"
     KEYCLOAK_ADMIN_PASSWORD: "{{ keycloak_admin_password }}"
+    KEYCLOAK_DB_PASSWORD: "{{ keycloak_db_password }}"
     KEYCLOAK_API_SERVICE_SECRET: "{{ keycloak_api_service_secret }}"
     LETSENCRYPT_EMAIL: "{{ letsencrypt_email }}"
     AUTH_SECRET: "{{ auth_secret }}"

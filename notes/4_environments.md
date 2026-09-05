@@ -216,7 +216,7 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 ```
 Run prod with:
 ```
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+infra/ansible/deploy.sh
 ```
 
 ### What Is Happening Step by Step

@@ -122,6 +122,22 @@ services:
       vault-agent:
         condition: service_healthy
 
+  keycloak-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?KEYCLOAK_DB_PASSWORD is required}
+    volumes:
+      - keycloak_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 5s
+
   keycloak:
     # Same split as 'db': version-pinned tag here for Dependabot,
     # environment-specific config (start vs start-dev, ports, hostname/proxy
@@ -139,6 +155,13 @@ services:
       # never this key existing at all.
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USER}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?KEYCLOAK_DB_PASSWORD is required}
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
     volumes:
       # Realm export, read once at startup because of --import-realm
       # (set per-environment alongside 'start'/'start-dev' below). Editing
@@ -386,6 +409,10 @@ services:
 
 volumes:
   db_data:
+  # Keycloak's realms, users, credentials, and client state. This is a
+  # dedicated PostgreSQL volume so identity data survives Keycloak container
+  # recreation and remains isolated from the application's database.
+  keycloak_db_data:
   # Let's Encrypt account key + issued certificates. Named volume so a
   # renewed/reissued cert (and the ACME account registration) survives
   # 'docker compose down' — losing this means re-solving the HTTP-01

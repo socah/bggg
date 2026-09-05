@@ -11,6 +11,7 @@ set -eu
 #
 # How to run it: SSH into the app server, then —
 #   cd /opt/bggg
+#   export KEYCLOAK_DB_PASSWORD='<value from Infisical /ENV_VARS>'
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
 #     exec vault sh -c "$(cat infra/vault/bootstrap-prod-init.sh)"
 # 'exec' reaches the already-running 'vault' container directly over the

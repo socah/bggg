@@ -53,7 +53,8 @@ fi
 # prompt.
 if [ -z "${VAULT_AGENT_ROLE_ID:-}" ] || [ -z "${VAULT_AGENT_SECRET_ID:-}" ] ||
    [ -z "${VAULT_BOOTSTRAP_ROLE_ID:-}" ] || [ -z "${VAULT_BOOTSTRAP_SECRET_ID:-}" ] ||
-   [ -z "${DUCKDNS_TOKEN:-}" ] || [ -z "${BGG_API_TOKEN:-}" ]; then
+   [ -z "${DUCKDNS_TOKEN:-}" ] || [ -z "${BGG_API_TOKEN:-}" ] ||
+   [ -z "${KEYCLOAK_DB_PASSWORD:-}" ]; then
   # shellcheck source=../scripts/import-secrets.sh
   source "$SCRIPT_DIR/../scripts/import-secrets.sh"
 fi
@@ -68,6 +69,11 @@ done
 
 if [ -z "${BGG_API_TOKEN:-}" ]; then
   echo "BGG_API_TOKEN isn't set in Infisical's /ENV_VARS — add it there." >&2
+  exit 1
+fi
+
+if [ -z "${KEYCLOAK_DB_PASSWORD:-}" ]; then
+  echo "KEYCLOAK_DB_PASSWORD isn't set in Infisical's /ENV_VARS - add it there before deploying." >&2
   exit 1
 fi
 
@@ -98,6 +104,7 @@ ansible-playbook -i "$SCRIPT_DIR/inventory.ini" "$SCRIPT_DIR/playbook.yml" \
   -e duckdns_token="$DUCKDNS_TOKEN" \
   -e bgg_api_token="$BGG_API_TOKEN" \
   -e keycloak_admin_password="${KEYCLOAK_ADMIN_PASSWORD:-}" \
+  -e keycloak_db_password="$KEYCLOAK_DB_PASSWORD" \
   -e keycloak_api_service_secret="${KEYCLOAK_API_SERVICE_SECRET:-}" \
   -e letsencrypt_email="${LETSENCRYPT_EMAIL:-}" \
   -e auth_secret="${AUTH_SECRET:-}" \

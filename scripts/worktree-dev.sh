@@ -133,6 +133,7 @@ init_env() {
   ensure_local_secret DB_PASSWORD "$(random_value)"
   ensure_local_secret VAULT_DEV_ROOT_TOKEN "$(random_value)"
   ensure_local_secret KEYCLOAK_ADMIN_PASSWORD "$(random_value)"
+  ensure_local_secret KEYCLOAK_DB_PASSWORD "$(random_value)"
   ensure_local_secret AUTH_SECRET "$(random_value)"
   ensure_local_secret BOOTSTRAP_ADMIN_PASSWORD "$(random_value)"
   chmod 600 "$ENV_FILE"
@@ -150,7 +151,9 @@ require_docker() {
 
 wait_for() {
   label=$1 url=$2
-  retries=${DEV_READY_RETRIES:-30}
+  # A fresh Keycloak PostgreSQL database may need more than a minute for its
+  # initial schema migration and realm import.
+  retries=${DEV_READY_RETRIES:-60}
   i=0
   while [ "$i" -lt "$retries" ]; do
     curl -fsS "$url" >/dev/null 2>&1 && return 0

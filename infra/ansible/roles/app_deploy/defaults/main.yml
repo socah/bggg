@@ -72,10 +72,11 @@ vault_kms_crypto_endpoint: ""
 vault_kms_management_endpoint: ""
 
 # Deliberately empty by default, same "lives in the operator's shell, never
-# in git" pattern as the vault AppRole vars above — these two live in
+# in git" pattern as the vault AppRole vars above — these live in
 # Infisical's /ENV_VARS, not in .env.prod (non-secret config only, see that
 # file's own header). Pass at run time:
 #   -e keycloak_admin_password="$KEYCLOAK_ADMIN_PASSWORD" \
+#   -e keycloak_db_password="$KEYCLOAK_DB_PASSWORD" \
 #   -e keycloak_api_service_secret="$KEYCLOAK_API_SERVICE_SECRET"
 #
 # keycloak_api_service_secret has an extra wrinkle: infra/keycloak/
@@ -87,6 +88,9 @@ vault_kms_management_endpoint: ""
 # first time — the same chicken-and-egg as the Vault AppRole credentials
 # above.
 keycloak_admin_password: ""
+# Long-lived password for Keycloak's dedicated PostgreSQL database. It must
+# remain stable after keycloak_db_data is initialized.
+keycloak_db_password: ""
 keycloak_api_service_secret: ""
 
 # Deliberately empty by default too, but for a different reason than the two

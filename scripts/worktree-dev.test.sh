@@ -42,6 +42,7 @@ check "fresh init creates env" "$( [ -f "$WORK/first.env" ] && echo expected || 
 check "fresh init derives selected web URL" "$( [ "$(get "$WORK/first.env" AUTH_URL)" = "http://localhost:$(get "$WORK/first.env" WEB_HOST_PORT)" ] && echo expected || echo wrong )"
 check "fresh init derives public app URL" "$( [ "$(get "$WORK/first.env" PUBLIC_APP_URL)" = "http://localhost:$(get "$WORK/first.env" WEB_HOST_PORT)" ] && echo expected || echo wrong )"
 check "fresh init allocates an API port" "$( [ -n "$(get "$WORK/first.env" API_HOST_PORT)" ] && echo expected || echo missing )"
+check "fresh init generates Keycloak database password" "$( case "$(get "$WORK/first.env" KEYCLOAK_DB_PASSWORD)" in ''|replace-with-*) echo missing ;; *) echo expected ;; esac )"
 check "same path keeps slot" "$( [ "$first_slot" = "$(get "$WORK/first.env" WORKTREE_SLOT)" ] && echo expected || echo changed )"
 check "different paths get project names" "$( [ "$(get "$WORK/first.env" COMPOSE_PROJECT_NAME)" != "$(get "$WORK/second.env" COMPOSE_PROJECT_NAME)" ] && echo expected || echo same )"
 check "API dev command uses allocated port" "$( grep -q 'API_HOST_PORT:-3001' "$ROOT/package.json" && echo expected || echo missing )"
@@ -53,9 +54,10 @@ check "setup cleans legacy server state" "$( grep -q 'LEGACY_DEV_STATE_DIR' "$SC
 check "web dev command targets allocated API" "$( grep -q 'NEXT_PUBLIC_API_URL=http://localhost:\$api_port' "$SCRIPT" && echo expected || echo missing )"
 check "auth cookies are isolated per worktree" "$( grep -q 'cookieSuffix' "$ROOT/apps/web/auth.ts" && echo expected || echo missing )"
 
-printf 'DB_PASSWORD=my-password\nAUTH_URL=http://custom.example\nPUBLIC_APP_URL=https://public.example\n' >"$WORK/preserved.env"
+printf 'DB_PASSWORD=my-password\nKEYCLOAK_DB_PASSWORD=keycloak-db-password\nAUTH_URL=http://custom.example\nPUBLIC_APP_URL=https://public.example\n' >"$WORK/preserved.env"
 WORKTREE_DIR="$WORK/first" REPO_ROOT="$ROOT" ENV_FILE="$WORK/preserved.env" PORT_CHECK_CMD=false sh "$SCRIPT" init >/dev/null
 check "existing user secret preserved" "$( [ "$(get "$WORK/preserved.env" DB_PASSWORD)" = my-password ] && echo expected || echo overwritten )"
+check "existing Keycloak database password preserved" "$( [ "$(get "$WORK/preserved.env" KEYCLOAK_DB_PASSWORD)" = keycloak-db-password ] && echo expected || echo overwritten )"
 check "existing user URL preserved" "$( [ "$(get "$WORK/preserved.env" AUTH_URL)" = http://custom.example ] && echo expected || echo overwritten )"
 check "existing public app URL preserved" "$( [ "$(get "$WORK/preserved.env" PUBLIC_APP_URL)" = https://public.example ] && echo expected || echo overwritten )"
 
