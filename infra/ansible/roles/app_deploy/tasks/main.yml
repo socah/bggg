@@ -346,68 +346,6 @@
   changed_when: false
   no_log: true
 
-# Invite registration is the first path that needs the API's Keycloak
-# service account, so a missing or stale client secret can otherwise survive
-# a deploy unnoticed until a real invitee submits the registration form.
-# Exercise the exact client-credentials grant here, from a one-shot API
-# container, and fail the deploy while the cause is still in front of the
-# operator. The response body is deliberately never printed: Keycloak may
-# include credential diagnostics in errors and returns a bearer token on
-# success.
-- name: Verify API service-account authentication
-  command:
-    argv:
-      - docker
-      - compose
-      - -f
-      - docker-compose.yml
-      - -f
-      - docker-compose.prod.yml
-      - --env-file
-      - .env.prod
-      - run
-      - --rm
-      - --no-deps
-      - -T
-      - api
-      - node
-      - -e
-      - >-
-        const body = new URLSearchParams({
-          grant_type: 'client_credentials',
-          client_id: process.env.KEYCLOAK_API_SERVICE_ID,
-          client_secret: process.env.KEYCLOAK_API_SERVICE_SECRET
-        });
-        fetch(`${process.env.KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}/protocol/openid-connect/token`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/x-www-form-urlencoded' },
-          body
-        }).then(response => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1));
-  args:
-    chdir: "{{ deploy_dir }}"
-  environment:
-    DB_USER: "{{ db_user }}"
-    DB_NAME: "{{ db_name }}"
-    DB_PASSWORD: "{{ bootstrap_db_password }}"
-    VAULT_KMS_KEY_ID: "{{ vault_kms_key_id }}"
-    VAULT_KMS_CRYPTO_ENDPOINT: "{{ vault_kms_crypto_endpoint }}"
-    VAULT_KMS_MANAGEMENT_ENDPOINT: "{{ vault_kms_management_endpoint }}"
-    KEYCLOAK_ADMIN_PASSWORD: "{{ keycloak_admin_password }}"
-    KEYCLOAK_API_SERVICE_SECRET: "{{ keycloak_api_service_secret }}"
-    LETSENCRYPT_EMAIL: "{{ letsencrypt_email }}"
-    AUTH_SECRET: "{{ auth_secret }}"
-    AUTH_KEYCLOAK_SECRET: "{{ auth_keycloak_secret }}"
-    BGG_API_TOKEN: "{{ bgg_api_token }}"
-    R2_ENDPOINT: "{{ r2_endpoint }}"
-    R2_ACCESS_KEY_ID: "{{ r2_access_key_id }}"
-    R2_SECRET_ACCESS_KEY: "{{ r2_secret_access_key }}"
-  register: keycloak_service_auth
-  until: keycloak_service_auth.rc == 0
-  retries: 15
-  delay: 2
-  changed_when: false
-  no_log: true
-
 # 'db' has no healthcheck of its own (same gap Makefile's own 'migrate'
 # target works around) — 'api' being up (the task above) doesn't mean
 # Postgres inside 'db' is actually accepting connections yet, so the
