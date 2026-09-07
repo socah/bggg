@@ -265,7 +265,8 @@ CREATE TABLE IF NOT EXISTS play_session_proposals (
                                CHECK (status IN ('collecting', 'confirming', 'confirmed', 'cancelled')),
   confirmed_start  TIMESTAMPTZ,
   confirmed_end    TIMESTAMPTZ,
-  created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+  created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  UNIQUE (id, group_id)
 );
 
 -- ── PLAY SESSION PROPOSAL RSVPS ───────────────────────────────────────────
@@ -523,15 +524,64 @@ CREATE TABLE IF NOT EXISTS invites (
   created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
--- ── MESSAGES ───────────────────────────────────────────────────────────────
--- Append-only group chat messages. User identifiers are raw Keycloak subjects,
--- matching the identity columns used by groups and memberships.
+-- ── CHAT ───────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS chat_threads (
+  id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  group_id       UUID        REFERENCES groups(id) ON DELETE CASCADE,
+  kind           TEXT        NOT NULL CHECK (kind IN ('general', 'proposal', 'direct')),
+  proposal_id    UUID,
+  direct_user_a  TEXT,
+  direct_user_b  TEXT,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CHECK (
+    (kind = 'general' AND group_id IS NOT NULL AND proposal_id IS NULL AND direct_user_a IS NULL AND direct_user_b IS NULL) OR
+    (kind = 'proposal' AND group_id IS NOT NULL AND proposal_id IS NOT NULL AND direct_user_a IS NULL AND direct_user_b IS NULL) OR
+    (kind = 'direct' AND group_id IS NULL AND proposal_id IS NULL AND direct_user_a IS NOT NULL AND direct_user_b IS NOT NULL AND direct_user_a <= direct_user_b)
+  ),
+  FOREIGN KEY (proposal_id, group_id) REFERENCES play_session_proposals(id, group_id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS chat_threads_general_unique ON chat_threads(group_id) WHERE kind = 'general';
+CREATE UNIQUE INDEX IF NOT EXISTS chat_threads_proposal_unique ON chat_threads(proposal_id) WHERE kind = 'proposal';
+CREATE UNIQUE INDEX IF NOT EXISTS chat_threads_direct_unique ON chat_threads(direct_user_a, direct_user_b) WHERE kind = 'direct';
+
+-- Rollback metadata retained by the global-direct-chat migration. Existing
+-- per-group direct threads are merged, so these record every original thread
+-- and message mapping if that migration ever needs to be reverted.
+CREATE TABLE IF NOT EXISTS global_direct_thread_origins (
+  thread_id     UUID,
+  group_id      UUID,
+  direct_user_a TEXT,
+  direct_user_b TEXT,
+  created_at    TIMESTAMPTZ,
+  updated_at    TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS global_direct_message_origins (
+  message_id UUID,
+  thread_id  UUID
+);
+
 CREATE TABLE IF NOT EXISTS messages (
   id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  group_id   TEXT        NOT NULL,
+  thread_id  UUID        NOT NULL REFERENCES chat_threads(id) ON DELETE CASCADE,
   sender_id  TEXT        NOT NULL,
   body       TEXT        NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS messages_thread_history_idx ON messages(thread_id, created_at DESC, id DESC);
+
+-- Migration-only archive for legacy messages whose unconstrained group_id no
+-- longer matched a group when chat threads were introduced. The application
+-- never reads this table; retaining it avoids silent historical data loss.
+CREATE TABLE IF NOT EXISTS legacy_orphaned_messages (
+  id         UUID,
+  group_id   TEXT,
+  sender_id  TEXT,
+  body       TEXT,
+  created_at TIMESTAMPTZ
 );
 
 -- ── AUDIT LOG ─────────────────────────────────────────────────────────────

@@ -38,7 +38,7 @@ async function bootstrap() {
   // Without this, a page at evil.com could make credentialed requests to
   // the API using the victim's browser token — a CSRF-adjacent attack.
   app.enableCors({
-    origin: process.env.CORS_ORIGIN,
+    origin: process.env.CORS_ORIGIN ?? process.env.PUBLIC_APP_URL ?? 'http://localhost:3000',
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   });

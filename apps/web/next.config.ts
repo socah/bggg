@@ -58,6 +58,16 @@ const nextConfig: NextConfig = {
   // using rather than skipping.
   output: 'standalone',
 
+  // Browser WebSockets bypass Next's HTTP rewrite. In development, expose
+  // the API's configurable host port to the client bundle; in production an
+  // empty value makes Socket.io use the current origin routed by Traefik.
+  env: {
+    NEXT_PUBLIC_SOCKET_URL: process.env.NEXT_PUBLIC_SOCKET_URL
+      || (process.env.NODE_ENV === 'development'
+        ? `http://localhost:${process.env.API_HOST_PORT ?? '3001'}`
+        : ''),
+  },
+
   // Rewrites are URL transformations that happen on the Next.js server,
   // invisible to the browser. The browser sends '/api/groups', Next.js
   // forwards it to the NestJS backend and returns the response —
@@ -80,7 +90,7 @@ const nextConfig: NextConfig = {
         // ':path*' is a wildcard that captures everything after /api/
         // e.g. '/api/groups/42/members' → 'http://localhost:3001/groups/42/members'
         source: '/api/:path*',
-        destination: `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/:path*`,
+        destination: `${process.env.NEXT_PUBLIC_API_URL ?? `http://localhost:${process.env.API_HOST_PORT ?? '3001'}`}/:path*`,
       },
     ];
   },

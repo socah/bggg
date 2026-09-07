@@ -8,6 +8,7 @@ const TABS: Array<{ tab: ViewTab; label: string }> = [
   { tab: 'calendar', label: 'Calendar' },
   { tab: 'collection', label: 'Collection' },
   { tab: 'profile', label: 'Profile' },
+  { tab: 'chat', label: 'Chat' },
 ];
 
 // These are links to three different routes, not tabs over in-page panels —
@@ -18,7 +19,10 @@ const TABS: Array<{ tab: ViewTab; label: string }> = [
 export function ViewTabs() {
   const pathname = usePathname();
   const { groupId, userId, tab: activeTab } = parseSpacePath(pathname);
-  const tabs = userId ? TABS.filter(({ tab }) => tab !== 'calendar') : TABS;
+  const tabs = TABS.filter(({ tab }) => {
+    if (userId) return tab !== 'calendar' && tab !== 'chat';
+    return true;
+  });
 
   return (
     <nav aria-label="Sections" className="flex gap-4 font-body text-sm font-medium">

@@ -1,43 +1,200 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, IsNull, Not, Repository, type FindOptionsWhere } from 'typeorm';
 import { Message } from './message.entity';
 import { GroupsService } from '../groups/groups.service';
+import { ChatThread } from './chat-thread.entity';
+import { PlaySessionProposal } from '../scheduling/play-session-proposal.entity';
+
+export interface ChatThreadSummary extends ChatThread {
+  lastMessage: Message | null;
+}
 
 @Injectable()
 export class ChatService {
   constructor(
     @InjectRepository(Message)
     private readonly messageRepository: Repository<Message>,
-    // Injecting GroupsService (not GroupRepository directly) means the
-    // ownership check below is the EXACT same check GroupsController uses —
-    // one place decides "does this user have access to this group", reused
-    // here instead of re-implemented. If group membership ever expands
-    // beyond ownerId (Phase 3: invite_system), fixing GroupsService.findOne
-    // automatically fixes chat access too.
+    @InjectRepository(ChatThread)
+    private readonly threadRepository: Repository<ChatThread>,
+    @InjectRepository(PlaySessionProposal)
+    private readonly proposalRepository: Repository<PlaySessionProposal>,
     private readonly groupsService: GroupsService,
   ) {}
 
-  async saveMessage(
-    groupId: string,
-    senderId: string,
-    body: string,
-  ): Promise<Message> {
-    // Throws NotFoundException or ForbiddenException if senderId does not
-    // own groupId — this is the authorization check the gateway relies on
-    // before ever touching socket.join() or broadcasting anything.
-    await this.groupsService.findOne(groupId, senderId);
+  async listThreads(groupId: string, requestingUserId: string): Promise<ChatThreadSummary[]> {
+    await this.groupsService.findOne(groupId, requestingUserId);
+    await this.getOrCreateThread({ groupId, kind: 'general' });
 
-    const message = this.messageRepository.create({ groupId, senderId, body });
-    return this.messageRepository.save(message);
+    const proposals = await this.proposalRepository.findBy({ groupId, status: Not('cancelled') });
+    await Promise.all(
+      proposals.map((proposal) =>
+        this.getOrCreateThread({ groupId, kind: 'proposal', proposalId: proposal.id }),
+      ),
+    );
+
+    const visibleThreadFilters: FindOptionsWhere<ChatThread>[] = [{ groupId, kind: 'general' }];
+    if (proposals.length > 0) {
+      visibleThreadFilters.push({
+        groupId,
+        kind: 'proposal',
+        proposalId: In(proposals.map((proposal) => proposal.id)),
+      });
+    }
+    const threads = await this.threadRepository.find({
+      where: visibleThreadFilters,
+      order: { updatedAt: 'DESC' },
+    });
+    return Promise.all(
+      threads.map(async (thread) => ({
+        ...thread,
+        lastMessage: await this.messageRepository.findOne({
+          where: { threadId: thread.id },
+          order: { createdAt: 'DESC' },
+        }),
+      })),
+    );
   }
 
-  async getHistory(groupId: string, requestingUserId: string): Promise<Message[]> {
-    await this.groupsService.findOne(groupId, requestingUserId);
+  async listDirectThreads(requestingUserId: string): Promise<ChatThreadSummary[]> {
+    const threads = await this.threadRepository
+      .createQueryBuilder('thread')
+      .where('thread.kind = :kind', { kind: 'direct' })
+      .andWhere('(thread.direct_user_a = :userId OR thread.direct_user_b = :userId)', {
+        userId: requestingUserId,
+      })
+      .orderBy('thread.updated_at', 'DESC')
+      .getMany();
 
-    return this.messageRepository.find({
-      where: { groupId },
-      order: { createdAt: 'ASC' },
+    const accessible: ChatThread[] = [];
+    for (const thread of threads) {
+      const otherUserId = thread.directUserA === requestingUserId
+        ? thread.directUserB
+        : thread.directUserA;
+      try {
+        await this.groupsService.assertUsersShareGroup(requestingUserId, otherUserId!);
+        accessible.push(thread);
+      } catch (error) {
+        // Threads are retained if membership changes, but hidden until the
+        // participants share a group again.
+        if (!(error instanceof ForbiddenException)) throw error;
+      }
+    }
+    return Promise.all(accessible.map(async (thread) => ({
+      ...thread,
+      lastMessage: await this.messageRepository.findOne({
+        where: { threadId: thread.id },
+        order: { createdAt: 'DESC' },
+      }),
+    })));
+  }
+
+  async getOrCreateDirectThread(
+    requestingUserId: string,
+    otherUserId: string,
+  ): Promise<ChatThread> {
+    await this.groupsService.assertUsersShareGroup(requestingUserId, otherUserId);
+    const [directUserA, directUserB] = [requestingUserId, otherUserId].sort();
+    return this.getOrCreateThread({
+      groupId: null,
+      kind: 'direct',
+      directUserA,
+      directUserB,
     });
+  }
+
+  async getOrCreateProposalThread(
+    groupId: string,
+    proposalId: string,
+    requestingUserId: string,
+  ): Promise<ChatThread> {
+    await this.groupsService.findOne(groupId, requestingUserId);
+    const proposal = await this.proposalRepository.findOneBy({ id: proposalId, groupId });
+    if (!proposal) throw new NotFoundException('Proposal not found in this group');
+    return this.getOrCreateThread({ groupId, kind: 'proposal', proposalId });
+  }
+
+  async getHistory(threadId: string, requestingUserId: string): Promise<Message[]> {
+    await this.getAuthorizedThread(threadId, requestingUserId);
+
+    const messages = await this.messageRepository.find({
+      where: { threadId },
+      order: { createdAt: 'DESC' },
+      take: 100,
+    });
+    return messages.reverse();
+  }
+
+  async saveMessage(threadId: string, senderId: string, body: string): Promise<Message> {
+    await this.getAuthorizedThread(threadId, senderId);
+    return this.messageRepository.manager.transaction(async (manager) => {
+      const messages = manager.getRepository(Message);
+      const threads = manager.getRepository(ChatThread);
+      const message = await messages.save(
+        messages.create({ threadId, senderId, body: body.trim() }),
+      );
+      await threads.update(threadId, { updatedAt: new Date() });
+      return message;
+    });
+  }
+
+  async canAccessThread(threadId: string, userId: string): Promise<boolean> {
+    try {
+      await this.getAuthorizedThread(threadId, userId);
+      return true;
+    } catch (error) {
+      if (error instanceof ForbiddenException || error instanceof NotFoundException) {
+        return false;
+      }
+      throw error;
+    }
+  }
+
+  private async getAuthorizedThread(threadId: string, userId: string): Promise<ChatThread> {
+    const thread = await this.threadRepository.findOneBy({ id: threadId });
+    if (!thread) throw new NotFoundException('Chat not found');
+    if (thread.kind === 'direct') {
+      if (thread.directUserA !== userId && thread.directUserB !== userId) {
+        throw new ForbiddenException('You do not have access to this direct chat');
+      }
+      const otherUserId = thread.directUserA === userId
+        ? thread.directUserB
+        : thread.directUserA;
+      await this.groupsService.assertUsersShareGroup(userId, otherUserId!);
+    } else {
+      await this.groupsService.findOne(thread.groupId!, userId);
+    }
+    return thread;
+  }
+
+  private async getOrCreateThread(
+    attributes: Pick<ChatThread, 'groupId' | 'kind'> &
+      Partial<Pick<ChatThread, 'proposalId' | 'directUserA' | 'directUserB'>>,
+  ): Promise<ChatThread> {
+    const where: FindOptionsWhere<ChatThread> = {
+      groupId: attributes.groupId ?? IsNull(),
+      kind: attributes.kind,
+      proposalId: attributes.proposalId ?? IsNull(),
+      directUserA: attributes.directUserA ?? IsNull(),
+      directUserB: attributes.directUserB ?? IsNull(),
+    };
+    const existing = await this.threadRepository.findOneBy(where);
+    if (existing) return existing;
+
+    try {
+      return await this.threadRepository.save(this.threadRepository.create({
+        groupId: attributes.groupId,
+        kind: attributes.kind,
+        proposalId: attributes.proposalId ?? null,
+        directUserA: attributes.directUserA ?? null,
+        directUserB: attributes.directUserB ?? null,
+      }));
+    } catch (error) {
+      if (typeof error === 'object' && error !== null && (error as { code?: string }).code === '23505') {
+        const raced = await this.threadRepository.findOneBy(where);
+        if (raced) return raced;
+      }
+      throw error;
+    }
   }
 }

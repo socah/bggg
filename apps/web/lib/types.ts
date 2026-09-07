@@ -97,6 +97,31 @@ export interface GroupMemberProfile extends GroupMemberInfo {
   lists: PersonalGameList[];
 }
 
+export type ChatThreadKind = 'general' | 'proposal' | 'direct';
+
+export interface ChatThread {
+  id: string;
+  groupId: string | null;
+  kind: ChatThreadKind;
+  proposalId: string | null;
+  directUserA: string | null;
+  directUserB: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  threadId: string;
+  senderId: string;
+  body: string;
+  createdAt: string;
+}
+
+export interface ChatThreadSummary extends ChatThread {
+  lastMessage: ChatMessage | null;
+}
+
 export interface GameCardGame {
   id: number;
   bggId: number;

@@ -12,6 +12,7 @@ import { ProposalLifecycleActions } from '@/components/proposal-lifecycle-action
 import { ProposalStatusBadge } from '@/components/proposal-status-badge';
 import { ProposalRsvpSection } from '@/components/proposal-rsvp-section';
 import { UserIdentityLink } from '@/components/user-identity-link';
+import { ProposalChat } from '@/components/proposal-chat';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogSheetContent, DialogClose, DialogTitle } from '@/components/ui/dialog';
@@ -524,6 +525,14 @@ export function InlineProposalPanel({
             ))}
           </ul>
         </div>
+      )}
+
+      {!isDraft && detail && (
+        <ProposalChat
+          groupId={detail.proposal.groupId}
+          proposalId={detail.proposal.id}
+          members={members}
+        />
       )}
 
       {/* 5. Footer Actions */}

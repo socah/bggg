@@ -23,4 +23,15 @@ describe('parseSpacePath', () => {
   it('does not create a selected-user calendar route', () => {
     expect(spaceHref('group-1', 'calendar', 'user-2')).toBe('/groups/group-1/calendar');
   });
+
+  it('recognizes the group chat route', () => {
+    expect(parseSpacePath('/groups/group-1/chat')).toEqual({
+      groupId: 'group-1',
+      userId: null,
+      tab: 'chat',
+    });
+    expect(spaceHref('group-1', 'chat')).toBe('/groups/group-1/chat');
+    expect(parseSpacePath('/chat')).toEqual({ groupId: null, userId: null, tab: 'chat' });
+    expect(spaceHref(null, 'chat')).toBe('/chat');
+  });
 });

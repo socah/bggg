@@ -4,10 +4,14 @@ import {
   SubscribeMessage,
   MessageBody,
   ConnectedSocket,
+  WebSocketServer,
 } from '@nestjs/websockets';
-import { Socket } from 'socket.io';
+import { Server, Socket } from 'socket.io';
 import { AuthGuard } from '../auth/auth.guard';
 import { ChatService } from './chat.service';
+import { JoinChatDto } from './dto/join-chat.dto';
+import { SendMessageDto } from './dto/send-message.dto';
+import type { Message } from './message.entity';
 
 // @UseGuards(AuthGuard) at the class level applies canActivate to every
 // @SubscribeMessage handler below — the exact same guard, same JWKS
@@ -28,53 +32,42 @@ import { ChatService } from './chat.service';
 @UseGuards(AuthGuard)
 // Same CORS_ORIGIN env var main.ts uses for the REST API — one source of
 // truth for "which frontend origin is allowed to talk to this backend."
-@WebSocketGateway({ cors: { origin: process.env.CORS_ORIGIN } })
+@WebSocketGateway({
+  cors: { origin: process.env.CORS_ORIGIN ?? process.env.PUBLIC_APP_URL ?? 'http://localhost:3000' },
+})
 export class ChatGateway {
+  @WebSocketServer()
+  server!: Server;
+
   constructor(private readonly chatService: ChatService) {}
 
-  @SubscribeMessage('join-group')
-  async handleJoinGroup(
+  @SubscribeMessage('join-chat')
+  async handleJoinChat(
     @ConnectedSocket() client: Socket,
-    @MessageBody() groupId: string,
+    @MessageBody() data: JoinChatDto,
   ): Promise<void> {
-    // client.data.user was set by AuthGuard.canActivate — see auth.guard.ts.
-    // .sub is the JWT subject claim: the stable user id.
     const userId = client.data.user.sub;
-
-    // getHistory() calls groupsService.findOne(groupId, userId) internally,
-    // which throws ForbiddenException if this user doesn't own the group.
-    // That exception propagates out of this handler and NestJS's WsException
-    // filter turns it into an error event on the socket — the join never
-    // happens, and socket.join() below is never reached for an unauthorised
-    // group id. This is the authorization check: proving identity (the
-    // guard) is not the same as proving access to THIS group (this call).
-    const history = await this.chatService.getHistory(groupId, userId);
-
-    client.join(`group:${groupId}`);
-    client.emit('chat-history', history);
+    const history = await this.chatService.getHistory(data.threadId, userId);
+    await client.join(`chat:${data.threadId}`);
+    client.emit('chat-history', { threadId: data.threadId, messages: history });
   }
 
   @SubscribeMessage('send-message')
   async handleSendMessage(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { groupId: string; body: string },
-  ): Promise<void> {
+    @MessageBody() data: SendMessageDto,
+  ): Promise<Message> {
     const userId = client.data.user.sub;
-
-    // saveMessage() re-checks group access (see chat.service.ts) — a client
-    // could technically emit 'send-message' for a group it never joined a
-    // room for, so this check cannot be skipped just because join-group
-    // already ran once earlier in the connection's lifetime.
-    const message = await this.chatService.saveMessage(
-      data.groupId,
-      userId,
-      data.body,
-    );
-
-    // io.to(room) is reached via client.to() here: broadcasts to every
-    // OTHER socket in the room, not back to the sender (which already has
-    // the message locally). Using client.server.to() instead would also
-    // echo it back to the sender — a UX choice, not a security one.
-    client.to(`group:${data.groupId}`).emit('new-message', message);
+    const message = await this.chatService.saveMessage(data.threadId, userId, data.body);
+    const sockets = await this.server.in(`chat:${data.threadId}`).fetchSockets();
+    await Promise.all(sockets.map(async (socket) => {
+      const recipientId = socket.data.user?.sub;
+      if (recipientId && await this.chatService.canAccessThread(data.threadId, recipientId)) {
+        socket.emit('new-message', message);
+      } else {
+        await socket.leave(`chat:${data.threadId}`);
+      }
+    }));
+    return message;
   }
 }

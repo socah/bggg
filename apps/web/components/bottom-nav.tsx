@@ -7,13 +7,17 @@ const TABS: Array<{ tab: ViewTab; label: string }> = [
   { tab: 'calendar', label: 'Calendar' },
   { tab: 'collection', label: 'Collection' },
   { tab: 'profile', label: 'Profile' },
+  { tab: 'chat', label: 'Chat' },
 ];
 
 export function BottomNav() {
   const pathname = usePathname();
   const router = useRouter();
   const { groupId, userId, tab: activeTab } = parseSpacePath(pathname);
-  const tabs = userId ? TABS.filter(({ tab }) => tab !== 'calendar') : TABS;
+  const tabs = TABS.filter(({ tab }) => {
+    if (userId) return tab !== 'calendar' && tab !== 'chat';
+    return true;
+  });
 
   return (
     <nav

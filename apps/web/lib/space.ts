@@ -1,6 +1,6 @@
-export type ViewTab = 'calendar' | 'collection' | 'profile';
+export type ViewTab = 'calendar' | 'collection' | 'profile' | 'chat';
 
-const TABS: ViewTab[] = ['calendar', 'collection', 'profile'];
+const TABS: ViewTab[] = ['calendar', 'collection', 'profile', 'chat'];
 
 export interface SpacePath {
   groupId: string | null;

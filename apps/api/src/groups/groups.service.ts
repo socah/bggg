@@ -99,6 +99,27 @@ export class GroupsService {
     );
   }
 
+  async assertMember(groupId: string, userId: string): Promise<GroupMember> {
+    const membership = await this.members.findOneBy({ groupId, userId });
+    if (!membership) throw new NotFoundException('Group member not found');
+    return membership;
+  }
+
+  async assertUsersShareGroup(userId: string, otherUserId: string): Promise<void> {
+    if (userId === otherUserId) return;
+    const memberships = await this.members.findBy({ userId });
+    if (memberships.length === 0) {
+      throw new ForbiddenException('You can only chat with users from a shared group');
+    }
+    const sharedMembership = await this.members.findOneBy({
+      userId: otherUserId,
+      groupId: In(memberships.map((membership) => membership.groupId)),
+    });
+    if (!sharedMembership) {
+      throw new ForbiddenException('You can only chat with users from a shared group');
+    }
+  }
+
   async getMemberProfile(id: string, userId: string, requestingUserId: string) {
     await this.findOne(id, requestingUserId);
     const membership = await this.members.findOneBy({ groupId: id, userId });
