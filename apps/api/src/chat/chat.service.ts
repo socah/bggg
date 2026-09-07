@@ -5,6 +5,7 @@ import { Message } from './message.entity';
 import { GroupsService } from '../groups/groups.service';
 import { ChatThread } from './chat-thread.entity';
 import { PlaySessionProposal } from '../scheduling/play-session-proposal.entity';
+import { ChatThreadDismissal } from './chat-thread-dismissal.entity';
 
 export interface ChatThreadSummary extends ChatThread {
   lastMessage: Message | null;
@@ -17,6 +18,8 @@ export class ChatService {
     private readonly messageRepository: Repository<Message>,
     @InjectRepository(ChatThread)
     private readonly threadRepository: Repository<ChatThread>,
+    @InjectRepository(ChatThreadDismissal)
+    private readonly dismissalRepository: Repository<ChatThreadDismissal>,
     @InjectRepository(PlaySessionProposal)
     private readonly proposalRepository: Repository<PlaySessionProposal>,
     private readonly groupsService: GroupsService,
@@ -65,9 +68,12 @@ export class ChatService {
       })
       .orderBy('thread.updated_at', 'DESC')
       .getMany();
+    const dismissals = await this.dismissalRepository.findBy({ userId: requestingUserId });
+    const dismissedIds = new Set(dismissals.map((dismissal) => dismissal.threadId));
 
     const accessible: ChatThread[] = [];
     for (const thread of threads) {
+      if (dismissedIds.has(thread.id)) continue;
       const otherUserId = thread.directUserA === requestingUserId
         ? thread.directUserB
         : thread.directUserA;
@@ -95,12 +101,26 @@ export class ChatService {
   ): Promise<ChatThread> {
     await this.groupsService.assertUsersShareGroup(requestingUserId, otherUserId);
     const [directUserA, directUserB] = [requestingUserId, otherUserId].sort();
-    return this.getOrCreateThread({
+    const thread = await this.getOrCreateThread({
       groupId: null,
       kind: 'direct',
       directUserA,
       directUserB,
     });
+    await this.dismissalRepository.delete({ threadId: thread.id, userId: requestingUserId });
+    return thread;
+  }
+
+  async removeDirectThread(threadId: string, requestingUserId: string): Promise<void> {
+    const thread = await this.threadRepository.findOneBy({ id: threadId, kind: 'direct' });
+    if (!thread) throw new NotFoundException('Direct chat not found');
+    if (thread.directUserA !== requestingUserId && thread.directUserB !== requestingUserId) {
+      throw new ForbiddenException('You do not have access to this direct chat');
+    }
+    await this.dismissalRepository.upsert(
+      { threadId: thread.id, userId: requestingUserId },
+      ['threadId', 'userId'],
+    );
   }
 
   async getOrCreateProposalThread(

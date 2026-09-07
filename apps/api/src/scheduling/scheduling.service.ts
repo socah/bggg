@@ -34,9 +34,11 @@ import { resolveAvailabilityWindow } from './resolve-window';
 // state without a second request.
 export interface ProposalGameWithVotes {
   proposalGameId: string;
-  game: { id: number; name: string };
+  game: Pick<Game, 'id' | 'bggId' | 'name' | 'minPlayers' | 'maxPlayers' | 'playingTime' | 'yearPublished' | 'rating'> & { image: string | null; thumbnail: string | null };
   voteCount: number;
   votedByMe: boolean;
+  downvotedByMe: boolean;
+  proposedByMe: boolean;
 }
 
 export interface ProposalPlaceWithVotes {
@@ -339,6 +341,7 @@ export class SchedulingService {
   ): Promise<PlaySessionProposalGame> {
     const proposal = await this.findProposalOrThrow(proposalId);
     await this.groupsService.findOne(proposal.groupId, requestingUserId);
+    this.assertCollecting(proposal);
 
     // UNIQUE (proposal_id, game_id) means a second "propose" of the same
     // game is a no-op, not an error — further interest is a vote, not a
@@ -355,27 +358,46 @@ export class SchedulingService {
     );
   }
 
-  async voteForGame(proposalGameId: string, requestingUserId: string): Promise<void> {
-    const proposalGame = await this.proposalGames.findOneBy({ id: proposalGameId });
+  async voteForGame(proposalId: string, proposalGameId: string, requestingUserId: string, value: -1 | 1): Promise<void> {
+    const proposalGame = await this.proposalGames.findOneBy({ id: proposalGameId, proposalId });
     if (!proposalGame) throw new NotFoundException('Proposed game not found');
 
     const proposal = await this.findProposalOrThrow(proposalGame.proposalId);
     await this.groupsService.findOne(proposal.groupId, requestingUserId);
+    this.assertCollecting(proposal);
 
     const existing = await this.gameVotes.findOneBy({ proposalGameId, userId: requestingUserId });
-    if (existing) return;
+    if (existing) {
+      if (existing.value === value) return;
+      existing.value = value;
+      await this.gameVotes.save(existing);
+      return;
+    }
 
-    await this.gameVotes.save(this.gameVotes.create({ proposalGameId, userId: requestingUserId }));
+    await this.gameVotes.save(this.gameVotes.create({ proposalGameId, userId: requestingUserId, value }));
   }
 
-  async unvoteForGame(proposalGameId: string, requestingUserId: string): Promise<void> {
-    const proposalGame = await this.proposalGames.findOneBy({ id: proposalGameId });
+  async unvoteForGame(proposalId: string, proposalGameId: string, requestingUserId: string): Promise<void> {
+    const proposalGame = await this.proposalGames.findOneBy({ id: proposalGameId, proposalId });
     if (!proposalGame) throw new NotFoundException('Proposed game not found');
 
     const proposal = await this.findProposalOrThrow(proposalGame.proposalId);
     await this.groupsService.findOne(proposal.groupId, requestingUserId);
+    this.assertCollecting(proposal);
 
     await this.gameVotes.delete({ proposalGameId, userId: requestingUserId });
+  }
+
+  async removeProposalGame(proposalId: string, proposalGameId: string, requestingUserId: string): Promise<void> {
+    const proposalGame = await this.proposalGames.findOneBy({ id: proposalGameId, proposalId });
+    if (!proposalGame) throw new NotFoundException('Proposed game not found');
+    const proposal = await this.findProposalOrThrow(proposalId);
+    await this.groupsService.findOne(proposal.groupId, requestingUserId);
+    this.assertCollecting(proposal);
+    if (proposalGame.proposedBy !== requestingUserId) {
+      throw new ForbiddenException('You can only remove games you suggested');
+    }
+    await this.proposalGames.remove(proposalGame);
   }
 
   async listProposalGames(
@@ -402,18 +424,30 @@ export class SchedulingService {
     // at this project's scale; would become a single GROUP BY if the
     // number of proposed games per proposal ever got large.
     const rows = await Promise.all(
-      proposalGames.map(async (proposalGame) => ({
+      proposalGames.map(async (proposalGame) => {
+        const game = gameById.get(proposalGame.gameId);
+        const votes = await this.gameVotes.findBy({ proposalGameId: proposalGame.id });
+        const myVote = votes.find((vote) => vote.userId === requestingUserId)?.value ?? 0;
+        return {
         proposalGameId: proposalGame.id,
         game: {
           id: proposalGame.gameId,
-          name: gameById.get(proposalGame.gameId)?.name ?? 'Unknown game',
+          bggId: game?.bggId ?? 0,
+          name: game?.name ?? 'Unknown game',
+          image: game?.image ?? null,
+          thumbnail: game?.thumbnail ?? null,
+          minPlayers: game?.minPlayers ?? 0,
+          maxPlayers: game?.maxPlayers ?? 0,
+          playingTime: game?.playingTime ?? 0,
+          yearPublished: game?.yearPublished ?? 0,
+          rating: game?.rating ?? 0,
         },
-        voteCount: await this.gameVotes.countBy({ proposalGameId: proposalGame.id }),
-        votedByMe: await this.gameVotes.existsBy({
-          proposalGameId: proposalGame.id,
-          userId: requestingUserId,
-        }),
-      })),
+        voteCount: votes.reduce((total, vote) => total + vote.value, 0),
+        votedByMe: myVote === 1,
+        downvotedByMe: myVote === -1,
+        proposedByMe: proposalGame.proposedBy === requestingUserId,
+      };
+      }),
     );
     return rows.sort(
       (left, right) =>
@@ -706,7 +740,7 @@ export class SchedulingService {
 
   private assertCollecting(proposal: PlaySessionProposal): void {
     if (proposal.status !== 'collecting') {
-      throw new ConflictException('Places can only be changed while the proposal is collecting');
+      throw new ConflictException('Suggestions and votes can only be changed while the proposal is collecting');
     }
   }
 

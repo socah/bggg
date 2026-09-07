@@ -30,8 +30,8 @@ describe('SchedulingService', () => {
   const mockSessions = {
     findOneBy: jest.fn(), findBy: jest.fn(), remove: jest.fn(), create: jest.fn(), save: jest.fn(), countBy: jest.fn(),
   };
-  const mockProposalGames = { findBy: jest.fn() };
-  const mockGameVotes = { countBy: jest.fn(), existsBy: jest.fn() };
+  const mockProposalGames = { findBy: jest.fn(), findOneBy: jest.fn(), create: jest.fn(), save: jest.fn(), remove: jest.fn() };
+  const mockGameVotes = { findBy: jest.fn(), findOneBy: jest.fn(), create: jest.fn(), save: jest.fn(), delete: jest.fn() };
   const mockGames = { findBy: jest.fn() };
   const mockPlaces = { findOneBy: jest.fn(), findBy: jest.fn(), create: jest.fn(), save: jest.fn() };
   const mockPlaceOwners = { findBy: jest.fn(), upsert: jest.fn(), delete: jest.fn() };
@@ -96,9 +96,10 @@ describe('SchedulingService', () => {
       mockRsvps.findBy.mockResolvedValue(rsvps);
       mockProposalGames.findBy.mockResolvedValue([proposalGame]);
       mockGames.findBy.mockResolvedValue([game]);
-      mockGameVotes.countBy.mockResolvedValue(2);
-      // The requesting user has NOT voted on this game.
-      mockGameVotes.existsBy.mockResolvedValue(false);
+      mockGameVotes.findBy.mockResolvedValue([
+        { proposalGameId: 'pg-1', userId: 'user-2', value: 1 },
+        { proposalGameId: 'pg-1', userId: 'user-3', value: 1 },
+      ]);
       mockProposalPlaces.findBy.mockResolvedValue([]);
 
       const result = await service.getProposal(PROPOSAL_ID, USER_ID);
@@ -110,9 +111,11 @@ describe('SchedulingService', () => {
         places: [],
         games: [{
           proposalGameId: 'pg-1',
-          game: { id: 42, name: 'Gloomhaven' },
+          game: { id: 42, bggId: 174430, name: 'Gloomhaven', thumbnail: '', image: '', minPlayers: 1, maxPlayers: 4, playingTime: 120, yearPublished: 2017, rating: 8.79 },
           voteCount: 2,
           votedByMe: false,
+          downvotedByMe: false,
+          proposedByMe: true,
         }],
       });
     });
@@ -132,18 +135,23 @@ describe('SchedulingService', () => {
           minPlayers: 1, maxPlayers: 4, playingTime: 120, yearPublished: 2017, rating: 8.79,
           lastFetchedAt: new Date(), createdAt: new Date() },
       ]);
-      mockGameVotes.countBy.mockResolvedValue(3);
-      mockGameVotes.existsBy.mockResolvedValue(true);
+      mockGameVotes.findBy.mockResolvedValue([
+        { proposalGameId: 'pg-1', userId: USER_ID, value: 1 },
+        { proposalGameId: 'pg-1', userId: 'user-2', value: 1 },
+        { proposalGameId: 'pg-1', userId: 'user-3', value: 1 },
+      ]);
 
       const result = await service.listProposalGames(PROPOSAL_ID, USER_ID);
 
       expect(result).toEqual([{
         proposalGameId: 'pg-1',
-        game: { id: 42, name: 'Gloomhaven' },
+        game: { id: 42, bggId: 174430, name: 'Gloomhaven', thumbnail: '', image: '', minPlayers: 1, maxPlayers: 4, playingTime: 120, yearPublished: 2017, rating: 8.79 },
         voteCount: 3,
         votedByMe: true,
+        downvotedByMe: false,
+        proposedByMe: true,
       }]);
-      expect(mockGameVotes.existsBy).toHaveBeenCalledWith({ proposalGameId: 'pg-1', userId: USER_ID });
+      expect(mockGameVotes.findBy).toHaveBeenCalledWith({ proposalGameId: 'pg-1' });
     });
 
     it('orders proposed games by vote count, then by name', async () => {
@@ -160,11 +168,10 @@ describe('SchedulingService', () => {
         { id: 2, name: 'Azul' },
         { id: 3, name: 'Brass' },
       ]);
-      mockGameVotes.countBy
-        .mockResolvedValueOnce(1)
-        .mockResolvedValueOnce(3)
-        .mockResolvedValueOnce(3);
-      mockGameVotes.existsBy.mockResolvedValue(false);
+      mockGameVotes.findBy
+        .mockResolvedValueOnce([{ userId: 'user-2', value: 1 }])
+        .mockResolvedValueOnce([{ userId: 'user-2', value: 1 }, { userId: 'user-3', value: 1 }, { userId: 'user-4', value: 1 }])
+        .mockResolvedValueOnce([{ userId: 'user-2', value: 1 }, { userId: 'user-3', value: 1 }, { userId: 'user-4', value: 1 }]);
 
       const result = await service.listProposalGames(PROPOSAL_ID, USER_ID);
 
@@ -175,6 +182,41 @@ describe('SchedulingService', () => {
   const baseProposal = (): PlaySessionProposal => ({
     id: PROPOSAL_ID, groupId: GROUP_ID, createdBy: USER_ID, proposedDate: '2026-08-30',
     hostId: null, status: 'collecting', confirmedStart: null, confirmedEnd: null, createdAt: new Date(),
+  });
+
+  describe('proposal game voting and removal', () => {
+    const proposalGame = {
+      id: 'pg-1', proposalId: PROPOSAL_ID, gameId: 42, proposedBy: USER_ID, createdAt: new Date(),
+    };
+
+    it('stores a downvote and can replace an existing upvote', async () => {
+      mockProposalGames.findOneBy.mockResolvedValue(proposalGame);
+      mockProposals.findOneBy.mockResolvedValue(baseProposal());
+      mockGameVotes.findOneBy.mockResolvedValue({ proposalGameId: 'pg-1', userId: USER_ID, value: 1 });
+
+      await service.voteForGame(PROPOSAL_ID, 'pg-1', USER_ID, -1);
+
+      expect(mockGameVotes.save).toHaveBeenCalledWith(expect.objectContaining({ value: -1 }));
+    });
+
+    it('lets only the suggester remove a proposed game', async () => {
+      mockProposalGames.findOneBy.mockResolvedValue(proposalGame);
+      mockProposals.findOneBy.mockResolvedValue(baseProposal());
+
+      await service.removeProposalGame(PROPOSAL_ID, 'pg-1', USER_ID);
+      expect(mockProposalGames.remove).toHaveBeenCalledWith(proposalGame);
+
+      await expect(service.removeProposalGame(PROPOSAL_ID, 'pg-1', 'user-2'))
+        .rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('rejects voting after collection closes', async () => {
+      mockProposalGames.findOneBy.mockResolvedValue(proposalGame);
+      mockProposals.findOneBy.mockResolvedValue({ ...baseProposal(), status: 'confirming' });
+
+      await expect(service.voteForGame(PROPOSAL_ID, 'pg-1', USER_ID, 1))
+        .rejects.toBeInstanceOf(ConflictException);
+    });
   });
 
   describe('places', () => {

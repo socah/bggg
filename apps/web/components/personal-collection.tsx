@@ -22,13 +22,6 @@ type LibraryTab = 'collection' | 'wishlist' | 'saved' | `list:${string}`;
 type ViewMode = 'compact' | 'list';
 type SortMode = 'priority' | 'source' | 'position' | 'name' | 'rating' | 'players' | 'time' | 'year' | 'added';
 
-interface ImportSummary {
-  added: number;
-  removed: number;
-  total: number;
-  wishlist: { added: number; removed: number; total: number };
-}
-
 const WISHLIST_PRIORITIES: Record<number, string> = {
   1: 'Must have',
   2: 'Love to have',
@@ -52,6 +45,7 @@ const RATING_SCALE: Record<number, string> = {
 
 const WEIGHT_SCALE = ['Light', 'Medium Light', 'Medium', 'Medium Heavy', 'Heavy'];
 const selectClass = 'min-h-10 rounded-sm border-[length:var(--border-w)] border-border bg-surface-raised px-2 text-sm text-text';
+const SORT_LABELS: Record<SortMode, string> = { priority: 'Wishlist priority', source: 'Source', position: 'Position', name: 'Name', rating: 'BGG rating', players: 'Minimum players', time: 'Playing time', year: 'Year published', added: 'Recently added' };
 
 async function responseError(response: Response): Promise<string> {
   try {
@@ -98,6 +92,7 @@ export function LibraryGame({
           <div className="min-w-0 flex-1">
             <h3 className="truncate font-display text-lg">{game.name}</h3>
             <div className="mt-2"><GameMeta game={game} /></div>
+            {game.owners && game.owners.length > 0 && <p className="mt-2 text-xs text-text-muted">Owned by {game.owners.map((owner) => owner.displayName || owner.username).join(', ')}</p>}
             {note && <div className="mt-2 text-xs text-text-muted">{note}</div>}
           </div>
         </button>
@@ -116,6 +111,7 @@ export function LibraryGame({
         <div className="flex flex-1 flex-col gap-2 p-3">
           <h3 className="line-clamp-2 font-display text-base leading-tight">{game.name}</h3>
           <GameMeta game={game} />
+          {game.owners && game.owners.length > 0 && <p className="text-xs text-text-muted">Owned by {game.owners.map((owner) => owner.displayName || owner.username).join(', ')}</p>}
           {note && <div className="mt-auto pt-1 text-xs text-text-muted">{note}</div>}
         </div>
       </button>
@@ -255,6 +251,12 @@ export function GameDetailsSheet({
         {!details && !error && <p className="py-12 text-center text-sm text-text-muted">Loading reviews and plays...</p>}
         {details && (
           <div className="mt-6 flex flex-col gap-7">
+            {game?.owners && game.owners.length > 0 && (
+              <section>
+                <h3 className="font-display text-lg">Owned by</h3>
+                <p className="mt-2 text-sm">{game.owners.map((owner) => owner.displayName || owner.username).join(', ')}</p>
+              </section>
+            )}
             <section>
               <h3 className="font-display text-lg">Your review</h3>
               {imported ? (
@@ -334,7 +336,7 @@ export function GameDetailsSheet({
                   {containingLists.map((list) => (
                     <div key={list.id} className="flex min-h-11 items-center justify-between gap-2 py-2">
                       <p className="text-sm font-semibold">{list.name}{list.type === 'tier' && <span className="ml-1 font-normal text-text-muted">· Tier list</span>}</p>
-                      <Button type="button" variant="secondary" className="min-h-9 px-3" disabled={busy} onClick={() => void onMutate(`/bgg-account/lists/${list.id}/games/${game.id}`, { method: 'DELETE' }, `Removed ${game.name} from ${list.name}.`)}>Remove</Button>
+                      <Button type="button" variant="secondary" className="min-h-9 px-3" disabled={busy} onClick={() => void onMutate(`/bgg-account/lists/${list.id}/games/${game.id}`, { method: 'DELETE' }, '')}>Remove</Button>
                     </div>
                   ))}
                   {!collectionGame && !wishlistGame && !savedGame && containingLists.length === 0 && <p className="py-2 text-sm text-text-muted">Not included in a list yet.</p>}
@@ -430,7 +432,6 @@ export function PersonalCollection() {
   const [newListName, setNewListName] = useState('');
   const [newListType, setNewListType] = useState<'custom' | 'tier'>('custom');
   const [tierLabels, setTierLabels] = useState('S, A, B, C, D');
-  const [existingGame, setExistingGame] = useState('');
   const [createListOpen, setCreateListOpen] = useState(false);
   const [newTierLabel, setNewTierLabel] = useState('');
   const [tierInsertAfter, setTierInsertAfter] = useState('');
@@ -462,6 +463,26 @@ export function PersonalCollection() {
       setMessage(reason instanceof Error ? reason.message : 'Unable to load your games');
       setLinked(false);
     });
+  }, []);
+
+  useEffect(() => {
+    async function synced(event: Event) {
+      setMessage((event as CustomEvent<string>).detail);
+      try {
+        await loadGames();
+      } catch (reason) {
+        setMessage(reason instanceof Error ? reason.message : 'Synced BGG, but could not refresh your games');
+      }
+    }
+    function failed(event: Event) {
+      setMessage((event as CustomEvent<string>).detail);
+    }
+    window.addEventListener('bgg-collection-synced', synced);
+    window.addEventListener('bgg-collection-sync-failed', failed);
+    return () => {
+      window.removeEventListener('bgg-collection-synced', synced);
+      window.removeEventListener('bgg-collection-sync-failed', failed);
+    };
   }, []);
 
   useEffect(() => {
@@ -509,27 +530,11 @@ export function PersonalCollection() {
       const response = await apiFetch(path, init);
       if (!response.ok) throw new Error(await responseError(response));
       await loadGames();
-      setMessage(success);
+      setMessage(success || null);
       return true;
     } catch (reason: unknown) {
       setMessage(reason instanceof Error ? reason.message : 'Unable to update your games');
       return false;
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function importCollection() {
-    setBusy(true);
-    setMessage(null);
-    try {
-      const response = await apiFetch('/bgg-account/import', { method: 'POST' });
-      if (!response.ok) throw new Error(await responseError(response));
-      const summary = (await response.json()) as ImportSummary;
-      await loadGames();
-      setMessage(`Synced ${summary.total} owned and ${summary.wishlist.total} wishlist games, ratings, and comments from BGG.`);
-    } catch (reason: unknown) {
-      setMessage(reason instanceof Error ? reason.message : 'Unable to import from BGG');
     } finally {
       setBusy(false);
     }
@@ -567,7 +572,6 @@ export function PersonalCollection() {
     const matchesPlayers = !count || (game.minPlayers <= count && game.maxPlayers >= count);
     return matchesName && matchesPlayers;
   }), activeList?.type === 'tier' ? 'position' : effectiveSort);
-  const availableGames = [...collection, ...wishlist, ...saved].filter((game, index, all) => all.findIndex((candidate) => candidate.id === game.id) === index && !activeList?.items.some((item) => item.id === game.id));
 
   function listActions(game: PersonalListGame) {
     if (!activeList) return null;
@@ -580,7 +584,7 @@ export function PersonalCollection() {
             <option value="">Unranked</option>{activeList.tiers.map((tier) => <option key={tier}>{tier}</option>)}
           </select>
         )}
-        <Button type="button" variant="secondary" className="min-h-9 px-2" disabled={busy} onClick={() => void mutate(`/bgg-account/lists/${activeList.id}/games/${game.id}`, { method: 'DELETE' }, `Removed ${game.name} from ${activeList.name}.`)}>Remove</Button>
+        <Button type="button" variant="secondary" className="min-h-9 px-2" disabled={busy} onClick={() => void mutate(`/bgg-account/lists/${activeList.id}/games/${game.id}`, { method: 'DELETE' }, '')}>Remove</Button>
       </>
     );
   }
@@ -632,14 +636,6 @@ export function PersonalCollection() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="font-display text-2xl">My games</h2>
-          <p className="text-sm text-text-muted">{collection.length} owned · {wishlist.length} wishlist · {saved.length} saved · {lists.length} custom lists</p>
-        </div>
-        {linked ? <Button type="button" onClick={importCollection} disabled={busy}>{busy ? 'Syncing...' : 'Sync BGG'}</Button> : <p className="text-sm text-text-muted">Link BGG in Settings to enable sync.</p>}
-      </div>
-
       <div ref={searchContainerRef} className="relative z-20">
       <Card className="overflow-visible p-4">
         <div className="relative">
@@ -684,6 +680,7 @@ export function PersonalCollection() {
           </TabsList>
         </Tabs>
         <button type="button" onClick={() => setCreateListOpen(true)} className="mx-2 flex size-9 shrink-0 items-center justify-center rounded-sm border-[length:var(--border-w)] border-border text-xl font-semibold text-accent-2" aria-label="Create a game list">+</button>
+        {activeList && <Button type="button" variant="secondary" className="ml-auto min-h-9 shrink-0 px-3" disabled={busy} onClick={() => { if (window.confirm(`Delete ${activeList.name}?`)) void mutate(`/bgg-account/lists/${activeList.id}`, { method: 'DELETE' }, `Deleted ${activeList.name}.`).then((deleted) => { if (deleted) setTab('collection'); }); }}>Delete list</Button>}
       </div>
 
       <Dialog open={createListOpen} onOpenChange={setCreateListOpen}>
@@ -701,15 +698,16 @@ export function PersonalCollection() {
       <Card className="p-4">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Filter by title" aria-label="Filter by title" />
-          <label className="flex flex-col gap-1 text-xs font-semibold text-text-muted">Player count
-            <span className="flex">
+          <label className="flex flex-col gap-1 text-xs font-semibold text-text-muted">
+            <span className="flex" aria-label="Player count">
               <button type="button" onClick={() => changePlayerCount(-1)} className="min-h-10 w-10 rounded-l-sm border-[length:var(--border-w)] border-border text-lg" aria-label="Decrease player count">-</button>
-              <Input type="number" min="1" value={playerCount} onChange={(event) => setPlayerCount(event.target.value)} placeholder="Any" className="min-w-0 rounded-none text-center" />
+              <Input type="text" inputMode="numeric" value={playerCount ? `Player count: ${playerCount}` : 'Player count: Any'} onChange={(event) => setPlayerCount(event.target.value.replace(/\D/g, ''))} aria-label="Player count value" className="min-w-0 rounded-none text-center" />
               <button type="button" onClick={() => changePlayerCount(1)} className="min-h-10 w-10 rounded-r-sm border-[length:var(--border-w)] border-border text-lg" aria-label="Increase player count">+</button>
             </span>
           </label>
-          <label className="flex flex-col gap-1 text-xs font-semibold text-text-muted">Sort by
-            <select value={effectiveSort} onChange={(event) => setSort(event.target.value as SortMode)} className={selectClass}>
+          <label className="flex flex-col gap-1 text-xs font-semibold text-text-muted">
+            <select aria-label="Sort by" value={`display:${effectiveSort}`} onChange={(event) => setSort(event.target.value as SortMode)} className={selectClass}>
+              <option value={`display:${effectiveSort}`} hidden>Sort by: {SORT_LABELS[effectiveSort]}</option>
               {tab === 'wishlist' && <option value="priority">Wishlist priority</option>}{hasMixedSources && <option value="source">Source</option>}<option value="name">Name</option><option value="rating">BGG rating</option><option value="players">Minimum players</option><option value="time">Playing time</option><option value="year">Year published</option><option value="added">Recently added</option>
             </select>
           </label>
@@ -720,24 +718,13 @@ export function PersonalCollection() {
         </div>
       </Card>
 
-      {activeList && (
+      {activeList?.type === 'tier' && (
         <Card className="p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div><h3 className="font-display text-xl">{activeList.name}</h3><p className="text-xs text-text-muted">{activeList.type === 'tier' ? `Tiers: ${activeList.tiers.join(', ')}` : 'Custom game list'}</p></div>
-            <Button type="button" variant="secondary" disabled={busy} onClick={() => { if (window.confirm(`Delete ${activeList.name}?`)) void mutate(`/bgg-account/lists/${activeList.id}`, { method: 'DELETE' }, `Deleted ${activeList.name}.`).then((deleted) => { if (deleted) setTab('collection'); }); }}>Delete list</Button>
-          </div>
-          <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-            <select value={existingGame} onChange={(event) => setExistingGame(event.target.value)} className={`flex-1 ${selectClass}`}><option value="">Choose from Collection, Wishlist, or Saved</option>{availableGames.map((game) => <option key={game.id} value={game.bggId}>{game.name}</option>)}</select>
-            <Button type="button" disabled={busy || !existingGame} onClick={() => { void mutate(`/bgg-account/lists/${activeList.id}/games`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bggId: Number(existingGame) }) }, `Added to ${activeList.name}.`); setExistingGame(''); }}>Add game</Button>
-          </div>
-          <p className="mt-2 text-xs text-text-muted">To add a game outside Collection, Wishlist, or Saved, search BGG above while this tab is selected.</p>
-          {activeList.type === 'tier' && (
-            <form onSubmit={addTier} className="mt-4 flex flex-col gap-2 border-t border-border pt-4 sm:flex-row">
-              <Input required maxLength={50} value={newTierLabel} onChange={(event) => setNewTierLabel(event.target.value)} placeholder="New tier label" />
-              <select value={tierInsertAfter} onChange={(event) => setTierInsertAfter(event.target.value)} className={selectClass}><option value="">Insert at top</option>{activeList.tiers.map((tier) => <option key={tier} value={tier}>Insert after {tier}</option>)}</select>
-              <Button type="submit" variant="secondary" disabled={busy || !newTierLabel.trim()}>Add tier</Button>
-            </form>
-          )}
+          <form onSubmit={addTier} className="flex flex-col gap-2 sm:flex-row">
+            <Input required maxLength={50} value={newTierLabel} onChange={(event) => setNewTierLabel(event.target.value)} placeholder="New tier label" />
+            <select value={tierInsertAfter} onChange={(event) => setTierInsertAfter(event.target.value)} className={selectClass}><option value="">Insert at top</option>{activeList.tiers.map((tier) => <option key={tier} value={tier}>Insert after {tier}</option>)}</select>
+            <Button type="submit" variant="secondary" disabled={busy || !newTierLabel.trim()}>Add tier</Button>
+          </form>
         </Card>
       )}
 

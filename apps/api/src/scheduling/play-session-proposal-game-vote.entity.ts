@@ -1,4 +1,4 @@
-import { Entity, PrimaryColumn } from 'typeorm';
+import { Check, Column, Entity, PrimaryColumn } from 'typeorm';
 
 // @Entity('play_session_proposal_game_votes') — one row per (proposed game,
 // user) upvote. Deliberately its own table rather than an upvote_count
@@ -12,10 +12,14 @@ import { Entity, PrimaryColumn } from 'typeorm';
 // surrogate id would just be redundant bookkeeping, same reasoning as
 // Invite.tokenHash being a bare @PrimaryColumn rather than an extra id.
 @Entity('play_session_proposal_game_votes')
+@Check('play_session_proposal_game_votes_value_check', '"value" IN (-1, 1)')
 export class PlaySessionProposalGameVote {
   @PrimaryColumn({ name: 'proposal_game_id', type: 'uuid', primaryKeyConstraintName: 'play_session_proposal_game_votes_pkey' })
   proposalGameId!: string;
 
   @PrimaryColumn({ name: 'user_id', type: 'text', primaryKeyConstraintName: 'play_session_proposal_game_votes_pkey' })
   userId!: string;
+
+  @Column({ type: 'smallint', default: 1 })
+  value!: -1 | 1;
 }

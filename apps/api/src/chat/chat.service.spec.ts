@@ -23,10 +23,16 @@ describe('ChatService', () => {
     find: jest.fn(),
     createQueryBuilder: jest.fn(),
     update: jest.fn(),
+    remove: jest.fn(),
   };
   const proposalRepository = {
     findBy: jest.fn(),
     findOneBy: jest.fn(),
+  };
+  const dismissalRepository = {
+    findBy: jest.fn().mockResolvedValue([]),
+    delete: jest.fn(),
+    upsert: jest.fn(),
   };
   const groupsService = {
     findOne: jest.fn(),
@@ -46,6 +52,7 @@ describe('ChatService', () => {
     service = new ChatService(
       messageRepository as never,
       threadRepository as never,
+      dismissalRepository as never,
       proposalRepository as never,
       groupsService as never,
     );
@@ -151,5 +158,27 @@ describe('ChatService', () => {
 
     await expect(service.getOrCreateProposalThread('group-1', 'proposal-1', 'user-a'))
       .rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('lets a participant dismiss a direct chat from their own list', async () => {
+    const thread = { id: 'thread-1', kind: 'direct', directUserA: 'user-a', directUserB: 'deleted-user' };
+    threadRepository.findOneBy.mockResolvedValue(thread);
+
+    await service.removeDirectThread('thread-1', 'user-a');
+
+    expect(threadRepository.findOneBy).toHaveBeenCalledWith({ id: 'thread-1', kind: 'direct' });
+    expect(dismissalRepository.upsert).toHaveBeenCalledWith(
+      { threadId: 'thread-1', userId: 'user-a' },
+      ['threadId', 'userId'],
+    );
+  });
+
+  it('does not let a non-participant remove a direct chat', async () => {
+    threadRepository.findOneBy.mockResolvedValue({
+      id: 'thread-1', kind: 'direct', directUserA: 'user-a', directUserB: 'deleted-user',
+    });
+
+    await expect(service.removeDirectThread('thread-1', 'user-c')).rejects.toBeInstanceOf(ForbiddenException);
+    expect(dismissalRepository.upsert).not.toHaveBeenCalled();
   });
 });

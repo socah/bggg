@@ -114,20 +114,42 @@ export class ProposalsController {
   @Post(':id/games/:proposalGameId/votes')
   @HttpCode(204)
   voteForGame(
+    @Param('id', ParseUUIDPipe) id: string,
     @Param('proposalGameId', ParseUUIDPipe) proposalGameId: string,
     @Request() req: AuthenticatedRequest,
   ) {
-    return this.schedulingService.voteForGame(proposalGameId, req.user.sub);
+    return this.schedulingService.voteForGame(id, proposalGameId, req.user.sub, 1);
+  }
+
+  @Post(':id/games/:proposalGameId/downvotes')
+  @HttpCode(204)
+  downvoteGame(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('proposalGameId', ParseUUIDPipe) proposalGameId: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.schedulingService.voteForGame(id, proposalGameId, req.user.sub, -1);
   }
 
   // DELETE /proposals/:id/games/:proposalGameId/votes → 204, idempotent.
   @Delete(':id/games/:proposalGameId/votes')
   @HttpCode(204)
   unvoteForGame(
+    @Param('id', ParseUUIDPipe) id: string,
     @Param('proposalGameId', ParseUUIDPipe) proposalGameId: string,
     @Request() req: AuthenticatedRequest,
   ) {
-    return this.schedulingService.unvoteForGame(proposalGameId, req.user.sub);
+    return this.schedulingService.unvoteForGame(id, proposalGameId, req.user.sub);
+  }
+
+  @Delete(':id/games/:proposalGameId')
+  @HttpCode(204)
+  removeGame(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('proposalGameId', ParseUUIDPipe) proposalGameId: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.schedulingService.removeProposalGame(id, proposalGameId, req.user.sub);
   }
 
   @Get(':id/places')

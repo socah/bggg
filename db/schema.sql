@@ -310,14 +310,12 @@ CREATE TABLE IF NOT EXISTS play_session_proposal_games (
 );
 
 -- ── PLAY SESSION PROPOSAL GAME VOTES ──────────────────────────────────────
--- One row per (proposed game, user) upvote. Deliberately a separate table
--- rather than an upvote_count column on play_session_proposal_games
--- (Decision E) — the PRIMARY KEY is what prevents the same user upvoting
--- the same game twice; the count itself is derived with COUNT(*), never
--- stored, so there is nothing to keep in sync.
+-- One signed vote per (proposed game, user). The score is derived by summing
+-- these rows, while the PRIMARY KEY prevents duplicate votes.
 CREATE TABLE IF NOT EXISTS play_session_proposal_game_votes (
   proposal_game_id  UUID  NOT NULL REFERENCES play_session_proposal_games(id) ON DELETE CASCADE,
   user_id           TEXT  NOT NULL,
+  value              SMALLINT NOT NULL DEFAULT 1 CHECK (value IN (-1, 1)),
 
   PRIMARY KEY (proposal_game_id, user_id)
 );
@@ -569,6 +567,12 @@ CREATE TABLE IF NOT EXISTS messages (
   sender_id  TEXT        NOT NULL,
   body       TEXT        NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS chat_thread_dismissals (
+  thread_id UUID NOT NULL REFERENCES chat_threads(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL,
+  PRIMARY KEY (thread_id, user_id)
 );
 
 CREATE INDEX IF NOT EXISTS messages_thread_history_idx ON messages(thread_id, created_at DESC, id DESC);

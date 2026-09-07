@@ -1,9 +1,11 @@
 import {
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
   Post,
+  HttpCode,
   Request,
   UseGuards,
 } from '@nestjs/common';
@@ -50,5 +52,14 @@ export class DirectChatsController {
   @Post('direct/:userId')
   direct(@Param('userId') userId: string, @Request() request: AuthenticatedRequest) {
     return this.chatService.getOrCreateDirectThread(request.user.sub, userId);
+  }
+
+  @Delete(':threadId')
+  @HttpCode(204)
+  remove(
+    @Param('threadId', ParseUUIDPipe) threadId: string,
+    @Request() request: AuthenticatedRequest,
+  ) {
+    return this.chatService.removeDirectThread(threadId, request.user.sub);
   }
 }

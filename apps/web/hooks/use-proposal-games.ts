@@ -13,6 +13,8 @@ interface UseProposalGamesResult {
   proposeGame: (gameId: number) => Promise<void>;
   vote: (proposalGameId: string) => Promise<void>;
   unvote: (proposalGameId: string) => Promise<void>;
+  downvote: (proposalGameId: string) => Promise<void>;
+  removeSuggestion: (proposalGameId: string) => Promise<void>;
   reload: () => void;
 }
 
@@ -84,6 +86,14 @@ export function useProposalGames(proposalId: string | null, onChanged?: () => vo
     (pgId: string) => run(`unvote:${pgId}`, () => apiMutate(`/proposals/${proposalId}/games/${pgId}/votes`, 'DELETE')),
     [run, proposalId],
   );
+  const downvote = useCallback(
+    (pgId: string) => run(`downvote:${pgId}`, () => apiMutate(`/proposals/${proposalId}/games/${pgId}/downvotes`, 'POST')),
+    [run, proposalId],
+  );
+  const removeSuggestion = useCallback(
+    (pgId: string) => run(`remove:${pgId}`, () => apiMutate(`/proposals/${proposalId}/games/${pgId}`, 'DELETE')),
+    [run, proposalId],
+  );
 
   return {
     rows,
@@ -94,6 +104,8 @@ export function useProposalGames(proposalId: string | null, onChanged?: () => vo
     proposeGame,
     vote,
     unvote,
+    downvote,
+    removeSuggestion,
     reload: () => setRefreshKey((k) => k + 1),
   };
 }

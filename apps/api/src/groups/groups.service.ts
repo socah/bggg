@@ -78,20 +78,26 @@ export class GroupsService {
   async getMembers(
     id: string,
     requestingUserId: string,
-  ): Promise<Array<Pick<KeycloakUserInfo, 'id' | 'username' | 'displayName'> & { role: string; isCurrentUser: boolean }>> {
+  ): Promise<Array<Pick<KeycloakUserInfo, 'id' | 'username' | 'displayName'> & { role: string; isCurrentUser: boolean; firstName?: string; bggUsername?: string }>> {
     await this.findOne(id, requestingUserId);
 
     const memberships = await this.members.findBy({ groupId: id });
     return Promise.all(
       memberships.map(async (m) => {
-        const person = await this.keycloakAdmin.getUser(m.userId).catch(() => ({
+        const [person, account] = await Promise.all([
+          this.keycloakAdmin.getUser(m.userId).catch(() => ({
           username: 'unknown-member',
           displayName: 'Unknown member',
-        }));
+            firstName: '',
+          })),
+          this.collectionsService.getAccount(m.userId),
+        ]);
         return {
           id: m.userId,
           username: person.username,
           displayName: person.displayName,
+          ...(person.firstName && { firstName: person.firstName }),
+          ...(account?.bggUsername && { bggUsername: account.bggUsername }),
           role: m.role,
           isCurrentUser: m.userId === requestingUserId,
         };
@@ -124,14 +130,17 @@ export class GroupsService {
     await this.findOne(id, requestingUserId);
     const membership = await this.members.findOneBy({ groupId: id, userId });
     if (!membership) throw new NotFoundException('Group member not found');
-    const [person, library] = await Promise.all([
+    const [person, account, library] = await Promise.all([
       this.keycloakAdmin.getUser(userId),
+      this.collectionsService.getAccount(userId),
       this.collectionsService.getLibrarySnapshot(userId),
     ]);
     return {
       id: userId,
       username: person.username,
       displayName: person.displayName,
+      ...(person.firstName && { firstName: person.firstName }),
+      ...(account?.bggUsername && { bggUsername: account.bggUsername }),
       role: membership.role,
       isCurrentUser: userId === requestingUserId,
       ...library,
@@ -145,7 +154,7 @@ export class GroupsService {
   async getLibrary(
     id: string,
     requestingUserId: string,
-  ): Promise<Array<Pick<Game, 'id' | 'bggId' | 'name' | 'image' | 'thumbnail' | 'minPlayers' | 'maxPlayers' | 'playingTime' | 'yearPublished' | 'rating'>>> {
+  ): Promise<Array<Pick<Game, 'id' | 'bggId' | 'name' | 'image' | 'thumbnail' | 'minPlayers' | 'maxPlayers' | 'playingTime' | 'yearPublished' | 'rating'> & { owners: Array<Pick<KeycloakUserInfo, 'id' | 'username' | 'displayName'>> }>> {
     await this.findOne(id, requestingUserId);
 
     const memberships = await this.members.findBy({ groupId: id });
@@ -166,6 +175,16 @@ export class GroupsService {
       order: { name: 'ASC' },
     });
 
+    const people = await Promise.all(memberships.map(async (membership) => {
+      const person = await this.keycloakAdmin.getUser(membership.userId).catch(() => ({
+        id: membership.userId,
+        username: 'unknown-member',
+        displayName: 'Unknown member',
+      }));
+      return { id: membership.userId, username: person.username, displayName: person.displayName };
+    }));
+    const personById = new Map(people.map((person) => [person.id, person]));
+
     return games.map((g) => ({
       id: g.id,
       bggId: g.bggId,
@@ -177,6 +196,10 @@ export class GroupsService {
       playingTime: g.playingTime,
       yearPublished: g.yearPublished,
       rating: g.rating,
+      owners: ownerships
+        .filter((row) => row.gameId === g.id)
+        .map((row) => personById.get(row.userId))
+        .filter((owner): owner is Pick<KeycloakUserInfo, 'id' | 'username' | 'displayName'> => Boolean(owner)),
     }));
   }
 

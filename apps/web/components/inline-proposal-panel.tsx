@@ -13,13 +13,14 @@ import { ProposalStatusBadge } from '@/components/proposal-status-badge';
 import { ProposalRsvpSection } from '@/components/proposal-rsvp-section';
 import { UserIdentityLink } from '@/components/user-identity-link';
 import { ProposalChat } from '@/components/proposal-chat';
+import { GameDetailsSheet } from '@/components/personal-collection';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogSheetContent, DialogClose, DialogTitle } from '@/components/ui/dialog';
 import { TimePickerDialog } from '@/components/ui/time-picker-dialog';
 import { apiMutate } from '@/lib/api';
 import { formatWindowRange } from '@/lib/datetime';
-import type { Group, GroupLibraryGame, GroupMemberInfo, Proposal } from '@/lib/types';
+import type { GameCardGame, Group, GroupLibraryGame, GroupMemberInfo, Proposal } from '@/lib/types';
 
 function MemberName({
   userId,
@@ -97,6 +98,7 @@ export function InlineProposalPanel({
   const [placeFilter, setPlaceFilter] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [selectedGame, setSelectedGame] = useState<GameCardGame | null>(null);
 
   const effectiveGroupId = isDraft
     ? (defaultGroupId || selectedGroupId || groups[0]?.id || '')
@@ -253,6 +255,8 @@ export function InlineProposalPanel({
         </p>
       )}
 
+      <div className={!isDraft && detail ? 'grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]' : undefined}>
+      <div className="min-w-0">
       {/* 2. RSVP Section */}
       {isDraft ? (
         <div className="space-y-3">
@@ -393,11 +397,14 @@ export function InlineProposalPanel({
           ) : (
             <ul className="mt-2 flex flex-col gap-1">
               {draftGames.map((game) => (
-                <li key={game.id} className="flex items-center justify-between text-xs">
-                  <span>
-                    {game.name}{' '}
-                    <span className="text-text-muted">({game.minPlayers}–{game.maxPlayers} players)</span>
-                  </span>
+                <li key={game.id} className="flex items-center justify-between gap-3 text-xs">
+                  <button type="button" onClick={() => setSelectedGame(game)} className="flex min-w-0 items-center gap-2 text-left">
+                    {game.thumbnail || game.image ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={game.thumbnail || game.image || ''} alt="" className="size-10 shrink-0 rounded-sm object-cover" />
+                    ) : <span className="size-10 shrink-0 rounded-sm bg-surface" />}
+                    <span>{game.name} <span className="text-text-muted">({game.minPlayers}–{game.maxPlayers} players)</span></span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => setDraftGames((prev) => prev.filter((g) => g.id !== game.id))}
@@ -413,7 +420,7 @@ export function InlineProposalPanel({
           detail && (
             <ul className="mt-2 flex flex-col gap-1">
               {existingGames.loading && <p className="text-text-muted">Loading games…</p>}
-              {existingGames.rows.map(({ proposalGameId, game, voteCount, votedByMe }) => (
+              {existingGames.rows.map(({ proposalGameId, game, voteCount, votedByMe, downvotedByMe, proposedByMe }) => (
                 <li
                   key={proposalGameId}
                   ref={(element) => {
@@ -423,16 +430,11 @@ export function InlineProposalPanel({
                   className="flex items-center gap-3 rounded-sm border border-border bg-surface px-3 py-2 text-sm"
                 >
                   {detail.proposal.status === 'collecting' && (
-                    <button
-                      type="button"
-                      aria-label={votedByMe ? 'Remove your vote' : 'Vote for this game'}
-                      className={`inline-flex min-w-12 items-center justify-center gap-1 rounded-full border px-2 py-1 font-semibold transition-colors ${votedByMe ? 'border-accent bg-accent text-accent-ink' : 'border-border-strong bg-surface-raised text-text hover:border-accent'}`}
-                      disabled={existingGames.pendingAction !== null}
-                      onClick={() => void (votedByMe ? existingGames.unvote(proposalGameId) : existingGames.vote(proposalGameId))}
-                    >
-                      <span aria-hidden="true">▲</span>
-                      <span>{voteCount}</span>
-                    </button>
+                    <div className="flex shrink-0 items-center overflow-hidden rounded-full border border-border-strong">
+                      <button type="button" aria-label={votedByMe ? 'Remove your upvote' : 'Upvote this game'} className={`px-2 py-1 font-semibold ${votedByMe ? 'bg-accent text-accent-ink' : 'bg-surface-raised hover:bg-highlight'}`} disabled={existingGames.pendingAction !== null} onClick={() => void (votedByMe ? existingGames.unvote(proposalGameId) : existingGames.vote(proposalGameId))}>▲</button>
+                      <span className="min-w-8 px-1 text-center font-semibold">{voteCount}</span>
+                      <button type="button" aria-label={downvotedByMe ? 'Remove your downvote' : 'Downvote this game'} className={`px-2 py-1 font-semibold ${downvotedByMe ? 'bg-accent text-accent-ink' : 'bg-surface-raised hover:bg-highlight'}`} disabled={existingGames.pendingAction !== null} onClick={() => void (downvotedByMe ? existingGames.unvote(proposalGameId) : existingGames.downvote(proposalGameId))}>▼</button>
+                    </div>
                   )}
                   {detail.proposal.status !== 'collecting' && (
                     <span className="inline-flex min-w-12 items-center justify-center gap-1 rounded-full bg-highlight px-2 py-1 font-semibold text-text">
@@ -440,12 +442,20 @@ export function InlineProposalPanel({
                       <span>{voteCount}</span>
                     </span>
                   )}
-                  <span className="font-medium">{game.name}</span>
+                  <button type="button" onClick={() => setSelectedGame(game)} className="flex min-w-0 flex-1 items-center gap-3 text-left font-medium">
+                    {game.thumbnail || game.image ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={game.thumbnail || game.image || ''} alt="" className="size-12 shrink-0 rounded-sm object-cover" />
+                    ) : <span className="size-12 shrink-0 rounded-sm bg-surface-raised" />}
+                    <span className="truncate underline-offset-2 hover:underline">{game.name}</span>
+                  </button>
+                  {detail.proposal.status === 'collecting' && proposedByMe && <button type="button" className="ml-auto text-xs text-text-muted underline hover:text-accent" disabled={existingGames.pendingAction !== null} onClick={() => void existingGames.removeSuggestion(proposalGameId)}>Remove</button>}
                 </li>
               ))}
             </ul>
           )
         )}
+        {existingGames.actionError && <p role="alert" className="mt-2 text-xs text-accent">{existingGames.actionError}</p>}
       </div>
 
       {/* 4. Suggested Places Section */}
@@ -527,14 +537,6 @@ export function InlineProposalPanel({
         </div>
       )}
 
-      {!isDraft && detail && (
-        <ProposalChat
-          groupId={detail.proposal.groupId}
-          proposalId={detail.proposal.id}
-          members={members}
-        />
-      )}
-
       {/* 5. Footer Actions */}
       {isDraft ? (
         <div className="border-t border-border pt-3 mt-3">
@@ -555,6 +557,19 @@ export function InlineProposalPanel({
           </div>
         )
       )}
+      </div>
+
+      {!isDraft && detail && (
+        <aside className="min-w-0 lg:border-l lg:border-border lg:pl-4">
+          <ProposalChat
+            groupId={detail.proposal.groupId}
+            proposalId={detail.proposal.id}
+            members={members}
+            openOnDesktop
+          />
+        </aside>
+      )}
+      </div>
 
       {/* Time Picker Dialog (Draft Mode) */}
       <TimePickerDialog
@@ -670,6 +685,7 @@ export function InlineProposalPanel({
           </ul>
         </DialogSheetContent>
       </Dialog>
+      <GameDetailsSheet game={selectedGame} open={Boolean(selectedGame)} onOpenChange={(open) => { if (!open) setSelectedGame(null); }} />
     </div>
   );
 }

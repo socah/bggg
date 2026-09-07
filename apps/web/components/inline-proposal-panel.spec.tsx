@@ -1,8 +1,13 @@
 import { describe, expect, it, jest } from '@jest/globals';
-import { render, screen } from '@testing-library/react';
-import type { ProposalStatus } from '@/lib/types';
+import { fireEvent, render, screen } from '@testing-library/react';
+import type { ProposalGameSummary, ProposalStatus } from '@/lib/types';
 
 let proposalStatus: ProposalStatus = 'collecting';
+let proposalGames: ProposalGameSummary[] = [];
+const vote = jest.fn();
+const unvote = jest.fn();
+const downvote = jest.fn();
+const removeSuggestion = jest.fn();
 
 jest.unstable_mockModule('next-auth/react', () => ({
   useSession: () => ({ data: { user: { id: 'user-1', name: 'Alice', username: 'alice' } } }),
@@ -60,12 +65,20 @@ jest.unstable_mockModule('@/hooks/use-group-library', () => ({
 
 jest.unstable_mockModule('@/hooks/use-proposal-games', () => ({
   useProposalGames: () => ({
-    rows: [],
+    rows: proposalGames,
     loading: false,
     error: null,
     pendingAction: null,
     actionError: null,
+    vote,
+    unvote,
+    downvote,
+    removeSuggestion,
   }),
+}));
+
+jest.unstable_mockModule('@/components/personal-collection', () => ({
+  GameDetailsSheet: ({ game, open }: { game: { name: string } | null; open: boolean }) => open ? <div>Details for {game?.name}</div> : null,
 }));
 
 jest.unstable_mockModule('@/hooks/use-proposal-places', () => ({
@@ -140,5 +153,28 @@ describe('InlineProposalPanel', () => {
     expect(screen.getAllByRole('link', { name: 'alice' })[0].getAttribute('href')).toBe('/groups/group-1/collection/user-1');
     expect(screen.getByText(/— yes/)).toBeTruthy();
     expect(screen.queryByText('Unknown member')).toBeNull();
+  });
+
+  it('shows proposal thumbnails, opens details, supports downvotes, and lets the suggester remove', () => {
+    proposalStatus = 'collecting';
+    proposalGames = [{
+      proposalGameId: 'pg-1',
+      game: { id: 1, bggId: 13, name: 'Catan', image: null, thumbnail: 'https://example.test/catan.jpg', minPlayers: 3, maxPlayers: 4, playingTime: 90, yearPublished: 1995, rating: 7.1 },
+      voteCount: 2,
+      votedByMe: false,
+      downvotedByMe: false,
+      proposedByMe: true,
+    }];
+
+    const { container } = render(<InlineProposalPanel proposalId="proposal-1" groups={[{ id: 'group-1', name: 'Game Night', ownerId: 'user-1', isSolo: false, createdAt: '2026-09-01T12:00:00.000Z' }]} />);
+
+    expect(container.querySelector('img')?.getAttribute('src')).toBe('https://example.test/catan.jpg');
+    fireEvent.click(screen.getByRole('button', { name: 'Downvote this game' }));
+    expect(downvote).toHaveBeenCalledWith('pg-1');
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+    expect(removeSuggestion).toHaveBeenCalledWith('pg-1');
+    fireEvent.click(screen.getByRole('button', { name: 'Catan' }));
+    expect(screen.getByText('Details for Catan')).toBeTruthy();
+    proposalGames = [];
   });
 });

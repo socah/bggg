@@ -61,6 +61,7 @@ describe('GroupsService', () => {
   };
 
   const mockCollectionsService = {
+    getAccount: jest.fn(),
     getLibrarySnapshot: jest.fn(),
   };
 
@@ -106,6 +107,7 @@ describe('GroupsService', () => {
     }).compile();
 
     service = module.get<GroupsService>(GroupsService);
+    mockCollectionsService.getAccount.mockResolvedValue(null);
     mockCollectionsService.getLibrarySnapshot.mockResolvedValue({
       collection: [],
       wishlist: [],
@@ -556,10 +558,15 @@ describe('GroupsService', () => {
         {
           id: 7, bggId: 1007, name: 'Azul', thumbnail: 't-7.jpg', image: '',
           minPlayers: 2, maxPlayers: 4, playingTime: 90, yearPublished: 2015, rating: 7.5,
+          owners: [{ id: 'user-a', username: 'bob', displayName: 'Bob' }],
         },
         {
           id: 42, bggId: 1042, name: 'Gloomhaven', thumbnail: 't-42.jpg', image: '',
           minPlayers: 2, maxPlayers: 4, playingTime: 90, yearPublished: 2015, rating: 7.5,
+          owners: [
+            { id: 'user-a', username: 'bob', displayName: 'Bob' },
+            { id: 'user-b', username: 'bob', displayName: 'Bob' },
+          ],
         },
       ]);
     });

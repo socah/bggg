@@ -127,6 +127,18 @@ export function GroupChatView({ groupId }: { groupId: string | null }) {
     }
   }
 
+  async function removeDirect(threadId: string) {
+    if (!window.confirm('Remove this chat from your chat list?')) return;
+    setError(null);
+    try {
+      await apiMutate(`/chats/${threadId}`, 'DELETE');
+      setDirectThreads((current) => current.filter((thread) => thread.id !== threadId));
+      setSelectedId(null);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Could not remove chat');
+    }
+  }
+
   const locatedThreads: LocatedThread[] = contexts.flatMap((context) =>
     context.threads.map((thread) => ({ context, thread })),
   );
@@ -137,6 +149,10 @@ export function GroupChatView({ groupId }: { groupId: string | null }) {
     contexts.flatMap((context) => context.members).map((member) => [member.id, member]),
   ).values()];
   const currentUserId = contacts.find((member) => member.isCurrentUser)?.id;
+  const directContacts = contacts.filter((member) =>
+    member.username !== 'unknown-member'
+      || directThreads.some((thread) => threadCounterpart(thread, currentUserId) === member.id),
+  );
   const selected = locatedThreads.find(({ thread }) => thread.id === selectedId) ?? null;
   const selectedDirectId = selected?.thread.kind === 'direct'
     ? threadCounterpart(selected.thread, currentUserId)
@@ -202,12 +218,12 @@ export function GroupChatView({ groupId }: { groupId: string | null }) {
               </section>
             );
           })}
-          {!groupId && contacts.length > 0 && (
+          {!groupId && directContacts.length > 0 && (
             <section className="mb-4 last:mb-0">
               <h2 className="mb-1 text-xs font-semibold uppercase tracking-wider text-text-muted">
                 Direct messages
               </h2>
-              {contacts.map((member) => {
+              {directContacts.map((member) => {
                 const existing = directThreads.find(
                   (thread) => threadCounterpart(thread, currentUserId) === member.id,
                 );
@@ -232,12 +248,16 @@ export function GroupChatView({ groupId }: { groupId: string | null }) {
         </nav>
 
         <section className="min-w-0 rounded-md border border-border bg-surface-raised p-4" aria-labelledby="active-chat-title">
-          <div className="mb-3">
-            <h2 id="active-chat-title" className="font-display text-lg">{selectedTitle}</h2>
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <div><h2 id="active-chat-title" className="font-display text-lg">{selectedTitle}</h2>
             {!groupId && selected?.context && (
               <p className="text-xs text-text-muted">
                 {selected.context.group.isSolo ? 'Just Me' : selected.context.group.name}
               </p>
+            )}
+            </div>
+            {selected?.thread.kind === 'direct' && selectedMember?.username === 'unknown-member' && (
+              <button type="button" className="text-xs font-semibold text-accent underline" onClick={() => void removeDirect(selected.thread.id)}>Remove deleted user chat</button>
             )}
           </div>
           {selected ? (

@@ -10,6 +10,7 @@ import type { CollectionGame, GameCardGame, PersonalGameList, PersonalListGame }
 type LibraryTab = 'collection' | 'wishlist' | 'saved' | `list:${string}`;
 type ViewMode = 'compact' | 'list';
 type SortMode = 'name' | 'rating' | 'players' | 'time' | 'year';
+const sortLabels: Record<SortMode, string> = { name: 'Name', rating: 'BGG rating', players: 'Minimum players', time: 'Playing time', year: 'Year published' };
 
 function sortGames(games: Array<CollectionGame | PersonalListGame>, sort: SortMode) {
   return [...games].sort((a, b) => {
@@ -56,6 +57,11 @@ export function CollectionBrowser({
     setSelected(game);
   }
 
+  function changePlayerCount(delta: number) {
+    const next = (Number(playerCount) || 0) + delta;
+    setPlayerCount(next > 0 ? String(next) : '');
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div className="overflow-x-auto border-b border-border">
@@ -72,11 +78,16 @@ export function CollectionBrowser({
       <Card className="p-4">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Filter by title" aria-label="Filter by title" />
-          <label className="flex flex-col gap-1 text-xs font-semibold text-text-muted">Player count
-            <Input type="number" min="1" value={playerCount} onChange={(event) => setPlayerCount(event.target.value)} placeholder="Any" />
+          <label className="flex flex-col gap-1 text-xs font-semibold text-text-muted">
+            <span className="flex" aria-label="Player count">
+              <button type="button" onClick={() => changePlayerCount(-1)} className="min-h-10 w-10 rounded-l-sm border-[length:var(--border-w)] border-border text-lg" aria-label="Decrease player count">-</button>
+              <Input type="text" inputMode="numeric" value={playerCount ? `Player count: ${playerCount}` : 'Player count: Any'} onChange={(event) => setPlayerCount(event.target.value.replace(/\D/g, ''))} aria-label="Player count value" className="min-w-0 rounded-none text-center" />
+              <button type="button" onClick={() => changePlayerCount(1)} className="min-h-10 w-10 rounded-r-sm border-[length:var(--border-w)] border-border text-lg" aria-label="Increase player count">+</button>
+            </span>
           </label>
-          <label className="flex flex-col gap-1 text-xs font-semibold text-text-muted">Sort by
-            <select value={sort} onChange={(event) => setSort(event.target.value as SortMode)} className="min-h-10 rounded-sm border-[length:var(--border-w)] border-border bg-surface-raised px-2 text-sm text-text">
+          <label className="flex flex-col gap-1 text-xs font-semibold text-text-muted">
+            <select aria-label="Sort by" value={`display:${sort}`} onChange={(event) => setSort(event.target.value as SortMode)} className="min-h-10 rounded-sm border-[length:var(--border-w)] border-border bg-surface-raised px-2 text-sm text-text">
+              <option value={`display:${sort}`} hidden>Sort by: {sortLabels[sort]}</option>
               <option value="name">Name</option><option value="rating">BGG rating</option><option value="players">Minimum players</option><option value="time">Playing time</option><option value="year">Year published</option>
             </select>
           </label>

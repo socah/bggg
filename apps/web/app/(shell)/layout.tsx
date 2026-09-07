@@ -4,6 +4,7 @@ import { ShellContextControl } from '@/components/shell-context-control';
 import { ViewTabs } from '@/components/view-tabs';
 import { UserMenu } from '@/components/user-menu';
 import { BottomNav } from '@/components/bottom-nav';
+import { CollectionSyncButton } from '@/components/collection-sync-button';
 
 export default async function ShellLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -24,7 +25,10 @@ export default async function ShellLayout({ children }: { children: React.ReactN
         <div className="hidden md:block">
           <ViewTabs />
         </div>
-        <UserMenu name={name} />
+        <div className="flex items-center gap-2">
+          <CollectionSyncButton />
+          <UserMenu name={name} />
+        </div>
       </header>
       <main className="flex-1 p-4 pb-20 md:pb-4">{children}</main>
       <BottomNav />

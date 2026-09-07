@@ -47,9 +47,11 @@ export interface Rsvp {
 // game.entity.ts has several more that the UI doesn't need yet.
 export interface ProposalGameSummary {
   proposalGameId: string;
-  game: { id: number; name: string };
+  game: GameCardGame;
   voteCount: number;
   votedByMe: boolean;
+  downvotedByMe: boolean;
+  proposedByMe: boolean;
 }
 
 export interface ProposalPlaceSummary {
@@ -88,6 +90,8 @@ export interface PublicUserIdentity {
 export interface GroupMemberInfo extends PublicUserIdentity {
   role: MemberRole;
   isCurrentUser?: boolean;
+  firstName?: string;
+  bggUsername?: string | null;
 }
 
 export interface GroupMemberProfile extends GroupMemberInfo {
@@ -133,6 +137,7 @@ export interface GameCardGame {
   playingTime: number;
   yearPublished: number;
   rating: number;
+  owners?: PublicUserIdentity[];
 }
 
 export interface CollectionGame extends GameCardGame {
@@ -204,4 +209,5 @@ export interface RsvpInput {
 // One row of GET /groups/:groupId/games — the propose-a-game picker's data.
 export interface GroupLibraryGame extends GameCardGame {
   bggId: number;
+  owners?: PublicUserIdentity[];
 }

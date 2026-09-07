@@ -48,6 +48,7 @@ describe('GroupLibrary', () => {
         id: 1, bggId: 174430, name: 'Gloomhaven', thumbnail: 'https://example.test/gloomhaven.jpg',
         image: 'https://example.test/gloomhaven-large.jpg', minPlayers: 1, maxPlayers: 4,
         playingTime: 120, yearPublished: 2017, rating: 8.6,
+        owners: [{ id: 'user-1', username: 'alice', displayName: 'Alice' }],
       }],
       loading: false,
       error: null,
@@ -62,5 +63,27 @@ describe('GroupLibrary', () => {
     expect(screen.getByText('2017')).toBeTruthy();
     expect(screen.getByText('8.6 BGG')).toBeTruthy();
     expect(screen.getByText('120 min')).toBeTruthy();
+    expect(screen.getByText('Owned by Alice')).toBeTruthy();
+  });
+
+  it('filters by title and player count', () => {
+    mockUseGroupLibrary.mockReturnValue({
+      games: [
+        { id: 1, bggId: 1, name: 'Azul', thumbnail: null, image: null, minPlayers: 2, maxPlayers: 4, playingTime: 30, yearPublished: 2017, rating: 7 },
+        { id: 2, bggId: 2, name: 'Cascadia', thumbnail: null, image: null, minPlayers: 1, maxPlayers: 4, playingTime: 45, yearPublished: 2021, rating: 8 },
+      ],
+      loading: false, error: null, reload: jest.fn(),
+    });
+    render(<GroupLibrary groupId="group-1" />);
+
+    fireEvent.change(screen.getByLabelText('Filter by title'), { target: { value: 'az' } });
+    expect(screen.getByRole('heading', { name: 'Azul' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Cascadia' })).toBeNull();
+
+    fireEvent.change(screen.getByLabelText('Filter by title'), { target: { value: '' } });
+    fireEvent.click(screen.getByLabelText('Increase player count'));
+    expect((screen.getByLabelText('Player count value') as HTMLInputElement).value).toBe('Player count: 1');
+    expect(screen.queryByRole('heading', { name: 'Azul' })).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Cascadia' })).toBeTruthy();
   });
 });
