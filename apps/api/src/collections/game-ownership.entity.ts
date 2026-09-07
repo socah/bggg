@@ -28,4 +28,7 @@ export class GameOwnership {
 
   @Column({ name: 'added_at', type: 'date', default: () => 'CURRENT_DATE' })
   addedAt!: Date;
+
+  @Column({ type: 'text', default: 'manual' })
+  source!: 'manual' | 'bgg';
 }

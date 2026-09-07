@@ -8,6 +8,16 @@ import { Game } from '../games/game.entity';
 import { CollectionsService } from './collections.service';
 import { BggAccount } from './bgg-account.entity';
 import { GameOwnership } from './game-ownership.entity';
+import { GameWishlist } from './game-wishlist.entity';
+import { GameSaved } from './game-saved.entity';
+import { Review } from './review.entity';
+import { GroupMember } from '../groups/group-member.entity';
+import { Group } from '../groups/group.entity';
+import { PlaySession } from '../scheduling/play-session.entity';
+import { PlaySessionGame } from '../scheduling/play-session-game.entity';
+import { KeycloakAdminClient } from '../keycloak/keycloak-admin.client';
+import { PersonalList } from './personal-list.entity';
+import { PersonalListItem } from './personal-list-item.entity';
 
 function makeGame(overrides: Partial<Game> = {}): Game {
   return {
@@ -34,6 +44,7 @@ function makeOwnership(overrides: Partial<GameOwnership> = {}): GameOwnership {
     userId: 'user-1',
     gameId: 1,
     addedAt: new Date(),
+    source: 'bgg',
     ...overrides,
   };
 }
@@ -61,6 +72,7 @@ describe('CollectionsService', () => {
 
   const mockOwnershipRepo = {
     findBy: jest.fn(),
+    findOneBy: jest.fn(),
     create: jest.fn(),
     save: jest.fn(),
     delete: jest.fn(),
@@ -71,14 +83,62 @@ describe('CollectionsService', () => {
     },
   };
 
+  const mockWishlistRepo = {
+    findBy: jest.fn(),
+    findOneBy: jest.fn(),
+    create: jest.fn(),
+    save: jest.fn(),
+    delete: jest.fn(),
+  };
+  const mockSavedRepo = {
+    findBy: jest.fn(),
+    findOneBy: jest.fn(),
+    create: jest.fn(),
+    save: jest.fn(),
+    delete: jest.fn(),
+  };
+  const mockReviewsRepo = {
+    findBy: jest.fn(),
+    findOneBy: jest.fn(),
+    create: jest.fn(),
+    save: jest.fn(),
+    delete: jest.fn(),
+    remove: jest.fn(),
+  };
+  const mockListsRepo = {
+    find: jest.fn(),
+    findOneBy: jest.fn(),
+    create: jest.fn(),
+    save: jest.fn(),
+    remove: jest.fn(),
+  };
+  const mockListItemsRepo = {
+    findBy: jest.fn(),
+    findOneBy: jest.fn(),
+    create: jest.fn(),
+    save: jest.fn(),
+    delete: jest.fn(),
+  };
+  const emptyRepo = {
+    findBy: jest.fn(),
+    find: jest.fn(),
+    findOneBy: jest.fn(),
+    create: jest.fn(),
+    save: jest.fn(),
+  };
+
   const mockBggService = {
     getUser: jest.fn(),
     getCollection: jest.fn(),
+    getWishlist: jest.fn(),
+    searchGames: jest.fn(),
   };
 
   const mockGamesService = {
     findOrFetchMany: jest.fn(),
+    findCachedByBggIds: jest.fn(),
     findByIds: jest.fn(),
+    findOrFetch: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -87,12 +147,26 @@ describe('CollectionsService', () => {
         CollectionsService,
         { provide: getRepositoryToken(BggAccount), useValue: mockAccountsRepo },
         { provide: getRepositoryToken(GameOwnership), useValue: mockOwnershipRepo },
+        { provide: getRepositoryToken(GameWishlist), useValue: mockWishlistRepo },
+        { provide: getRepositoryToken(GameSaved), useValue: mockSavedRepo },
+        { provide: getRepositoryToken(Review), useValue: mockReviewsRepo },
+        { provide: getRepositoryToken(PersonalList), useValue: mockListsRepo },
+        { provide: getRepositoryToken(PersonalListItem), useValue: mockListItemsRepo },
+        { provide: getRepositoryToken(GroupMember), useValue: emptyRepo },
+        { provide: getRepositoryToken(Group), useValue: emptyRepo },
+        { provide: getRepositoryToken(PlaySession), useValue: emptyRepo },
+        { provide: getRepositoryToken(PlaySessionGame), useValue: emptyRepo },
         { provide: BggService, useValue: mockBggService },
         { provide: GamesService, useValue: mockGamesService },
+        { provide: KeycloakAdminClient, useValue: { getUser: jest.fn() } },
       ],
     }).compile();
 
     service = module.get<CollectionsService>(CollectionsService);
+    mockBggService.getWishlist.mockResolvedValue([]);
+    mockWishlistRepo.findBy.mockResolvedValue([]);
+    mockSavedRepo.findBy.mockResolvedValue([]);
+    mockReviewsRepo.findBy.mockResolvedValue([]);
   });
 
   afterEach(() => jest.clearAllMocks());
@@ -198,7 +272,35 @@ describe('CollectionsService', () => {
       const result = await service.getOwnedGames('user-1');
 
       expect(mockGamesService.findByIds).toHaveBeenCalledWith([1, 2]);
-      expect(result).toEqual(games);
+      expect(result).toEqual([
+        expect.objectContaining({ ...games[0], source: 'bgg', addedAt: ownership[0].addedAt }),
+        expect.objectContaining({ ...games[1], source: 'bgg', addedAt: ownership[1].addedAt }),
+      ]);
+    });
+  });
+
+  describe('BGG-managed membership changes', () => {
+    it('rejects removing BGG-owned games locally', async () => {
+      mockOwnershipRepo.findOneBy.mockResolvedValue(makeOwnership({ source: 'bgg' }));
+
+      await expect(service.removeOwnedGame('user-1', 1)).rejects.toThrow(/BoardGameGeek.*sync/);
+      expect(mockOwnershipRepo.delete).not.toHaveBeenCalled();
+    });
+
+    it('allows removing manually added owned games without deleting the catalogue game', async () => {
+      mockOwnershipRepo.findOneBy.mockResolvedValue(makeOwnership({ source: 'manual' }));
+
+      await service.removeOwnedGame('user-1', 1);
+
+      expect(mockOwnershipRepo.delete).toHaveBeenCalledWith({ userId: 'user-1', gameId: 1 });
+      expect(mockGamesService.findByIds).not.toHaveBeenCalled();
+    });
+
+    it('rejects removing BGG wishlist games locally', async () => {
+      mockWishlistRepo.findOneBy.mockResolvedValue({ source: 'bgg' });
+
+      await expect(service.removeWishlistGame('user-1', 1)).rejects.toThrow(/BoardGameGeek.*sync/);
+      expect(mockWishlistRepo.delete).not.toHaveBeenCalled();
     });
   });
 
@@ -229,12 +331,12 @@ describe('CollectionsService', () => {
 
       expect(mockGamesService.findOrFetchMany).toHaveBeenCalledWith([174430, 13]);
       expect(mockOwnershipRepo.manager.transaction).toHaveBeenCalledTimes(1);
-      expect(mockTransactionManager.save).toHaveBeenCalledWith([
+      expect(mockTransactionManager.save).toHaveBeenCalledWith(GameOwnership, [
         expect.objectContaining({ userId: 'user-1', gameId: 1 }),
         expect.objectContaining({ userId: 'user-1', gameId: 2 }),
       ]);
       expect(mockTransactionManager.delete).not.toHaveBeenCalled();
-      expect(result).toEqual({ added: 2, removed: 0, total: 2 });
+      expect(result).toEqual(expect.objectContaining({ added: 2, removed: 0, total: 2 }));
     });
 
     it('should remove ownership rows for games no longer in the BGG collection', async () => {
@@ -252,11 +354,13 @@ describe('CollectionsService', () => {
 
       const result = await service.importCollection('user-1');
 
-      expect(mockTransactionManager.save).not.toHaveBeenCalled(); // nothing new to add
+      expect(mockTransactionManager.save).toHaveBeenCalledWith(GameOwnership, [
+        expect.objectContaining({ id: 10, userId: 'user-1', gameId: 1, source: 'bgg' }),
+      ]);
       expect(mockTransactionManager.delete).toHaveBeenCalledWith(GameOwnership, {
         id: In([11]),
       });
-      expect(result).toEqual({ added: 0, removed: 1, total: 1 });
+      expect(result).toEqual(expect.objectContaining({ added: 0, removed: 1, total: 1 }));
     });
 
     it('should both add and remove in the same import when the collection changed both ways', async () => {
@@ -274,13 +378,13 @@ describe('CollectionsService', () => {
 
       // Both writes go through the single transaction callback.
       expect(mockOwnershipRepo.manager.transaction).toHaveBeenCalledTimes(1);
-      expect(mockTransactionManager.save).toHaveBeenCalledWith([
+      expect(mockTransactionManager.save).toHaveBeenCalledWith(GameOwnership, [
         expect.objectContaining({ userId: 'user-1', gameId: 2 }),
       ]);
       expect(mockTransactionManager.delete).toHaveBeenCalledWith(GameOwnership, {
         id: In([10]),
       });
-      expect(result).toEqual({ added: 1, removed: 1, total: 1 });
+      expect(result).toEqual(expect.objectContaining({ added: 1, removed: 1, total: 1 }));
     });
 
     it('should report a valid empty sync for a collection with zero owned games', async () => {
@@ -296,7 +400,21 @@ describe('CollectionsService', () => {
       expect(mockTransactionManager.delete).toHaveBeenCalledWith(GameOwnership, {
         id: In([10]),
       });
-      expect(result).toEqual({ added: 0, removed: 1, total: 0 });
+      expect(result).toEqual(expect.objectContaining({ added: 0, removed: 1, total: 0 }));
+    });
+
+    it('removes a BGG wishlist game that is no longer returned by BGG', async () => {
+      mockAccountsRepo.findOneBy.mockResolvedValue({ userId: 'user-1', bggUsername: 'aldie' });
+      mockBggService.getCollection.mockResolvedValue([]);
+      mockBggService.getWishlist.mockResolvedValue([]);
+      mockGamesService.findOrFetchMany.mockResolvedValue([]);
+      mockOwnershipRepo.findBy.mockResolvedValue([]);
+      mockWishlistRepo.findBy.mockResolvedValue([{ id: 9, userId: 'user-1', gameId: 2, source: 'bgg', wishlistPriority: 3 }]);
+
+      const result = await service.importCollection('user-1');
+
+      expect(mockTransactionManager.delete).toHaveBeenCalledWith(GameWishlist, { id: In([9]) });
+      expect(result.wishlist).toEqual({ added: 0, removed: 1, total: 0 });
     });
 
     it('should refuse to sync at all when BGG omitted games from the hydration batch', async () => {
@@ -325,6 +443,183 @@ describe('CollectionsService', () => {
       expect(mockTransactionManager.delete).not.toHaveBeenCalled();
       expect(mockOwnershipRepo.save).not.toHaveBeenCalled();
       expect(mockOwnershipRepo.delete).not.toHaveBeenCalled();
+    });
+
+    it('should import BGG rating and comment as a BGG-sourced review', async () => {
+      mockAccountsRepo.findOneBy.mockResolvedValue({ userId: 'user-1', bggUsername: 'aldie' });
+      mockBggService.getCollection.mockResolvedValue([{
+        bggId: 174430,
+        name: 'Gloomhaven',
+        userRating: 8.5,
+        comment: 'Excellent campaign.',
+      }]);
+      mockGamesService.findOrFetchMany.mockResolvedValue([makeGame()]);
+      mockOwnershipRepo.findBy.mockResolvedValue([]);
+      mockReviewsRepo.create.mockImplementation((data) => data);
+      mockReviewsRepo.save.mockImplementation((data) => Promise.resolve(data));
+
+      await service.importCollection('user-1');
+
+      expect(mockReviewsRepo.save).toHaveBeenCalledWith(expect.objectContaining({
+        userId: 'user-1',
+        gameId: 1,
+        rating: 8.5,
+        body: 'Excellent campaign.',
+        source: 'bgg',
+      }));
+    });
+  });
+
+  describe('upsertReview', () => {
+    it('rejects edits to a BGG-sourced review', async () => {
+      mockGamesService.findByIds.mockResolvedValue([makeGame()]);
+      mockReviewsRepo.findOneBy.mockResolvedValue({ source: 'bgg' });
+
+      await expect(service.upsertReview('user-1', 1, { rating: 9 })).rejects.toThrow(/BGG.*sync/);
+      expect(mockReviewsRepo.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('saved games', () => {
+    it('adds a game to Saved once', async () => {
+      const game = makeGame();
+      mockGamesService.findOrFetch.mockResolvedValue(game);
+      mockSavedRepo.findOneBy.mockResolvedValue(null);
+      mockSavedRepo.create.mockImplementation((data) => data);
+      mockSavedRepo.save.mockImplementation((data) => Promise.resolve(data));
+
+      await service.addSavedGame('user-1', game.bggId);
+
+      expect(mockSavedRepo.save).toHaveBeenCalledWith(expect.objectContaining({
+        userId: 'user-1',
+        gameId: game.id,
+        source: 'manual',
+      }));
+    });
+
+    it('removes only the current user saved membership', async () => {
+      await service.removeSavedGame('user-1', 7);
+
+      expect(mockSavedRepo.delete).toHaveBeenCalledWith({ userId: 'user-1', gameId: 7 });
+    });
+  });
+
+  describe('searchGames', () => {
+    it('preserves search order and enriches results with cached thumbnails', async () => {
+      mockBggService.searchGames.mockResolvedValue([
+        { bggId: 2, name: 'Second', yearPublished: 2020 },
+        { bggId: 1, name: 'First', yearPublished: 2019 },
+      ]);
+      mockGamesService.findCachedByBggIds.mockResolvedValue([
+        makeGame({ bggId: 1, thumbnail: 'first.jpg' }),
+        makeGame({ id: 2, bggId: 2, thumbnail: 'second.jpg' }),
+      ]);
+
+      await expect(service.searchGames(' game ')).resolves.toEqual([
+        expect.objectContaining({ bggId: 2, thumbnail: 'second.jpg' }),
+        expect.objectContaining({ bggId: 1, thumbnail: 'first.jpg' }),
+      ]);
+      expect(mockBggService.searchGames).toHaveBeenCalledWith('game');
+      expect(mockGamesService.findCachedByBggIds).toHaveBeenCalledWith([2, 1]);
+    });
+
+    it('returns basic results when optional thumbnail hydration fails', async () => {
+      mockBggService.searchGames.mockResolvedValue([
+        { bggId: 2, name: 'Second', yearPublished: 2020 },
+      ]);
+      mockGamesService.findCachedByBggIds.mockRejectedValue(new Error('cache read failed'));
+
+      await expect(service.searchGames('game')).resolves.toEqual([
+        { bggId: 2, name: 'Second', yearPublished: 2020, thumbnail: '' },
+      ]);
+    });
+  });
+
+  describe('personal lists', () => {
+    const list = {
+      id: '98e8ec9a-42c6-4f8f-aa9a-8dd0115893f8',
+      userId: 'user-1',
+      name: 'Favorites',
+      type: 'tier' as const,
+      tiers: ['S', 'A'],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    it('hydrates a direct BGG search result and appends it to an owned list', async () => {
+      mockListsRepo.findOneBy.mockResolvedValue(list);
+      mockGamesService.findOrFetch.mockResolvedValue(makeGame());
+      mockListItemsRepo.findOneBy.mockResolvedValue(null);
+      mockListItemsRepo.findBy.mockResolvedValue([]);
+      mockListItemsRepo.create.mockImplementation((data) => data);
+      mockListItemsRepo.save.mockImplementation((data) => Promise.resolve(data));
+
+      const result = await service.addListGame('user-1', list.id, {
+        bggId: 174430,
+        tier: 'S',
+      });
+
+      expect(mockGamesService.findOrFetch).toHaveBeenCalledWith(174430);
+      expect(mockListItemsRepo.save).toHaveBeenCalledWith(expect.objectContaining({
+        listId: list.id,
+        gameId: 1,
+        tier: 'S',
+        position: 0,
+      }));
+      expect(result).toEqual(expect.objectContaining({ id: 1, tier: 'S', position: 0 }));
+    });
+
+    it('rejects a tier that is not configured on the list', async () => {
+      mockListsRepo.findOneBy.mockResolvedValue(list);
+
+      await expect(service.addListGame('user-1', list.id, {
+        bggId: 174430,
+        tier: 'B',
+      })).rejects.toThrow(/Invalid tier/);
+      expect(mockGamesService.findOrFetch).not.toHaveBeenCalled();
+    });
+
+    it('does not expose a list belonging to another user', async () => {
+      mockListsRepo.findOneBy.mockResolvedValue(null);
+
+      await expect(service.removeList('user-1', list.id)).rejects.toThrow(/List not found/);
+      expect(mockListsRepo.remove).not.toHaveBeenCalled();
+    });
+
+    it('normalizes positions when moving a game within a tier', async () => {
+      mockListsRepo.findOneBy.mockResolvedValue(list);
+      mockListItemsRepo.findOneBy.mockResolvedValue({ listId: list.id, gameId: 1, tier: 'S', position: 0 });
+      mockListItemsRepo.findBy.mockResolvedValue([
+        { listId: list.id, gameId: 1, tier: 'S', position: 0 },
+        { listId: list.id, gameId: 2, tier: 'S', position: 1 },
+      ]);
+      mockListItemsRepo.save.mockImplementation((data) => Promise.resolve(data));
+      mockGamesService.findByIds.mockResolvedValue([makeGame()]);
+
+      await service.updateListGame('user-1', list.id, 1, { tier: 'S', position: 1 });
+
+      expect(mockListItemsRepo.save).toHaveBeenCalledWith([
+        expect.objectContaining({ gameId: 2, position: 0 }),
+        expect.objectContaining({ gameId: 1, position: 1 }),
+      ]);
+    });
+  });
+
+  describe('removeReview', () => {
+    it('removes the current user manual review', async () => {
+      const review = { id: 4, userId: 'user-1', gameId: 1, source: 'manual' };
+      mockReviewsRepo.findOneBy.mockResolvedValue(review);
+
+      await service.removeReview('user-1', 1);
+
+      expect(mockReviewsRepo.remove).toHaveBeenCalledWith(review);
+    });
+
+    it('rejects removal of a BGG review', async () => {
+      mockReviewsRepo.findOneBy.mockResolvedValue({ source: 'bgg' });
+
+      await expect(service.removeReview('user-1', 1)).rejects.toThrow(/BGG.*sync/);
+      expect(mockReviewsRepo.remove).not.toHaveBeenCalled();
     });
   });
 });

@@ -98,6 +98,11 @@ export class GamesService {
     return this.games.findBy({ id: In(ids) });
   }
 
+  async findCachedByBggIds(bggIds: number[]): Promise<Game[]> {
+    if (bggIds.length === 0) return [];
+    return this.games.findBy({ bggId: In([...new Set(bggIds)]) });
+  }
+
   private isStale(game: Game): boolean {
     return Date.now() - game.lastFetchedAt.getTime() > CACHE_TTL_MS;
   }

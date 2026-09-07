@@ -5,7 +5,7 @@ export function Badge({ className, style, ...props }: HTMLAttributes<HTMLSpanEle
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 rounded-sm bg-highlight px-2 py-0.5 font-mono text-xs font-medium text-text',
+        'inline-flex items-center gap-1 rounded-sm bg-highlight px-2 py-0.5 font-mono text-xs font-semibold text-[#2b2140]',
         className
       )}
       style={{ transform: 'rotate(var(--badge-rotate))', ...style }}

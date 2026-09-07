@@ -8,7 +8,8 @@ describe('GameCard', () => {
     render(
       <GameCard
         game={{
-          id: 1,
+      id: 1,
+      bggId: 174430,
           name: 'Gloomhaven',
           image: 'https://example.test/gloomhaven-large.jpg',
           thumbnail: 'https://example.test/gloomhaven-thumb.jpg',

@@ -76,24 +76,55 @@ export class GroupsService {
   async getMembers(
     id: string,
     requestingUserId: string,
-  ): Promise<Array<Pick<KeycloakUserInfo, 'id' | 'displayName'> & { role: string; isCurrentUser: boolean }>> {
+  ): Promise<Array<Pick<KeycloakUserInfo, 'id' | 'username' | 'displayName'> & { role: string; isCurrentUser: boolean }>> {
     await this.findOne(id, requestingUserId);
 
     const memberships = await this.members.findBy({ groupId: id });
     return Promise.all(
-      memberships.map(async (m) => ({
-        ...(await this.keycloakAdmin.getUser(m.userId).catch(() => ({
+      memberships.map(async (m) => {
+        const person = await this.keycloakAdmin.getUser(m.userId).catch(() => ({
+          username: 'unknown-member',
+          displayName: 'Unknown member',
+        }));
+        return {
           id: m.userId,
-          displayName: m.userId === requestingUserId ? 'You' : 'Unknown member',
-        }))),
-        // The membership row is the application's identity source of truth.
-        // Keep the provider response from changing the id used by clients to
-        // join names to proposal creators and RSVPs.
-        id: m.userId,
-        role: m.role,
-        isCurrentUser: m.userId === requestingUserId,
-      })),
+          username: person.username,
+          displayName: person.displayName,
+          role: m.role,
+          isCurrentUser: m.userId === requestingUserId,
+        };
+      }),
     );
+  }
+
+  async getMemberProfile(id: string, userId: string, requestingUserId: string) {
+    await this.findOne(id, requestingUserId);
+    const membership = await this.members.findOneBy({ groupId: id, userId });
+    if (!membership) throw new NotFoundException('Group member not found');
+    const person = await this.keycloakAdmin.getUser(userId);
+    const ownerships = await this.ownership.findBy({ userId });
+    const games = ownerships.length
+      ? await this.gamesRepo.find({ where: { id: In(ownerships.map((row) => row.gameId)) }, order: { name: 'ASC' } })
+      : [];
+    return {
+      id: userId,
+      username: person.username,
+      displayName: person.displayName,
+      role: membership.role,
+      isCurrentUser: userId === requestingUserId,
+      ownedGames: games.map((game) => ({
+        id: game.id,
+        bggId: game.bggId,
+        name: game.name,
+        image: game.image,
+        thumbnail: game.thumbnail,
+        minPlayers: game.minPlayers,
+        maxPlayers: game.maxPlayers,
+        playingTime: game.playingTime,
+        yearPublished: game.yearPublished,
+        rating: game.rating,
+      })),
+    };
   }
 
   // GET /groups/:groupId/games — every game owned by ANY member, deduped,

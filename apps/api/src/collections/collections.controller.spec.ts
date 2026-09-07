@@ -17,6 +17,9 @@ describe('CollectionsController', () => {
     unlinkAccount: jest.fn(),
     importCollection: jest.fn(),
     getOwnedGames: jest.fn(),
+    getSavedGames: jest.fn(),
+    addSavedGame: jest.fn(),
+    removeSavedGame: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -79,6 +82,21 @@ describe('CollectionsController', () => {
       await controller.getOwnedGames(fakeRequest);
 
       expect(mockCollectionsService.getOwnedGames).toHaveBeenCalledWith('user-1');
+    });
+  });
+
+  describe('saved games', () => {
+    it('gets, adds, and removes Saved games for the requesting user', async () => {
+      mockCollectionsService.getSavedGames.mockResolvedValue([]);
+      mockCollectionsService.addSavedGame.mockResolvedValue({ id: 7 });
+
+      await controller.getSavedGames(fakeRequest);
+      await controller.addSavedGame({ bggId: 42 }, fakeRequest);
+      await controller.removeSavedGame(7, fakeRequest);
+
+      expect(mockCollectionsService.getSavedGames).toHaveBeenCalledWith('user-1');
+      expect(mockCollectionsService.addSavedGame).toHaveBeenCalledWith('user-1', 42);
+      expect(mockCollectionsService.removeSavedGame).toHaveBeenCalledWith('user-1', 7);
     });
   });
 });

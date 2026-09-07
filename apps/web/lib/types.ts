@@ -77,17 +77,26 @@ export interface ProposalDetail {
 
 export type MemberRole = 'owner' | 'admin' | 'member';
 
+export interface PublicUserIdentity {
+  id: string;
+  username: string;
+  displayName: string;
+}
+
 // Mirrors apps/api getMembers: Keycloak display info + the member's
 // group_members.role, which drives which lifecycle controls the panel shows.
-export interface GroupMemberInfo {
-  id: string;
-  displayName: string;
+export interface GroupMemberInfo extends PublicUserIdentity {
   role: MemberRole;
   isCurrentUser?: boolean;
 }
 
+export interface GroupMemberProfile extends GroupMemberInfo {
+  ownedGames: GameCardGame[];
+}
+
 export interface GameCardGame {
   id: number;
+  bggId: number;
   name: string;
   image: string | null;
   thumbnail: string | null;
@@ -96,6 +105,63 @@ export interface GameCardGame {
   playingTime: number;
   yearPublished: number;
   rating: number;
+}
+
+export interface CollectionGame extends GameCardGame {
+  source: 'manual' | 'bgg';
+  addedAt: string;
+  wishlistPriority?: number;
+}
+
+export interface PersonalListGame extends GameCardGame {
+  tier: string | null;
+  position: number;
+}
+
+export interface PersonalGameList {
+  id: string;
+  name: string;
+  type: 'custom' | 'tier';
+  tiers: string[];
+  items: PersonalListGame[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GameReview {
+  id: number;
+  userId: string;
+  displayName: string;
+  username: string;
+  profileGroupId: string | null;
+  isMine: boolean;
+  rating: number | null;
+  complexityScore: number | null;
+  depthScore: number | null;
+  body: string | null;
+  source: 'manual' | 'bgg';
+  updatedAt: string;
+}
+
+export interface GamePlaySummary {
+  id: string;
+  playedAt: string;
+  notes: string | null;
+  status: 'finished' | 'abandoned';
+  groupName: string;
+}
+
+export interface CollectionGameDetails {
+  game: GameCardGame;
+  reviews: GameReview[];
+  plays: GamePlaySummary[];
+}
+
+export interface BggSearchResult {
+  bggId: number;
+  name: string;
+  yearPublished: number;
+  thumbnail: string;
 }
 
 // Body of PUT /proposals/:id/rsvp. Times are optional HH:mm (24h) —

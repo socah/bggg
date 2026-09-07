@@ -59,6 +59,15 @@ export class GroupsController {
     return this.groupsService.getMembers(groupId, req.user.sub);
   }
 
+  @Get(':groupId/members/:userId')
+  getMemberProfile(
+    @Param('groupId', ParseUUIDPipe) groupId: string,
+    @Param('userId') userId: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.groupsService.getMemberProfile(groupId, userId, req.user.sub);
+  }
+
   @Patch(':groupId/members/:userId')
   updateMemberRole(
     @Param('groupId', ParseUUIDPipe) groupId: string,

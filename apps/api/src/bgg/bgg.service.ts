@@ -18,6 +18,25 @@ export interface BggGame {
   rating: number;
 }
 
+export interface BggSearchResult {
+  bggId: number;
+  name: string;
+  yearPublished: number;
+}
+
+export interface BggCollectionItem {
+  bggId: number;
+  name: string;
+  userRating: number | null;
+  comment: string | null;
+}
+
+export interface BggWishlistItem {
+  bggId: number;
+  name: string;
+  wishlistPriority: number;
+}
+
 interface BggXmlNameNode {
   '@_type'?: string;
   '@_value'?: string;
@@ -38,6 +57,13 @@ interface BggXmlItem {
   maxplayers?: BggXmlValueNode;
   playingtime?: BggXmlValueNode;
   yearpublished?: BggXmlValueNode;
+  status?: {
+    '@_wishlistpriority'?: string;
+  };
+  stats?: {
+    rating?: BggXmlValueNode;
+  };
+  comment?: string;
   statistics?: {
     ratings?: {
       average?: BggXmlValueNode;
@@ -130,8 +156,58 @@ export class BggService {
 
   // Fetches the games a user has marked "own" on BGG. Returns just enough to
   // know which games to hydrate/own — full stats come from getGamesBatch.
-  async getCollection(username: string): Promise<{ bggId: number; name: string }[]> {
-    const url = `https://boardgamegeek.com/xmlapi2/collection?username=${encodeURIComponent(username)}&own=1`;
+  async getCollection(username: string): Promise<BggCollectionItem[]> {
+    const items = await this.getCollectionByStatus(username, 'own', true);
+    return items.map((item) => {
+      const ratingValue = item.stats?.rating?.['@_value'];
+      const userRating = ratingValue === undefined || ratingValue === 'N/A'
+        ? null
+        : Number(ratingValue);
+      return {
+        bggId: Number(item['@_objectid']),
+        name: this.textOf(item.name),
+        userRating: Number.isFinite(userRating) ? userRating : null,
+        comment: typeof item.comment === 'string' && item.comment.trim()
+          ? item.comment.trim()
+          : null,
+      };
+    });
+  }
+
+  async getWishlist(username: string): Promise<BggWishlistItem[]> {
+    const items = await this.getCollectionByStatus(username, 'wishlist');
+    return items.map((item) => {
+      const priority = Number(item.status?.['@_wishlistpriority']);
+      return {
+        bggId: Number(item['@_objectid']),
+        name: this.textOf(item.name),
+        wishlistPriority: priority >= 1 && priority <= 5 ? priority : 3,
+      };
+    });
+  }
+
+  async searchGames(query: string): Promise<BggSearchResult[]> {
+    const url = `https://boardgamegeek.com/xmlapi2/search?query=${encodeURIComponent(query)}&type=boardgame`;
+    const xml = await this.fetchWithPolling(url);
+    const result = this.parser.parse(xml) as BggXmlParsed;
+
+    if (result.errors || !result.items) {
+      throw new HttpException('BGG search returned an invalid response', 502);
+    }
+
+    return this.normalizeItems(result).slice(0, 20).map((item) => ({
+      bggId: Number(item['@_id']),
+      name: (item.name?.[0]?.['@_value'] ?? this.textOf(item.name)) || 'Unknown',
+      yearPublished: Number(item.yearpublished?.['@_value'] ?? 0),
+    }));
+  }
+
+  private async getCollectionByStatus(
+    username: string,
+    status: 'own' | 'wishlist',
+    includeStats = false,
+  ): Promise<BggXmlItem[]> {
+    const url = `https://boardgamegeek.com/xmlapi2/collection?username=${encodeURIComponent(username)}&${status}=1${includeStats ? '&stats=1' : ''}&_=${Date.now()}`;
     const xml = await this.fetchWithPolling(url);
     const result = this.parser.parse(xml) as BggXmlParsed;
 
@@ -147,10 +223,7 @@ export class BggService {
       throw new HttpException(`BGG collection request failed: ${message}`, 502);
     }
 
-    return this.normalizeItems(result).map((item) => ({
-      bggId: Number(item['@_objectid']),
-      name: this.textOf(item.name),
-    }));
+    return this.normalizeItems(result);
   }
 
   // Polls the given URL until BGG returns 200, up to maxRetries attempts.
@@ -166,7 +239,9 @@ export class BggService {
       // responseType: 'text' prevents axios from trying to JSON.parse the XML body.
       const response = await firstValueFrom(
         this.http.get<string>(url, { responseType: 'text' }),
-      );
+      ).catch(() => {
+        throw new HttpException('Unable to reach the BGG API', 502);
+      });
 
       if (response.status === 200) return response.data;
 

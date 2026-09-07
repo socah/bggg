@@ -244,7 +244,7 @@ export function CalendarMonthGrid({
 
       <div className="mb-1 grid grid-cols-7 gap-1">
         {WEEKDAY_INITIALS.map((initial, index) => (
-          <div key={`${initial}-${index}`} className="text-center text-xs font-medium text-text-muted">
+          <div key={`${initial}-${index}`} className={cn('text-center text-xs font-medium', index >= 5 ? 'text-accent' : 'text-text-muted')}>
             {initial}
           </div>
         ))}
@@ -282,7 +282,7 @@ export function CalendarMonthGrid({
                       )}
                     >
                       <span className="flex items-center justify-between font-medium">
-                        <span>{date.getDate()}</span>
+                        <span className={cn(inMonth && (date.getDay() === 6 || date.getDay() === 0) && 'text-accent')}>{date.getDate()}</span>
                       </span>
                       {shown.map((item) => (
                         <span

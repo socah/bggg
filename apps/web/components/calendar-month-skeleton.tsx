@@ -1,4 +1,5 @@
 import { buildMonthGrid } from '@/lib/calendar-grid';
+import { cn } from '@/lib/cn';
 
 const WEEKDAY_INITIALS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'] as const;
 
@@ -20,7 +21,7 @@ export function CalendarMonthSkeleton({ label }: { label: string }) {
 
         <div className="mb-1 grid grid-cols-7 gap-1">
           {WEEKDAY_INITIALS.map((initial, index) => (
-            <div key={`${initial}-${index}`} className="text-center text-xs text-text-muted/50">
+            <div key={`${initial}-${index}`} className={cn('text-center text-xs', index >= 5 ? 'text-accent/50' : 'text-text-muted/50')}>
               {initial}
             </div>
           ))}

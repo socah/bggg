@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 
 jest.unstable_mockModule('@/components/inline-proposal-panel', () => ({
   InlineProposalPanel: () => null,
@@ -84,5 +84,15 @@ describe('CalendarMonthGrid', () => {
     );
 
     expect(screen.getByText(label)).toBeTruthy();
+  });
+
+  it('distinguishes Saturday and Sunday headings and date numbers', () => {
+    render(<CalendarMonthGrid proposals={[]} />);
+
+    const weekendHeadings = screen.getAllByText('S');
+    expect(weekendHeadings[0].className).toContain('text-accent');
+    expect(weekendHeadings[1].className).toContain('text-accent');
+    expect(within(screen.getByRole('button', { name: 'May 2, 2026' })).getByText('2').className).toContain('text-accent');
+    expect(within(screen.getByRole('button', { name: 'May 3, 2026' })).getByText('3').className).toContain('text-accent');
   });
 });

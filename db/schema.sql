@@ -152,11 +152,8 @@ CREATE TABLE IF NOT EXISTS bgg_accounts (
 -- ── GAME OWNERSHIP ────────────────────────────────────────────────────────
 -- Tracks which users personally own which games. A group's game library is
 -- the union of its members' game_ownership rows — there is no separate
--- group_games table. Rows here come from a BGG collection import (see
--- bgg_accounts above) and are kept in sync on re-import: added when a game
--- newly appears in the user's BGG collection, removed when it no longer
--- does. Unlinking a bgg_accounts row does NOT delete these — they represent
--- real-world ownership, not BGG-link state.
+-- group_games table. Rows can come from BGG sync or direct app additions.
+-- source keeps BGG sync from deleting manually maintained rows.
 -- user_id: TEXT, not an INT FK to users(id) as this table originally
 -- sketched here — same drift-and-fix already applied to group_members
 -- above; this schema's 'users' table was never built as a real entity.
@@ -165,26 +162,77 @@ CREATE TABLE IF NOT EXISTS game_ownership (
   user_id   TEXT   NOT NULL,
   game_id   INT    NOT NULL REFERENCES games(id) ON DELETE CASCADE,
   added_at  DATE   NOT NULL DEFAULT CURRENT_DATE,
+  source    TEXT   NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'bgg')),
 
+  UNIQUE (user_id, game_id)
+);
+
+-- ── GAME WISHLIST ─────────────────────────────────────────────────────────
+-- Personal wishlist, populated either directly or from a linked BGG account.
+CREATE TABLE IF NOT EXISTS game_wishlist (
+  id        SERIAL PRIMARY KEY,
+  user_id   TEXT   NOT NULL,
+  game_id   INT    NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  added_at  DATE   NOT NULL DEFAULT CURRENT_DATE,
+  source    TEXT   NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'bgg')),
+  wishlist_priority INT NOT NULL DEFAULT 3 CHECK (wishlist_priority BETWEEN 1 AND 5),
+
+  UNIQUE (user_id, game_id)
+);
+
+-- ── SAVED GAMES ────────────────────────────────────────────────────────────
+-- App-only bookmarks for games that are neither ownership nor purchase intent.
+CREATE TABLE IF NOT EXISTS game_saved (
+  id        SERIAL PRIMARY KEY,
+  user_id   TEXT NOT NULL,
+  game_id   INT  NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  added_at  DATE NOT NULL DEFAULT CURRENT_DATE,
+  source    TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'bgg')),
   UNIQUE (user_id, game_id)
 );
 
 -- ── REVIEWS ───────────────────────────────────────────────────────────────
 -- One review per user per game (not scoped to a group — reviews are personal).
 -- The design includes complexity and depth scores alongside the main rating.
--- All three are optional individually but at least rating must be present.
+-- BGG comment-only reviews may omit a rating. Reviews written in the app
+-- still require one through API validation.
 CREATE TABLE IF NOT EXISTS reviews (
   id               SERIAL       PRIMARY KEY,
-  user_id          INT          NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id          TEXT         NOT NULL,
   game_id          INT          NOT NULL REFERENCES games(id) ON DELETE CASCADE,
-  rating           INT          NOT NULL CHECK (rating BETWEEN 1 AND 10),
+  rating           NUMERIC(4,2) CHECK (rating BETWEEN 1 AND 10),
   complexity_score INT          CHECK (complexity_score BETWEEN 1 AND 5),
   depth_score      INT          CHECK (depth_score BETWEEN 1 AND 5),
   body             TEXT,
+  source           TEXT         NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'bgg')),
   created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  updated_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
 
   -- One review per user per game globally.
   UNIQUE (user_id, game_id)
+);
+
+-- ── PERSONAL GAME LISTS ───────────────────────────────────────────────────
+-- Custom lists and tier lists can include any cached BGG game, whether or not
+-- it also appears in the user's collection or wishlist.
+CREATE TABLE IF NOT EXISTS personal_lists (
+  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     TEXT        NOT NULL,
+  name        TEXT        NOT NULL,
+  type        TEXT        NOT NULL CHECK (type IN ('custom', 'tier')),
+  tiers       JSONB       NOT NULL DEFAULT '["S","A","B","C","D"]'::jsonb,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS personal_list_items (
+  id        SERIAL PRIMARY KEY,
+  list_id   UUID NOT NULL REFERENCES personal_lists(id) ON DELETE CASCADE,
+  game_id   INT  NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  tier      TEXT,
+  position  INT  NOT NULL CHECK (position >= 0),
+
+  UNIQUE (list_id, game_id)
 );
 
 -- ── PLAY SESSION PROPOSALS ────────────────────────────────────────────────

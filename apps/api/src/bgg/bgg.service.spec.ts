@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { HttpException } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { BggService, BggGame } from './bgg.service';
 
 // Minimal BGG XML fixture — only the fields BggService actually reads.
@@ -43,6 +43,38 @@ const SINGLE_ITEM_COLLECTION_XML = `
   <items totalitems="1">
     <item objecttype="thing" objectid="174430" subtype="boardgame">
       <name sortindex="1">Gloomhaven</name>
+    </item>
+  </items>
+`;
+
+const WISHLIST_COLLECTION_XML = `
+  <items totalitems="1">
+    <item objecttype="thing" objectid="174430" subtype="boardgame">
+      <name sortindex="1">Gloomhaven</name>
+      <status wishlist="1" wishlistpriority="1"/>
+    </item>
+  </items>
+`;
+
+const RATED_COLLECTION_XML = `
+  <items totalitems="1">
+    <item objecttype="thing" objectid="174430" subtype="boardgame">
+      <name sortindex="1">Gloomhaven</name>
+      <stats><rating value="8.5"/></stats>
+      <comment>Bring it to game night.</comment>
+    </item>
+  </items>
+`;
+
+const SEARCH_XML = `
+  <items total="2">
+    <item type="boardgame" id="13">
+      <name type="primary" value="Catan"/>
+      <yearpublished value="1995"/>
+    </item>
+    <item type="boardgame" id="123">
+      <name type="primary" value="Catan: 5-6 Player Extension"/>
+      <yearpublished value="1996"/>
     </item>
   </items>
 `;
@@ -109,6 +141,41 @@ describe('BggService', () => {
   afterEach(() => {
     jest.clearAllMocks();
     jest.useRealTimers();
+  });
+
+  describe('wishlist and search', () => {
+    it('requests and parses BGG wishlist items', async () => {
+      mockHttpService.get.mockReturnValue(of({ status: 200, data: WISHLIST_COLLECTION_XML }));
+
+      await expect(service.getWishlist('aldie')).resolves.toEqual([
+        { bggId: 174430, name: 'Gloomhaven', wishlistPriority: 1 },
+      ]);
+      expect(mockHttpService.get).toHaveBeenCalledWith(
+        expect.stringContaining('username=aldie&wishlist=1'),
+        { responseType: 'text' },
+      );
+    });
+
+    it('defaults a missing wishlist priority to Like to have', async () => {
+      mockHttpService.get.mockReturnValue(of({ status: 200, data: SINGLE_ITEM_COLLECTION_XML }));
+
+      await expect(service.getWishlist('aldie')).resolves.toEqual([
+        { bggId: 174430, name: 'Gloomhaven', wishlistPriority: 3 },
+      ]);
+    });
+
+    it('returns compact search results from BGG', async () => {
+      mockHttpService.get.mockReturnValue(of({ status: 200, data: SEARCH_XML }));
+
+      await expect(service.searchGames('Catan')).resolves.toEqual([
+        { bggId: 13, name: 'Catan', yearPublished: 1995 },
+        { bggId: 123, name: 'Catan: 5-6 Player Extension', yearPublished: 1996 },
+      ]);
+      expect(mockHttpService.get).toHaveBeenCalledWith(
+        expect.stringContaining('query=Catan&type=boardgame'),
+        { responseType: 'text' },
+      );
+    });
   });
 
   // ── getGame: happy path ───────────────────────────────────────────────────
@@ -201,6 +268,12 @@ describe('BggService', () => {
       // Should have given up after the first call, not retried.
       expect(mockHttpService.get).toHaveBeenCalledTimes(1);
     });
+
+    it('should translate transport failures instead of leaking an internal server error', async () => {
+      mockHttpService.get.mockReturnValue(throwError(() => new Error('socket reset')));
+
+      await expect(service.getGame(174430)).rejects.toMatchObject({ status: 502 });
+    });
   });
 
   // ── getUser ──────────────────────────────────────────────────────────────
@@ -249,8 +322,8 @@ describe('BggService', () => {
       const result = await service.getCollection('someuser');
 
       expect(result).toEqual([
-        { bggId: 174430, name: 'Gloomhaven' },
-        { bggId: 13, name: 'Catan' },
+        { bggId: 174430, name: 'Gloomhaven', userRating: null, comment: null },
+        { bggId: 13, name: 'Catan', userRating: null, comment: null },
       ]);
     });
 
@@ -264,7 +337,9 @@ describe('BggService', () => {
 
       const result = await service.getCollection('someuser');
 
-      expect(result).toEqual([{ bggId: 174430, name: 'Gloomhaven' }]);
+      expect(result).toEqual([{
+        bggId: 174430, name: 'Gloomhaven', userRating: null, comment: null,
+      }]);
     });
 
     it('should return an empty array for a user who owns nothing', async () => {
@@ -304,7 +379,24 @@ describe('BggService', () => {
       const result = await promise;
 
       expect(mockHttpService.get).toHaveBeenCalledTimes(2);
-      expect(result).toEqual([{ bggId: 174430, name: 'Gloomhaven' }]);
+      expect(result).toEqual([{
+        bggId: 174430, name: 'Gloomhaven', userRating: null, comment: null,
+      }]);
+    });
+
+    it('requests stats and parses a personal rating and comment', async () => {
+      mockHttpService.get.mockReturnValue(of({ status: 200, data: RATED_COLLECTION_XML }));
+
+      await expect(service.getCollection('someuser')).resolves.toEqual([{
+        bggId: 174430,
+        name: 'Gloomhaven',
+        userRating: 8.5,
+        comment: 'Bring it to game night.',
+      }]);
+      expect(mockHttpService.get).toHaveBeenCalledWith(
+        expect.stringContaining('own=1&stats=1'),
+        { responseType: 'text' },
+      );
     });
   });
 
