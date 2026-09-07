@@ -48,10 +48,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     // token has expired, refreshes it via Keycloak's refresh-token grant.
     // Without this, a client-side /api/* call would start failing partway
     // through a session the moment the (short-lived) access token expired.
-    async jwt({ token, account }) {
+    async jwt({ token, account, profile }) {
       if (account) {
         return {
           ...token,
+          username: typeof profile?.preferred_username === 'string'
+            ? profile.preferred_username
+            : typeof token.name === 'string' ? token.name : undefined,
           accessToken: account.access_token,
           refreshToken: account.refresh_token,
           // account.expires_at is seconds since epoch (OAuth standard),
@@ -120,6 +123,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // here lets client components gate controls on "is this mine / what's
       // my role" without decoding the access token in the browser.
       if (token.sub && session.user) session.user.id = token.sub;
+      if (session.user && typeof token.username === 'string') session.user.username = token.username;
       return session;
     },
   },
@@ -141,6 +145,10 @@ declare module 'next-auth' {
     accessToken: string;
     error?: 'RefreshTokenError';
   }
+
+  interface User {
+    username?: string;
+  }
 }
 
 declare module '@auth/core/jwt' {
@@ -149,5 +157,6 @@ declare module '@auth/core/jwt' {
     refreshToken?: string;
     expiresAt?: number;
     error?: 'RefreshTokenError';
+    username?: string;
   }
 }

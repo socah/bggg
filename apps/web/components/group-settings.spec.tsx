@@ -9,8 +9,8 @@ const reload = jest.fn();
 jest.unstable_mockModule('@/hooks/use-group-members', () => ({
   useGroupMembers: () => ({
     members: [
-      { id: 'owner-1', displayName: 'Alice', role: 'owner' },
-      { id: 'member-1', displayName: 'Bob', role: 'member' },
+      { id: 'owner-1', username: 'alice', displayName: 'Alice', role: 'owner' },
+      { id: 'member-1', username: 'bob', displayName: 'Bob', role: 'member' },
     ],
     loading: false,
     reload,
@@ -28,10 +28,10 @@ describe('GroupSettings', () => {
   it('shows member privileges and allows the owner to change and remove a member', () => {
     render(<GroupSettings groupId="group-1" currentUserId="owner-1" />);
 
-    expect(screen.getByText('Alice')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'alice' }).getAttribute('href')).toBe('/groups/group-1/collection/owner-1');
     expect(screen.getByText('owner')).toBeTruthy();
-    expect(screen.getByLabelText('Role for Bob')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Remove Bob' })).toBeTruthy();
+    expect(screen.getByLabelText('Role for bob')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Remove bob' })).toBeTruthy();
   });
 
   it('provides a group deletion control only to the owner', () => {

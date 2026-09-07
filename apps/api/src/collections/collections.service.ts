@@ -90,6 +90,16 @@ export class CollectionsService {
     return this.getGamesForRows(await this.saved.findBy({ userId }));
   }
 
+  async getLibrarySnapshot(userId: string) {
+    const [collection, wishlist, saved, lists] = await Promise.all([
+      this.getOwnedGames(userId),
+      this.getWishlistGames(userId),
+      this.getSavedGames(userId),
+      this.getLists(userId),
+    ]);
+    return { collection, wishlist, saved, lists };
+  }
+
   async searchGames(query: string) {
     const normalized = query.trim();
     if (normalized.length < 2) throw new BadRequestException('Search must be at least 2 characters');

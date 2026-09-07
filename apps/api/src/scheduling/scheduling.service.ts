@@ -645,6 +645,25 @@ export class SchedulingService {
     };
   }
 
+  async getMemberHostingStats(
+    groupId: string,
+    userId: string,
+    requestingUserId: string,
+  ): Promise<{ hostedSessionCount: number }> {
+    await this.groupsService.findOne(groupId, requestingUserId);
+    const membership = await this.members.findOneBy({ groupId, userId });
+    if (!membership) throw new NotFoundException('Group member not found');
+
+    const sessions = await this.sessions.findBy({ groupId });
+    if (sessions.length === 0) return { hostedSessionCount: 0 };
+    return {
+      hostedSessionCount: await this.sessionHosts.countBy({
+        userId,
+        sessionId: In(sessions.map((session) => session.id)),
+      }),
+    };
+  }
+
   async getProposal(
     proposalId: string,
     requestingUserId: string,

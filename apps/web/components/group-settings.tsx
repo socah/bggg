@@ -9,6 +9,7 @@ import type { GroupMemberInfo, MemberRole } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { GroupInviteSettings } from '@/components/group-invite-settings';
+import { UserIdentityLink } from '@/components/user-identity-link';
 
 export function GroupSettings({ groupId, currentUserId }: { groupId: string; currentUserId: string }) {
   const router = useRouter();
@@ -34,7 +35,7 @@ export function GroupSettings({ groupId, currentUserId }: { groupId: string; cur
   }
 
   async function removeMember(member: GroupMemberInfo) {
-    if (!window.confirm(`Remove ${member.displayName} from this group?`)) return;
+    if (!window.confirm(`Remove ${member.username} from this group?`)) return;
     setBusyUserId(member.id);
     setMessage(null);
     try {
@@ -78,12 +79,12 @@ export function GroupSettings({ groupId, currentUserId }: { groupId: string; cur
             return (
               <div key={member.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
                 <div>
-                  <p className="font-semibold">{member.displayName}</p>
+                  <p className="font-semibold"><UserIdentityLink user={member} groupId={groupId} /></p>
                   <p className="text-sm text-text-muted">{member.role}</p>
                 </div>
                 {canManage && (
                   <div className="flex items-center gap-2">
-                    <label className="sr-only" htmlFor={`role-${member.id}`}>Role for {member.displayName}</label>
+                    <label className="sr-only" htmlFor={`role-${member.id}`}>Role for {member.username}</label>
                     <select
                       id={`role-${member.id}`}
                       value={member.role}
@@ -95,7 +96,7 @@ export function GroupSettings({ groupId, currentUserId }: { groupId: string; cur
                       {isOwner && <option value="admin">admin</option>}
                     </select>
                     <Button type="button" variant="ghost" disabled={busyUserId === member.id} onClick={() => void removeMember(member)}>
-                      {busyUserId === member.id ? 'Working…' : `Remove ${member.displayName}`}
+                      {busyUserId === member.id ? 'Working…' : `Remove ${member.username}`}
                     </Button>
                   </div>
                 )}

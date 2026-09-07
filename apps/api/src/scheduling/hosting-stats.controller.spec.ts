@@ -7,6 +7,7 @@ describe('HostingStatsController', () => {
   const schedulingService = {
     getMyHostingStats: jest.fn(),
     getGroupHostingStats: jest.fn(),
+    getMemberHostingStats: jest.fn(),
   };
   const request = { user: { sub: 'user-1' } };
 
@@ -33,5 +34,13 @@ describe('HostingStatsController', () => {
 
     await expect(controller.getGroupHostingStats('group-1', request)).resolves.toEqual(stats);
     expect(schedulingService.getGroupHostingStats).toHaveBeenCalledWith('group-1', 'user-1');
+  });
+
+  it('delegates member stats with the group, target, and authenticated user ids', async () => {
+    schedulingService.getMemberHostingStats.mockResolvedValue({ hostedSessionCount: 2 });
+
+    await expect(controller.getMemberHostingStats('group-1', 'user-2', request))
+      .resolves.toEqual({ hostedSessionCount: 2 });
+    expect(schedulingService.getMemberHostingStats).toHaveBeenCalledWith('group-1', 'user-2', 'user-1');
   });
 });

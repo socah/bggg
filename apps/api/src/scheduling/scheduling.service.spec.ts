@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { In } from 'typeorm';
 import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { SchedulingService } from './scheduling.service';
 import { PlaySessionProposal } from './play-session-proposal.entity';
@@ -27,7 +28,7 @@ describe('SchedulingService', () => {
   const mockProposals = { findOneBy: jest.fn(), findBy: jest.fn(), save: jest.fn(), remove: jest.fn() };
   const mockRsvps = { findBy: jest.fn() };
   const mockSessions = {
-    findOneBy: jest.fn(), remove: jest.fn(), create: jest.fn(), save: jest.fn(), countBy: jest.fn(),
+    findOneBy: jest.fn(), findBy: jest.fn(), remove: jest.fn(), create: jest.fn(), save: jest.fn(), countBy: jest.fn(),
   };
   const mockProposalGames = { findBy: jest.fn() };
   const mockGameVotes = { countBy: jest.fn(), existsBy: jest.fn() };
@@ -314,6 +315,29 @@ describe('SchedulingService', () => {
         .rejects.toBeInstanceOf(ForbiddenException);
       expect(mockSessions.countBy).not.toHaveBeenCalled();
       expect(mockSessionHosts.createQueryBuilder).not.toHaveBeenCalled();
+    });
+
+    it('counts a selected member hosting sessions in the authorized group', async () => {
+      mockGroupsService.findOne.mockResolvedValue({ id: GROUP_ID });
+      mockMembers.findOneBy.mockResolvedValue({ groupId: GROUP_ID, userId: 'user-2' });
+      mockSessions.findBy.mockResolvedValue([{ id: 'session-1' }, { id: 'session-2' }]);
+      mockSessionHosts.countBy.mockResolvedValue(2);
+
+      await expect(service.getMemberHostingStats(GROUP_ID, 'user-2', USER_ID))
+        .resolves.toEqual({ hostedSessionCount: 2 });
+      expect(mockSessionHosts.countBy).toHaveBeenCalledWith({
+        userId: 'user-2',
+        sessionId: In(['session-1', 'session-2']),
+      });
+    });
+
+    it('rejects stats for a target who is not a current group member', async () => {
+      mockGroupsService.findOne.mockResolvedValue({ id: GROUP_ID });
+      mockMembers.findOneBy.mockResolvedValue(null);
+
+      await expect(service.getMemberHostingStats(GROUP_ID, 'outsider', USER_ID))
+        .rejects.toBeInstanceOf(NotFoundException);
+      expect(mockSessions.findBy).not.toHaveBeenCalled();
     });
   });
 

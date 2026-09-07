@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/api';
 import { useGroupMembers } from '@/hooks/use-group-members';
+import { UserIdentityLink } from '@/components/user-identity-link';
 
 interface GroupHostingStats {
   totalSessionCount: number;
@@ -41,6 +42,38 @@ export function PersonalHostingStats() {
         <div className="mt-5 flex items-end gap-3">
           <strong className="font-display text-5xl leading-none text-accent-2">{count ?? '...'}</strong>
           <span className="pb-1 text-sm text-text-muted">confirmed sessions hosted</span>
+        </div>
+      )}
+    </section>
+  );
+}
+
+export function MemberHostingStats({ groupId, userId }: { groupId: string; userId: string }) {
+  const [count, setCount] = useState<number | null>(null);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch(`/groups/${groupId}/members/${encodeURIComponent(userId)}/hosting-stats`)
+      .then((response) => {
+        if (!response.ok) throw new Error(`Unexpected status ${response.status}`);
+        return response.json() as Promise<{ hostedSessionCount: number }>;
+      })
+      .then((stats) => { if (!cancelled) setCount(stats.hostedSessionCount); })
+      .catch(() => { if (!cancelled) setError(true); });
+    return () => { cancelled = true; };
+  }, [groupId, userId]);
+
+  return (
+    <section aria-labelledby="member-hosting-heading" className="max-w-xl rounded-md border border-border bg-surface-raised p-5 shadow-sm">
+      <p className="font-mono text-xs uppercase tracking-widest text-text-muted">Group history</p>
+      <h1 id="member-hosting-heading" className="mt-1 font-display text-2xl text-text">Hosting</h1>
+      {error ? (
+        <p className="mt-4 text-sm text-accent" role="alert">Could not load hosting stats.</p>
+      ) : (
+        <div className="mt-5 flex items-end gap-3">
+          <strong className="font-display text-5xl leading-none text-accent-2">{count ?? '...'}</strong>
+          <span className="pb-1 text-sm text-text-muted">confirmed sessions hosted in this group</span>
         </div>
       )}
     </section>
@@ -87,17 +120,18 @@ export function GroupHostingStats({ groupId }: { groupId: string }) {
       )}
       {!error && stats && stats.hosts.length > 0 && (
         <ol className="mt-4 space-y-2">
-          {stats.hosts.map((host, index) => (
-            <li key={host.userId} className="flex items-center gap-3 rounded-sm bg-surface px-3 py-2">
+          {stats.hosts.map((host, index) => {
+            const member = members.find((candidate) => candidate.id === host.userId);
+            return <li key={host.userId} className="flex items-center gap-3 rounded-sm bg-surface px-3 py-2">
               <span className="w-6 font-mono text-xs text-text-muted">#{index + 1}</span>
               <span className="flex-1 font-medium">
                 {membersLoading
                   ? 'Loading member...'
-                  : members.find((member) => member.id === host.userId)?.displayName ?? 'Former member'}
+                  : member ? <UserIdentityLink user={member} groupId={groupId} /> : 'Former member'}
               </span>
               <strong className="font-mono text-accent-2">{host.hostedSessionCount}</strong>
-            </li>
-          ))}
+            </li>;
+          })}
         </ol>
       )}
     </section>

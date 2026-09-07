@@ -39,9 +39,9 @@ export function GroupLibrary({ groupId }: { groupId: string }) {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-text-muted">{games.length} games from group members</p>
-        <div className="flex rounded-sm border-[length:var(--border-w)] border-border p-0.5" aria-label="View style">
-          <button type="button" aria-pressed={view === 'compact'} onClick={() => setView('compact')} className={`rounded-sm px-3 py-1.5 text-sm font-semibold ${view === 'compact' ? 'bg-accent-2 text-accent-2-ink' : 'text-text-muted'}`}>Grid</button>
-          <button type="button" aria-pressed={view === 'list'} onClick={() => setView('list')} className={`rounded-sm px-3 py-1.5 text-sm font-semibold ${view === 'list' ? 'bg-accent-2 text-accent-2-ink' : 'text-text-muted'}`}>List</button>
+        <div className="flex overflow-hidden rounded-sm border-[length:var(--border-w)] border-border" aria-label="View style">
+          <button type="button" aria-pressed={view === 'compact'} onClick={() => setView('compact')} className={`px-3 py-1.5 text-sm font-semibold ${view === 'compact' ? 'bg-accent-2 text-accent-2-ink' : 'text-text-muted'}`}>Grid</button>
+          <button type="button" aria-pressed={view === 'list'} onClick={() => setView('list')} className={`border-l border-border px-3 py-1.5 text-sm font-semibold ${view === 'list' ? 'bg-accent-2 text-accent-2-ink' : 'text-text-muted'}`}>List</button>
         </div>
       </div>
       <div className={view === 'compact' ? 'grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6' : 'flex flex-col gap-3'}>

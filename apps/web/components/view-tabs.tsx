@@ -17,14 +17,16 @@ const TABS: Array<{ tab: ViewTab; label: string }> = [
 // also restores middle-click / open-in-new-tab.
 export function ViewTabs() {
   const pathname = usePathname();
-  const { groupId, tab: activeTab } = parseSpacePath(pathname);
+  const { groupId, userId, tab: activeTab } = parseSpacePath(pathname);
+  const tabs = userId ? TABS.filter(({ tab }) => tab !== 'calendar') : TABS;
 
   return (
     <nav aria-label="Sections" className="flex gap-4 font-body text-sm font-medium">
-      {TABS.map(({ tab, label }) => (
+      {tabs.map(({ tab, label }) => (
         <Link
           key={tab}
-          href={spaceHref(groupId, tab)}
+          href={spaceHref(groupId, tab, userId)}
+          replace={Boolean(userId)}
           aria-current={tab === activeTab ? 'page' : undefined}
           className={
             tab === activeTab

@@ -5,7 +5,7 @@ import type { ProposalStatus } from '@/lib/types';
 let proposalStatus: ProposalStatus = 'collecting';
 
 jest.unstable_mockModule('next-auth/react', () => ({
-  useSession: () => ({ data: { user: { id: 'user-1', name: 'Alice' } } }),
+  useSession: () => ({ data: { user: { id: 'user-1', name: 'Alice', username: 'alice' } } }),
   getSession: jest.fn(),
   signOut: jest.fn(),
 }));
@@ -47,7 +47,7 @@ jest.unstable_mockModule('@/hooks/use-proposal-detail', () => ({
 }));
 
 jest.unstable_mockModule('@/hooks/use-group-members', () => ({
-  useGroupMembers: () => ({ members: [], loading: false, reload: jest.fn() }),
+  useGroupMembers: () => ({ members: [{ id: 'user-1', username: 'alice', displayName: 'Alice', role: 'owner' }], loading: false, reload: jest.fn() }),
 }));
 
 jest.unstable_mockModule('@/hooks/use-proposal-actions', () => ({
@@ -119,7 +119,7 @@ describe('InlineProposalPanel', () => {
     expect(screen.getByText(label).className).toMatch(/bg-(amber|sky|emerald|slate)-/);
   });
 
-  it('uses the session name for the current user when member data cannot resolve it', () => {
+  it('uses the linked username for the current user', () => {
     proposalStatus = 'collecting';
     render(
       <InlineProposalPanel
@@ -136,8 +136,9 @@ describe('InlineProposalPanel', () => {
       />,
     );
 
-    expect(screen.getByText('Alice')).toBeTruthy();
-    expect(screen.getByText(/Alice — yes/)).toBeTruthy();
+    expect(screen.getAllByRole('link', { name: 'alice' })).toHaveLength(2);
+    expect(screen.getAllByRole('link', { name: 'alice' })[0].getAttribute('href')).toBe('/groups/group-1/collection/user-1');
+    expect(screen.getByText(/— yes/)).toBeTruthy();
     expect(screen.queryByText('Unknown member')).toBeNull();
   });
 });

@@ -91,7 +91,10 @@ export interface GroupMemberInfo extends PublicUserIdentity {
 }
 
 export interface GroupMemberProfile extends GroupMemberInfo {
-  ownedGames: GameCardGame[];
+  collection: CollectionGame[];
+  wishlist: CollectionGame[];
+  saved: CollectionGame[];
+  lists: PersonalGameList[];
 }
 
 export interface GameCardGame {

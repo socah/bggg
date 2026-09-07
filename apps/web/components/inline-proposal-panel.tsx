@@ -11,23 +11,26 @@ import { useProposalPlaces } from '@/hooks/use-proposal-places';
 import { ProposalLifecycleActions } from '@/components/proposal-lifecycle-actions';
 import { ProposalStatusBadge } from '@/components/proposal-status-badge';
 import { ProposalRsvpSection } from '@/components/proposal-rsvp-section';
+import { UserIdentityLink } from '@/components/user-identity-link';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogSheetContent, DialogClose, DialogTitle } from '@/components/ui/dialog';
 import { TimePickerDialog } from '@/components/ui/time-picker-dialog';
 import { apiMutate } from '@/lib/api';
 import { formatWindowRange } from '@/lib/datetime';
-import type { Group, GroupLibraryGame, Proposal } from '@/lib/types';
+import type { Group, GroupLibraryGame, GroupMemberInfo, Proposal } from '@/lib/types';
 
 function MemberName({
   userId,
   members,
   loading,
+  groupId,
   fallbackName,
 }: {
   userId: string;
-  members: { id: string; displayName: string }[];
+  members: GroupMemberInfo[];
   loading: boolean;
+  groupId: string;
   fallbackName?: string;
 }) {
   if (loading) {
@@ -39,7 +42,9 @@ function MemberName({
     );
   }
 
-  return fallbackName ?? members.find((member) => member.id === userId)?.displayName ?? 'Unknown member';
+  const member = members.find((candidate) => candidate.id === userId);
+  if (member) return <UserIdentityLink user={member} groupId={groupId} />;
+  return fallbackName ?? 'Unknown member';
 }
 
 export interface InlineProposalPanelProps {
@@ -65,7 +70,7 @@ export function InlineProposalPanel({
   const isDraft = proposalId === null;
   const { data: session } = useSession();
   const myId = session?.user?.id ?? null;
-  const myName = session?.user?.name ?? 'You';
+  const myName = session?.user?.username ?? session?.user?.name ?? 'You';
 
   // --- Existing proposal data ---
   const { detail, loading: loadingDetail, notFound, error: detailError, retry: retryDetail } =
@@ -224,6 +229,7 @@ export function InlineProposalPanel({
                     userId={detail.proposal.createdBy}
                     members={members}
                     loading={loadingMembers}
+                    groupId={effectiveGroupId}
                     fallbackName={detail.proposal.createdBy === myId ? myName : undefined}
                   />
                 </strong>
@@ -313,7 +319,7 @@ export function InlineProposalPanel({
           </div>
 
           <div>
-            <div className="font-medium text-xs uppercase tracking-wider text-text-muted mb-1">RSVPs</div>
+            <div className="mb-1 text-xs font-medium tracking-wider text-text-muted">RSVPs</div>
             <ul className="space-y-1">
               <li className="flex items-center gap-2 text-xs">
                 <span>
@@ -335,7 +341,7 @@ export function InlineProposalPanel({
             />
 
             <div>
-              <div className="font-medium text-xs uppercase tracking-wider text-text-muted mb-1">RSVPs</div>
+              <div className="mb-1 text-xs font-medium tracking-wider text-text-muted">RSVPs</div>
               <ul className="space-y-1">
                 {detail.rsvps.map((rsvp) => {
                   return (
@@ -345,6 +351,7 @@ export function InlineProposalPanel({
                           userId={rsvp.userId}
                           members={members}
                           loading={loadingMembers}
+                          groupId={effectiveGroupId}
                           fallbackName={rsvp.userId === myId ? myName : undefined}
                         />{' '}
                         — {rsvp.status}
@@ -495,6 +502,7 @@ export function InlineProposalPanel({
                             userId={ownerId}
                             members={members}
                             loading={loadingMembers}
+                            groupId={effectiveGroupId}
                             fallbackName={ownerId === myId ? myName : undefined}
                           />
                         </span>

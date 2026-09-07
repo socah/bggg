@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
-import { GroupSwitcher } from '@/components/group-switcher';
+import { ShellContextControl } from '@/components/shell-context-control';
 import { ViewTabs } from '@/components/view-tabs';
 import { UserMenu } from '@/components/user-menu';
 import { BottomNav } from '@/components/bottom-nav';
@@ -12,7 +12,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
   // render a broken header if it's ever reached without a session.
   if (!session?.user) redirect('/web/login');
 
-  const name = session.user.name ?? 'Account';
+  const name = session.user.username ?? session.user.name ?? 'Account';
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -20,7 +20,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
         className="flex items-center justify-between gap-3 bg-surface-raised px-4 py-3"
         style={{ borderBottom: 'var(--border-w) solid var(--border)' }}
       >
-        <GroupSwitcher />
+        <ShellContextControl />
         <div className="hidden md:block">
           <ViewTabs />
         </div>

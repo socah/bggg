@@ -23,4 +23,13 @@ export class HostingStatsController {
   ) {
     return this.schedulingService.getGroupHostingStats(groupId, req.user.sub);
   }
+
+  @Get('groups/:groupId/members/:userId/hosting-stats')
+  getMemberHostingStats(
+    @Param('groupId', ParseUUIDPipe) groupId: string,
+    @Param('userId') userId: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.schedulingService.getMemberHostingStats(groupId, userId, req.user.sub);
+  }
 }

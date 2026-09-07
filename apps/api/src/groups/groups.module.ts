@@ -8,6 +8,7 @@ import { GroupsController } from './groups.controller';
 import { GroupsService } from './groups.service';
 import { AuditModule } from '../audit/audit.module';
 import { KeycloakModule } from '../keycloak/keycloak.module';
+import { CollectionsModule } from '../collections/collections.module';
 
 @Module({
   // TypeOrmModule.forFeature([Group, GroupMember, GameOwnership, Game])
@@ -25,6 +26,7 @@ import { KeycloakModule } from '../keycloak/keycloak.module';
     TypeOrmModule.forFeature([Group, GroupMember, GameOwnership, Game]),
     AuditModule,
     KeycloakModule,
+    CollectionsModule,
   ],
 
   // controllers: NestJS instantiates these and registers their routes.

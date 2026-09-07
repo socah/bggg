@@ -9,6 +9,7 @@ import { CreateGroupDto } from './dto/create-group.dto';
 import { UpdateGroupDto } from './dto/update-group.dto';
 import { AuditService } from '../audit/audit.service';
 import { KeycloakAdminClient, KeycloakUserInfo } from '../keycloak/keycloak-admin.client';
+import { CollectionsService } from '../collections/collections.service';
 
 @Injectable()
 export class GroupsService {
@@ -29,6 +30,7 @@ export class GroupsService {
     // imports GroupsModule.
     private readonly auditService: AuditService,
     private readonly keycloakAdmin: KeycloakAdminClient,
+    private readonly collectionsService: CollectionsService,
   ) {}
 
   // Scoped to groups this user is a MEMBER of (owner, admin, or member role
@@ -101,29 +103,17 @@ export class GroupsService {
     await this.findOne(id, requestingUserId);
     const membership = await this.members.findOneBy({ groupId: id, userId });
     if (!membership) throw new NotFoundException('Group member not found');
-    const person = await this.keycloakAdmin.getUser(userId);
-    const ownerships = await this.ownership.findBy({ userId });
-    const games = ownerships.length
-      ? await this.gamesRepo.find({ where: { id: In(ownerships.map((row) => row.gameId)) }, order: { name: 'ASC' } })
-      : [];
+    const [person, library] = await Promise.all([
+      this.keycloakAdmin.getUser(userId),
+      this.collectionsService.getLibrarySnapshot(userId),
+    ]);
     return {
       id: userId,
       username: person.username,
       displayName: person.displayName,
       role: membership.role,
       isCurrentUser: userId === requestingUserId,
-      ownedGames: games.map((game) => ({
-        id: game.id,
-        bggId: game.bggId,
-        name: game.name,
-        image: game.image,
-        thumbnail: game.thumbnail,
-        minPlayers: game.minPlayers,
-        maxPlayers: game.maxPlayers,
-        playingTime: game.playingTime,
-        yearPublished: game.yearPublished,
-        rating: game.rating,
-      })),
+      ...library,
     };
   }
 

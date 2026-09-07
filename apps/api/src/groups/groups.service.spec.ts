@@ -9,6 +9,7 @@ import { GameOwnership } from '../collections/game-ownership.entity';
 import { Game } from '../games/game.entity';
 import { AuditService } from '../audit/audit.service';
 import { KeycloakAdminClient } from '../keycloak/keycloak-admin.client';
+import { CollectionsService } from '../collections/collections.service';
 
 // A fixed owner id reused across fixtures — every Group row needs one now
 // that ownership checks exist (2_owasp), and every service call needs a
@@ -59,6 +60,10 @@ describe('GroupsService', () => {
     getUser: jest.fn(),
   };
 
+  const mockCollectionsService = {
+    getLibrarySnapshot: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -93,10 +98,20 @@ describe('GroupsService', () => {
           provide: KeycloakAdminClient,
           useValue: mockKeycloakAdmin,
         },
+        {
+          provide: CollectionsService,
+          useValue: mockCollectionsService,
+        },
       ],
     }).compile();
 
     service = module.get<GroupsService>(GroupsService);
+    mockCollectionsService.getLibrarySnapshot.mockResolvedValue({
+      collection: [],
+      wishlist: [],
+      saved: [],
+      lists: [],
+    });
   });
 
   // Reset call counts and configured return values so tests don't bleed into
@@ -337,12 +352,12 @@ describe('GroupsService', () => {
       mockMembersRepository.findBy.mockResolvedValue([
         { id: 2, userId: 'canonical-user-id', groupId: 'group-1', role: 'member', joinedAt: new Date() },
       ]);
-      mockKeycloakAdmin.getUser.mockResolvedValue({ id: 'provider-user-id', displayName: 'Alice' });
+      mockKeycloakAdmin.getUser.mockResolvedValue({ id: 'provider-user-id', username: 'alice', displayName: 'Alice' });
 
       const result = await service.getMembers('group-1', OWNER_ID);
 
       expect(result).toEqual([
-         { id: 'canonical-user-id', displayName: 'Alice', role: 'member', isCurrentUser: false },
+         { id: 'canonical-user-id', username: 'alice', displayName: 'Alice', role: 'member', isCurrentUser: false },
       ]);
     });
 
@@ -357,15 +372,15 @@ describe('GroupsService', () => {
         { id: 2, userId: 'user-b', groupId: 'group-1', role: 'member', joinedAt: new Date() },
       ]);
       mockKeycloakAdmin.getUser
-        .mockResolvedValueOnce({ id: 'user-a', displayName: 'Alice' })
-        .mockResolvedValueOnce({ id: 'user-b', displayName: 'Bob' });
+        .mockResolvedValueOnce({ id: 'user-a', username: 'alice', displayName: 'Alice' })
+        .mockResolvedValueOnce({ id: 'user-b', username: 'bob', displayName: 'Bob' });
 
       const result = await service.getMembers('group-1', OWNER_ID);
 
       expect(mockRepository.findOneBy).toHaveBeenCalledWith({ id: 'group-1' });
       expect(result).toEqual([
-         { id: 'user-a', displayName: 'Alice', role: 'owner', isCurrentUser: false },
-         { id: 'user-b', displayName: 'Bob', role: 'member', isCurrentUser: false },
+         { id: 'user-a', username: 'alice', displayName: 'Alice', role: 'owner', isCurrentUser: false },
+         { id: 'user-b', username: 'bob', displayName: 'Bob', role: 'member', isCurrentUser: false },
       ]);
     });
 
@@ -376,11 +391,11 @@ describe('GroupsService', () => {
       mockMembersRepository.findBy.mockResolvedValue([
         { id: 1, userId: OWNER_ID, groupId: 'group-1', role: 'owner', joinedAt: new Date() },
       ]);
-      mockKeycloakAdmin.getUser.mockResolvedValue({ id: OWNER_ID, displayName: 'Alice' });
+      mockKeycloakAdmin.getUser.mockResolvedValue({ id: OWNER_ID, username: 'alice', displayName: 'Alice' });
 
       const result = await service.getMembers('group-1', OWNER_ID);
 
-      expect(result[0]).toEqual({ id: OWNER_ID, displayName: 'Alice', role: 'owner', isCurrentUser: true });
+      expect(result[0]).toEqual({ id: OWNER_ID, username: 'alice', displayName: 'Alice', role: 'owner', isCurrentUser: true });
     });
 
     it('keeps membership and role data when an identity lookup fails', async () => {
@@ -392,12 +407,12 @@ describe('GroupsService', () => {
         { id: 2, userId: 'stale-user', groupId: 'group-1', role: 'member', joinedAt: new Date() },
       ]);
       mockKeycloakAdmin.getUser
-        .mockResolvedValueOnce({ id: OWNER_ID, displayName: 'Alice' })
+        .mockResolvedValueOnce({ id: OWNER_ID, username: 'alice', displayName: 'Alice' })
         .mockRejectedValueOnce(new Error('not found'));
 
       await expect(service.getMembers('group-1', OWNER_ID)).resolves.toEqual([
-        { id: OWNER_ID, displayName: 'Alice', role: 'owner', isCurrentUser: true },
-        { id: 'stale-user', displayName: 'Unknown member', role: 'member', isCurrentUser: false },
+        { id: OWNER_ID, username: 'alice', displayName: 'Alice', role: 'owner', isCurrentUser: true },
+        { id: 'stale-user', username: 'unknown-member', displayName: 'Unknown member', role: 'member', isCurrentUser: false },
       ]);
     });
 
@@ -408,6 +423,44 @@ describe('GroupsService', () => {
 
       await expect(service.getMembers('group-1', 'someone-else')).rejects.toThrow(ForbiddenException);
       expect(mockKeycloakAdmin.getUser).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getMemberProfile', () => {
+    it('returns every list after verifying both users belong to the group', async () => {
+      const group: Group = { id: 'group-1', name: 'Chess Club', ownerId: OWNER_ID, isSolo: false, createdAt: new Date() };
+      const library = {
+        collection: [{ id: 1, name: 'Owned game' }],
+        wishlist: [{ id: 2, name: 'Wanted game' }],
+        saved: [{ id: 3, name: 'Saved game' }],
+        lists: [{ id: 'list-1', name: 'Favorites', items: [] }],
+      };
+      mockRepository.findOneBy.mockResolvedValue(group);
+      mockMembersRepository.findOneBy
+        .mockResolvedValueOnce({ userId: OWNER_ID, groupId: 'group-1', role: 'owner' })
+        .mockResolvedValueOnce({ userId: 'user-2', groupId: 'group-1', role: 'member' });
+      mockKeycloakAdmin.getUser.mockResolvedValue({ id: 'user-2', username: 'bob', displayName: 'Bob' });
+      mockCollectionsService.getLibrarySnapshot.mockResolvedValue(library);
+
+      await expect(service.getMemberProfile('group-1', 'user-2', OWNER_ID)).resolves.toEqual({
+        id: 'user-2',
+        username: 'bob',
+        displayName: 'Bob',
+        role: 'member',
+        isCurrentUser: false,
+        ...library,
+      });
+      expect(mockCollectionsService.getLibrarySnapshot).toHaveBeenCalledWith('user-2');
+    });
+
+    it('does not read lists when the target is not a member of the group', async () => {
+      mockRepository.findOneBy.mockResolvedValue({ id: 'group-1' });
+      mockMembersRepository.findOneBy
+        .mockResolvedValueOnce({ userId: OWNER_ID, groupId: 'group-1', role: 'owner' })
+        .mockResolvedValueOnce(null);
+
+      await expect(service.getMemberProfile('group-1', 'outsider', OWNER_ID)).rejects.toThrow(NotFoundException);
+      expect(mockCollectionsService.getLibrarySnapshot).not.toHaveBeenCalled();
     });
   });
 
