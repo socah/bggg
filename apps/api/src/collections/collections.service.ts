@@ -486,6 +486,7 @@ export class CollectionsService {
       if (item.userRating == null) continue;
       withContent.add(gameId);
       const review = existingByGameId.get(gameId);
+      if (review?.source === 'manual') continue;
       await this.reviews.save(this.reviews.create({
         ...review,
         userId,

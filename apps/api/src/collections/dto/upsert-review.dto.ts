@@ -1,7 +1,7 @@
-import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 
 export class UpsertReviewDto {
-  @IsInt()
+  @IsNumber({ maxDecimalPlaces: 1 })
   @Min(1)
   @Max(10)
   rating!: number;

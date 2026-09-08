@@ -263,10 +263,7 @@ export function GameDetailsSheet({
                   {mine && <p className="text-xs text-text-muted">Editing your existing review.{imported && ' The rating is updated from BGG when you sync; your other edits stay here.'}</p>}
                   <div className="grid gap-2 sm:grid-cols-3">
                     <label className="text-xs font-semibold text-text-muted">Rating
-                      <select required value={rating} onChange={(event) => setRating(event.target.value)} className={`mt-1 w-full ${selectClass}`}>
-                        <option value="">Choose</option>
-                        {Object.entries(RATING_SCALE).reverse().map(([value, label]) => <option key={value} value={value}>{value} - {label}</option>)}
-                      </select>
+                      <Input required type="number" min="1" max="10" step="0.1" value={rating} onChange={(event) => setRating(event.target.value)} className="mt-1" placeholder="1-10" />
                     </label>
                     <label className="text-xs font-semibold text-text-muted">Complexity
                       <select value={complexity} onChange={(event) => setComplexity(event.target.value)} className={`mt-1 w-full ${selectClass}`}>
@@ -279,7 +276,7 @@ export function GameDetailsSheet({
                       </select>
                     </label>
                   </div>
-                  {rating && <p className="text-xs text-text-muted"><strong>{rating}/10:</strong> {RATING_SCALE[Number(rating)]}</p>}
+                  {rating && <p className="text-xs text-text-muted"><strong>{rating}/10:</strong> {RATING_SCALE[Math.round(Number(rating))]}</p>}
                   <label className="text-xs font-semibold text-text-muted">Comment
                     <textarea value={body} onChange={(event) => setBody(event.target.value)} rows={4} maxLength={5000} className="mt-1 w-full resize-y rounded-sm border-[length:var(--border-w)] border-border bg-surface-raised p-2 font-body text-sm text-text" placeholder="What did you think?" />
                   </label>

@@ -495,6 +495,24 @@ describe('CollectionsService', () => {
         source: 'bgg',
       }));
     });
+
+    it('does not overwrite a manually created review with BGG data', async () => {
+      const manualReview = {
+        id: 8, userId: 'user-1', gameId: 1, rating: 6, body: 'Keep all of this.',
+        complexityScore: 2, depthScore: 3, source: 'manual',
+      };
+      mockAccountsRepo.findOneBy.mockResolvedValue({ userId: 'user-1', bggUsername: 'aldie' });
+      mockBggService.getCollection.mockResolvedValue([{
+        bggId: 174430, name: 'Gloomhaven', userRating: 9, comment: 'Ignore this.',
+      }]);
+      mockGamesService.findOrFetchMany.mockResolvedValue([makeGame()]);
+      mockOwnershipRepo.findBy.mockResolvedValue([makeOwnership()]);
+      mockReviewsRepo.findBy.mockResolvedValue([manualReview]);
+
+      await service.importCollection('user-1');
+
+      expect(mockReviewsRepo.save).not.toHaveBeenCalled();
+    });
   });
 
   describe('upsertReview', () => {
