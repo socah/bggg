@@ -259,15 +259,8 @@ export function GameDetailsSheet({
             )}
             <section>
               <h3 className="font-display text-lg">Your review</h3>
-              {imported ? (
-                <Card className="mt-3 p-4">
-                  <div className="flex items-center justify-between gap-2"><strong>Imported from BGG</strong>{mine.rating && <Badge>{mine.rating}/10</Badge>}</div>
-                  {mine.body && <p className="mt-3 whitespace-pre-wrap text-sm">{mine.body}</p>}
-                  <p className="mt-3 text-xs text-text-muted">This review is read-only here. Change your rating or comment on BoardGameGeek, then sync your collection.</p>
-                </Card>
-              ) : (
-                <form onSubmit={saveReview} className="mt-3 flex flex-col gap-3">
-                  {mine && <p className="text-xs text-text-muted">Editing your existing review.</p>}
+              <form onSubmit={saveReview} className="mt-3 flex flex-col gap-3">
+                  {mine && <p className="text-xs text-text-muted">Editing your existing review.{imported && ' The rating is updated from BGG when you sync; your other edits stay here.'}</p>}
                   <div className="grid gap-2 sm:grid-cols-3">
                     <label className="text-xs font-semibold text-text-muted">Rating
                       <select required value={rating} onChange={(event) => setRating(event.target.value)} className={`mt-1 w-full ${selectClass}`}>
@@ -292,10 +285,9 @@ export function GameDetailsSheet({
                   </label>
                   <div className="flex flex-wrap gap-2">
                     <Button type="submit" disabled={saving || !rating}>{saving ? 'Saving...' : mine ? 'Update review' : 'Save review'}</Button>
-                    {mine && <Button type="button" variant="secondary" disabled={saving} onClick={() => void deleteReview()}>Delete review</Button>}
+                    {mine && !imported && <Button type="button" variant="secondary" disabled={saving} onClick={() => void deleteReview()}>Delete review</Button>}
                   </div>
-                </form>
-              )}
+              </form>
             </section>
 
             {onMutate && game && (
@@ -368,7 +360,7 @@ export function GameDetailsSheet({
                 {details.reviews.map((review) => (
                   <Card key={review.id} className="p-3">
                     <div className="flex items-center justify-between gap-2"><strong><UserIdentityLink user={{ id: review.userId, username: review.username, displayName: review.displayName }} groupId={review.profileGroupId} /></strong>{review.rating && <Badge>{review.rating}/10</Badge>}</div>
-                    <p className="mt-1 text-xs text-text-muted">{review.source === 'bgg' ? 'Imported from BGG' : `Complexity ${review.complexityScore ?? '-'} / 5 · Depth ${review.depthScore ?? '-'} / 5`}</p>
+                    <p className="mt-1 text-xs text-text-muted">{review.source === 'bgg' ? 'Rating synced from BGG' : `Complexity ${review.complexityScore ?? '-'} / 5 · Depth ${review.depthScore ?? '-'} / 5`}</p>
                     {review.body && <p className="mt-2 whitespace-pre-wrap text-sm">{review.body}</p>}
                   </Card>
                 ))}

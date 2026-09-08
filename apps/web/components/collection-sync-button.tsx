@@ -39,7 +39,7 @@ export function CollectionSyncButton() {
       if (!response.ok) throw new Error('Unable to import from BGG');
       const summary = await response.json() as ImportSummary;
       window.dispatchEvent(new CustomEvent('bgg-collection-synced', {
-        detail: `Synced ${summary.total} owned and ${summary.wishlist.total} wishlist games, ratings, and comments from BGG.`,
+        detail: `Synced ${summary.total} owned and ${summary.wishlist.total} wishlist games and ratings from BGG.`,
       }));
     } catch (error) {
       window.dispatchEvent(new CustomEvent('bgg-collection-sync-failed', {

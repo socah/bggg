@@ -402,11 +402,6 @@ export class CollectionsService {
     const [game] = await this.games.findByIds([gameId]);
     if (!game) throw new NotFoundException('Game not found');
     const existing = await this.reviews.findOneBy({ userId, gameId });
-    if (existing?.source === 'bgg') {
-      throw new BadRequestException(
-        'This review was imported from BGG. Update it on BGG and sync your collection.',
-      );
-    }
     return this.reviews.save(this.reviews.create({
       ...existing,
       userId,
@@ -415,7 +410,7 @@ export class CollectionsService {
       complexityScore: dto.complexityScore ?? null,
       depthScore: dto.depthScore ?? null,
       body: dto.body?.trim() || null,
-      source: 'manual',
+      source: existing?.source ?? 'manual',
     }));
   }
 
@@ -488,24 +483,27 @@ export class CollectionsService {
 
     for (const item of collection) {
       const gameId = gameIdByBggId.get(item.bggId)!;
-      if (item.userRating == null && item.comment == null) continue;
+      if (item.userRating == null) continue;
       withContent.add(gameId);
       const review = existingByGameId.get(gameId);
-      if (review?.source === 'manual') continue;
       await this.reviews.save(this.reviews.create({
         ...review,
         userId,
         gameId,
         rating: item.userRating,
-        body: item.comment,
-        complexityScore: null,
-        depthScore: null,
-        source: 'bgg',
+        body: review?.body ?? null,
+        complexityScore: review?.complexityScore ?? null,
+        depthScore: review?.depthScore ?? null,
+        source: review?.source ?? 'bgg',
       }));
     }
 
     const staleIds = existing
-      .filter((review) => review.source === 'bgg' && !withContent.has(review.gameId))
+      .filter((review) => review.source === 'bgg'
+        && !withContent.has(review.gameId)
+        && !review.body
+        && review.complexityScore == null
+        && review.depthScore == null)
       .map((review) => review.id);
     if (staleIds.length) await this.reviews.delete({ id: In(staleIds) });
   }

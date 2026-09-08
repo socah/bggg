@@ -445,7 +445,7 @@ describe('CollectionsService', () => {
       expect(mockOwnershipRepo.delete).not.toHaveBeenCalled();
     });
 
-    it('should import BGG rating and comment as a BGG-sourced review', async () => {
+    it('should import only the BGG rating into a BGG-sourced review', async () => {
       mockAccountsRepo.findOneBy.mockResolvedValue({ userId: 'user-1', bggUsername: 'aldie' });
       mockBggService.getCollection.mockResolvedValue([{
         bggId: 174430,
@@ -464,19 +464,51 @@ describe('CollectionsService', () => {
         userId: 'user-1',
         gameId: 1,
         rating: 8.5,
-        body: 'Excellent campaign.',
+        body: null,
+        source: 'bgg',
+      }));
+    });
+
+    it('updates the BGG rating without overwriting app review fields', async () => {
+      const existingReview = {
+        id: 7, userId: 'user-1', gameId: 1, rating: 7, body: 'Edited in the app.',
+        complexityScore: 4, depthScore: 5, source: 'bgg',
+      };
+      mockAccountsRepo.findOneBy.mockResolvedValue({ userId: 'user-1', bggUsername: 'aldie' });
+      mockBggService.getCollection.mockResolvedValue([{
+        bggId: 174430, name: 'Gloomhaven', userRating: 9, comment: 'BGG comment should be ignored.',
+      }]);
+      mockGamesService.findOrFetchMany.mockResolvedValue([makeGame()]);
+      mockOwnershipRepo.findBy.mockResolvedValue([makeOwnership()]);
+      mockReviewsRepo.findBy.mockResolvedValue([existingReview]);
+      mockReviewsRepo.create.mockImplementation((data) => data);
+      mockReviewsRepo.save.mockImplementation((data) => Promise.resolve(data));
+
+      await service.importCollection('user-1');
+
+      expect(mockReviewsRepo.save).toHaveBeenCalledWith(expect.objectContaining({
+        id: 7,
+        rating: 9,
+        body: 'Edited in the app.',
+        complexityScore: 4,
+        depthScore: 5,
         source: 'bgg',
       }));
     });
   });
 
   describe('upsertReview', () => {
-    it('rejects edits to a BGG-sourced review', async () => {
+    it('edits a BGG-sourced review while preserving its rating provenance', async () => {
       mockGamesService.findByIds.mockResolvedValue([makeGame()]);
-      mockReviewsRepo.findOneBy.mockResolvedValue({ source: 'bgg' });
+      mockReviewsRepo.findOneBy.mockResolvedValue({ id: 5, source: 'bgg' });
+      mockReviewsRepo.create.mockImplementation((data) => data);
+      mockReviewsRepo.save.mockImplementation((data) => Promise.resolve(data));
 
-      await expect(service.upsertReview('user-1', 1, { rating: 9 })).rejects.toThrow(/BGG.*sync/);
-      expect(mockReviewsRepo.save).not.toHaveBeenCalled();
+      await service.upsertReview('user-1', 1, { rating: 9, body: 'App edit', complexityScore: 3 });
+
+      expect(mockReviewsRepo.save).toHaveBeenCalledWith(expect.objectContaining({
+        id: 5, source: 'bgg', rating: 9, body: 'App edit', complexityScore: 3,
+      }));
     });
   });
 
