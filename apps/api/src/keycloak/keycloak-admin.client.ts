@@ -163,25 +163,21 @@ export class KeycloakAdminClient {
     return this.getUser(userId);
   }
 
-  // Compensating action for InvitesService.registerAndAcceptInvite: if
-  // redeeming the invite fails AFTER this account was created, there is no
-  // single transaction spanning Keycloak and Postgres to roll back — the
-  // best we can do is delete what we just created so a retry doesn't hit
-  // "email already exists" for an account that never got a group. Best
-  // effort: if this itself fails, the caller logs it and moves on rather
-  // than compounding one failure with an unhandled second one.
+  // Used both for invite-registration rollback and explicit account deletion.
+  // The rollback caller catches failures; account deletion surfaces them so
+  // the UI never reports success while the Keycloak account still exists.
   async deleteUser(userId: string): Promise<void> {
     const token = await this.getServiceToken();
 
-    await firstValueFrom(
+    const response = await firstValueFrom(
       this.http.delete(`${KEYCLOAK_URL}/admin/realms/${REALM}/users/${userId}`, {
         headers: { Authorization: `Bearer ${token}` },
         validateStatus: () => true,
       }),
     );
-    // Not checking the response status here: whether this succeeds (204),
-    // the user was already gone (404), or it fails outright, the caller's
-    // job is already done — log and move on, per the comment above.
+    if (response.status !== 204 && response.status !== 404) {
+      throw new HttpException(`Keycloak user deletion failed (${response.status})`, 502);
+    }
   }
 
   private async getServiceToken(): Promise<string> {

@@ -2,6 +2,7 @@ import { AppearanceSettings } from '@/components/appearance-settings';
 import { BggAccountSettings } from '@/components/bgg-account-settings';
 import { CalendarFeedSettings } from '@/components/calendar-feed-settings';
 import { ProfileSettings } from '@/components/profile-settings';
+import { DeleteAccountSettings } from '@/components/delete-account-settings';
 
 export default function PersonalSettingsPage() {
   return (
@@ -28,6 +29,12 @@ export default function PersonalSettingsPage() {
         <h2 className="font-display text-xl">Calendar feed</h2>
         <div className="mt-4">
           <CalendarFeedSettings />
+        </div>
+      </section>
+      <section>
+        <h2 className="font-display text-xl text-accent">Delete account</h2>
+        <div className="mt-4">
+          <DeleteAccountSettings />
         </div>
       </section>
     </div>

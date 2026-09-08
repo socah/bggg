@@ -6,7 +6,7 @@ import { KeycloakAdminClient } from './keycloak-admin.client';
 // module's scope, KeycloakAdminClient is the only provider, exported so
 // InvitesModule (and the seed-admin script's application context) can use it.
 @Module({
-  imports: [HttpModule],
+  imports: [HttpModule.register({ timeout: 10_000 })],
   providers: [KeycloakAdminClient],
   exports: [KeycloakAdminClient],
 })

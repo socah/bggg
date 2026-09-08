@@ -232,4 +232,20 @@ describe('KeycloakAdminClient', () => {
       expect(result).toMatchObject({ email: 'alice@example.com', displayName: 'Alice' });
     });
   });
+
+  describe('deleteUser', () => {
+    it.each([204, 404])('accepts status %s', async (status) => {
+      mockHttpService.post.mockReturnValue(of({ status: 200, data: { access_token: 'service-token', expires_in: 60 } }));
+      mockHttpService.delete.mockReturnValue(of({ status }));
+
+      await expect(client.deleteUser('user-1')).resolves.toBeUndefined();
+    });
+
+    it('rejects a failed Keycloak deletion', async () => {
+      mockHttpService.post.mockReturnValue(of({ status: 200, data: { access_token: 'service-token', expires_in: 60 } }));
+      mockHttpService.delete.mockReturnValue(of({ status: 500 }));
+
+      await expect(client.deleteUser('user-1')).rejects.toMatchObject({ status: 502 });
+    });
+  });
 });

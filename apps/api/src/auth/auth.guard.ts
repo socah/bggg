@@ -2,8 +2,11 @@ import {
   Injectable,
   CanActivate,
   ExecutionContext,
+  Optional,
   UnauthorizedException,
 } from '@nestjs/common';
+import { DataSource } from 'typeorm';
+import { createHash } from 'node:crypto';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 
 // createRemoteJWKSet returns a resolver function, not a key — it fetches
@@ -43,6 +46,8 @@ export const ISSUER =
 
 @Injectable()
 export class AuthGuard implements CanActivate {
+  constructor(@Optional() private readonly dataSource?: DataSource) {}
+
   // NestJS calls canActivate before every handler this guard protects.
   // Returning true lets the request through; throwing blocks it with 401.
   // jwtVerify is async (it may need to fetch JWKS on first call), so this
@@ -64,6 +69,15 @@ export class AuthGuard implements CanActivate {
         issuer: ISSUER,
         algorithms: ['RS256'],
       });
+      if (!payload.sub) throw new UnauthorizedException('Token has no subject');
+      const subjectHash = createHash('sha256').update(payload.sub).digest('hex');
+      if (this.dataSource) {
+        const deleted = await this.dataSource.query<Array<{ exists: boolean }>>(
+          `SELECT EXISTS (SELECT 1 FROM deleted_account_subjects WHERE subject_hash = $1) AS "exists"`,
+          [subjectHash],
+        );
+        if (deleted[0]?.exists) throw new UnauthorizedException('Account deleted');
+      }
 
       // Attach the decoded payload to whichever object the handler will
       // actually receive, so it can read `.sub` (the user's ID) without

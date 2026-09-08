@@ -1,7 +1,8 @@
-import { Body, Controller, Get, Patch, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Patch, Request, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '../auth/auth.guard';
 import { KeycloakAdminClient } from '../keycloak/keycloak-admin.client';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { UsersService } from './users.service';
 
 interface AuthenticatedRequest {
   user: { sub: string };
@@ -10,7 +11,10 @@ interface AuthenticatedRequest {
 @Controller('users/me')
 @UseGuards(AuthGuard)
 export class UsersController {
-  constructor(private readonly keycloakAdmin: KeycloakAdminClient) {}
+  constructor(
+    private readonly keycloakAdmin: KeycloakAdminClient,
+    private readonly usersService: UsersService,
+  ) {}
 
   @Get()
   getProfile(@Request() request: AuthenticatedRequest) {
@@ -27,5 +31,11 @@ export class UsersController {
       firstName: dto.firstName?.trim(),
       lastName: dto.lastName?.trim(),
     });
+  }
+
+  @Delete()
+  @HttpCode(204)
+  deleteAccount(@Request() request: AuthenticatedRequest) {
+    return this.usersService.deleteAccount(request.user.sub);
   }
 }

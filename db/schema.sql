@@ -575,6 +575,22 @@ CREATE TABLE IF NOT EXISTS chat_thread_dismissals (
   PRIMARY KEY (thread_id, user_id)
 );
 
+-- Hashes of deleted Keycloak subjects. Auth rejects otherwise-valid access
+-- tokens for these accounts immediately, without retaining the raw subject.
+CREATE TABLE IF NOT EXISTS deleted_account_subjects (
+  subject_hash TEXT PRIMARY KEY,
+  deleted_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Durable reconciliation across Keycloak deletion and PostgreSQL cleanup.
+-- The raw subject is retained only until the final cleanup pass succeeds.
+CREATE TABLE IF NOT EXISTS account_deletion_jobs (
+  subject_id TEXT PRIMARY KEY,
+  tombstone TEXT NOT NULL UNIQUE,
+  identity_deleted BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE INDEX IF NOT EXISTS messages_thread_history_idx ON messages(thread_id, created_at DESC, id DESC);
 
 -- Migration-only archive for legacy messages whose unconstrained group_id no
