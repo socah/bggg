@@ -10,11 +10,12 @@ interface ProposalLifecycleActionsProps {
   proposal: Proposal;
   canManage: boolean;
   actions: ProposalActions;
+  soleAttendee?: boolean;
 }
 
 // Creator / owner-admin lifecycle controls, contextual to the current
 // status. Undo from 'confirmed' also deletes the recorded play_sessions row.
-export function ProposalLifecycleActions({ proposal, canManage, actions }: ProposalLifecycleActionsProps) {
+export function ProposalLifecycleActions({ proposal, canManage, actions, soleAttendee = false }: ProposalLifecycleActionsProps) {
   const [confirmingUndo, setConfirmingUndo] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const busy = actions.pendingAction !== null;
@@ -29,7 +30,7 @@ export function ProposalLifecycleActions({ proposal, canManage, actions }: Propo
           disabled={busy}
           onClick={() => actions.requestConfirmation(proposal.id)}
         >
-          Request confirmation
+          {soleAttendee ? 'Confirm proposal' : 'Request confirmation'}
         </Button>
       )}
       {proposal.status === 'confirming' && (

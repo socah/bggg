@@ -17,6 +17,7 @@ import { SchedulingService } from './scheduling.service';
 import { GroupProposalsController } from './group-proposals.controller';
 import { ProposalsController } from './proposals.controller';
 import { HostingStatsController } from './hosting-stats.controller';
+import { PlacesController } from './places.controller';
 import { GroupsModule } from '../groups/groups.module';
 
 @Module({
@@ -48,7 +49,7 @@ import { GroupsModule } from '../groups/groups.module';
     // ChatModule uses to inject GroupsService into ChatService.
     GroupsModule,
   ],
-  controllers: [GroupProposalsController, ProposalsController, HostingStatsController],
+  controllers: [GroupProposalsController, ProposalsController, PlacesController, HostingStatsController],
   providers: [SchedulingService],
   // PlaySession is exported so a future module (e.g. a "log a session
   // directly, without a proposal" feature, or CalendarModule reading

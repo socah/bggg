@@ -1,6 +1,6 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react';
-import type { ProposalGameSummary, ProposalStatus } from '@/lib/types';
+import type { AvailablePlace, ProposalGameSummary, ProposalPlaceSummary, ProposalStatus } from '@/lib/types';
 
 let proposalStatus: ProposalStatus = 'collecting';
 let proposalGames: ProposalGameSummary[] = [];
@@ -8,6 +8,10 @@ const vote = jest.fn();
 const unvote = jest.fn();
 const downvote = jest.fn();
 const removeSuggestion = jest.fn();
+let proposalPlaces: ProposalPlaceSummary[] = [];
+let availablePlaces: AvailablePlace[] = [];
+const downvotePlace = jest.fn();
+const removePlaceSuggestion = jest.fn();
 
 jest.unstable_mockModule('next-auth/react', () => ({
   useSession: () => ({ data: { user: { id: 'user-1', name: 'Alice', username: 'alice' } } }),
@@ -83,14 +87,17 @@ jest.unstable_mockModule('@/components/personal-collection', () => ({
 
 jest.unstable_mockModule('@/hooks/use-proposal-places', () => ({
   useProposalPlaces: () => ({
-    rows: [],
-    available: [],
+    rows: proposalPlaces,
+    available: availablePlaces,
     loading: false,
     error: null,
     pendingAction: null,
     suggest: jest.fn(),
     vote: jest.fn(),
+    downvote: downvotePlace,
     unvote: jest.fn(),
+    removeSuggestion: removePlaceSuggestion,
+    removeSaved: jest.fn(),
     setOwned: jest.fn(),
   }),
 }));
@@ -176,5 +183,43 @@ describe('InlineProposalPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Catan' }));
     expect(screen.getByText('Details for Catan')).toBeTruthy();
     proposalGames = [];
+  });
+
+  it('supports place downvotes and lets the suggester remove a place', () => {
+    proposalStatus = 'collecting';
+    proposalPlaces = [{
+      proposalPlaceId: 'pp-1',
+      place: { id: 'place-1', name: 'Clubhouse' },
+      voteCount: 1,
+      votedByMe: false,
+      downvotedByMe: false,
+      proposedByMe: true,
+      ownedByMe: false,
+      ownerIds: [],
+    }];
+
+    render(<InlineProposalPanel proposalId="proposal-1" groups={[{ id: 'group-1', name: 'Game Night', ownerId: 'user-1', isSolo: false, createdAt: '2026-09-01T12:00:00.000Z' }]} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Downvote this place' }));
+    expect(downvotePlace).toHaveBeenCalledWith('pp-1');
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+    expect(removePlaceSuggestion).toHaveBeenCalledWith('pp-1');
+    proposalPlaces = [];
+  });
+
+  it('adds a place to a draft before the proposal is saved', () => {
+    availablePlaces = [{
+      place: { id: 'place-1', name: 'Clubhouse' },
+      ownedByMe: false,
+      suggestionCount: 2,
+    }];
+    render(<InlineProposalPanel proposalId={null} draftDate="2026-09-03" groups={[{ id: 'group-1', name: 'Game Night', ownerId: 'user-1', isSolo: false, createdAt: '2026-09-01T12:00:00.000Z' }]} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add place' }));
+    fireEvent.click(screen.getByRole('button', { name: /Clubhouse/ }));
+
+    expect(screen.getByText('Clubhouse')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Remove' })).toBeTruthy();
+    availablePlaces = [];
   });
 });

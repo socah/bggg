@@ -78,7 +78,11 @@ The flow:
    after people lock in — which is what actually inserts the `play_sessions`
    row (`proposal_id` set, `played_at` = the stored trimmed start). Lock-ins
    are a *signal* the creator uses to decide when to finalize, not a
-   mechanical gate that finalizes automatically once everyone's in.
+    mechanical gate that finalizes automatically once everyone's in.
+   A proposal with exactly one attending RSVP is the exception: its sole
+   attendee's request computes the window, creates the session, and moves
+   directly from `collecting` to `confirmed`, because there is nobody else
+   to ask for a lock-in.
 5. **Undo** (from `confirming` or `confirmed` back to `collecting`) resets
    every RSVP's `confirmed` flag to `false`, clears the stored trimmed
    window, and — if a `play_sessions` row already existed — deletes it. A
@@ -103,6 +107,10 @@ wanted here.
 Chose: not a strict intersection across every `yes` window (which is often
 empty the moment 3+ people are involved), but the first and last moments
 where **at least two** people's windows overlap.
+
+For a proposal with one attendee, that attendee's complete availability
+window is used. If a suggested place has owners, the sole attendee must be
+one of those owners.
 
 Algorithm (no host): treat each RSVP window as a `[start, +1)`/`[end, -1)`
 pair of sweep-line events. Sort by time (processing `end` events before

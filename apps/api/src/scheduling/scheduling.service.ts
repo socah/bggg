@@ -46,6 +46,8 @@ export interface ProposalPlaceWithVotes {
   place: { id: string; name: string };
   voteCount: number;
   votedByMe: boolean;
+  downvotedByMe: boolean;
+  proposedByMe: boolean;
   ownedByMe: boolean;
   ownerIds: string[];
 }
@@ -182,9 +184,9 @@ export class SchedulingService {
     return this.rsvps.save(rsvp);
   }
 
-  // POST /proposals/:id/request-confirmation — the 'collecting' ->
-  // 'confirming' transition (Decision B, step 2). Computes and stores the
-  // trimmed window; does NOT create a play_sessions row yet.
+  // POST /proposals/:id/request-confirmation — normally the 'collecting' ->
+  // 'confirming' transition (Decision B, step 2). A sole attendee goes
+  // directly to 'confirmed' because there is nobody else to lock in.
   async requestConfirmation(
     proposalId: string,
     requestingUserId: string,
@@ -196,8 +198,9 @@ export class SchedulingService {
       throw new ConflictException(`Cannot request confirmation from status '${proposal.status}'`);
     }
 
-    const yesRsvps = await this.rsvps.findBy({ proposalId, status: 'yes' });
-    const windows = yesRsvps
+    const proposalRsvps = await this.rsvps.findBy({ proposalId });
+    const windows = proposalRsvps
+      .filter((r) => r.status === 'yes')
       .filter((r): r is PlaySessionRsvp & { availableStart: Date; availableEnd: Date } =>
         r.availableStart !== null && r.availableEnd !== null,
       )
@@ -221,9 +224,19 @@ export class SchedulingService {
       throw err;
     }
 
-    proposal.status = 'confirming';
     proposal.confirmedStart = window.start;
     proposal.confirmedEnd = window.end;
+    const participants = proposalRsvps.filter((rsvp) => rsvp.status !== 'no');
+    if (participants.length === 1) {
+      if (participants[0].userId !== requestingUserId) {
+        throw new ForbiddenException('Only the sole attendee can confirm this proposal');
+      }
+      await this.createSessionForProposal(proposal);
+      proposal.status = 'confirmed';
+      return this.proposals.save(proposal);
+    }
+
+    proposal.status = 'confirming';
     return this.proposals.save(proposal);
   }
 
@@ -262,26 +275,7 @@ export class SchedulingService {
       throw new ConflictException(`Cannot finalize from status '${proposal.status}'`);
     }
 
-    const session = await this.sessions.save(
-      this.sessions.create({
-        groupId: proposal.groupId,
-        playedAt: proposal.confirmedStart,
-        proposalId: proposal.id,
-      }),
-    );
-
-    const suggestedPlaces = await this.proposalPlaces.findBy({ proposalId });
-    if (suggestedPlaces.length > 0) {
-      const owners = await this.placeOwners.findBy({
-        placeId: In(suggestedPlaces.map((row) => row.placeId)),
-      });
-      const hostIds = [...new Set(owners.map((owner) => owner.userId))];
-      if (hostIds.length > 0) {
-        await this.sessionHosts.save(
-          hostIds.map((userId) => this.sessionHosts.create({ sessionId: session.id, userId })),
-        );
-      }
-    }
+    const session = await this.createSessionForProposal(proposal);
 
     proposal.status = 'confirmed';
     await this.proposals.save(proposal);
@@ -472,7 +466,7 @@ export class SchedulingService {
 
     let place: Place;
     if (dto.placeId) {
-      const available = await this.listAvailablePlaces(proposalId, requestingUserId);
+      const available = await this.listAvailablePlaces(requestingUserId);
       if (!available.some((row) => row.place.id === dto.placeId)) {
         throw new NotFoundException('Available place not found');
       }
@@ -517,14 +511,15 @@ export class SchedulingService {
 
     const result = await Promise.all(rows.map(async (row) => {
       const ownerIds = (ownerIdsByPlace.get(row.placeId) ?? []).sort();
+      const votes = await this.placeVotes.findBy({ proposalPlaceId: row.id });
+      const myVote = votes.find((vote) => vote.userId === requestingUserId)?.value ?? 0;
       return {
         proposalPlaceId: row.id,
         place: { id: row.placeId, name: placeById.get(row.placeId)?.name ?? 'Unknown place' },
-        voteCount: await this.placeVotes.countBy({ proposalPlaceId: row.id }),
-        votedByMe: await this.placeVotes.existsBy({
-          proposalPlaceId: row.id,
-          userId: requestingUserId,
-        }),
+        voteCount: votes.reduce((total, vote) => total + vote.value, 0),
+        votedByMe: myVote === 1,
+        downvotedByMe: myVote === -1,
+        proposedByMe: row.proposedBy === requestingUserId,
         ownedByMe: ownerIds.includes(requestingUserId),
         ownerIds,
       };
@@ -537,12 +532,8 @@ export class SchedulingService {
   }
 
   async listAvailablePlaces(
-    proposalId: string,
     requestingUserId: string,
   ): Promise<AvailablePlace[]> {
-    const proposal = await this.findProposalOrThrow(proposalId);
-    await this.groupsService.findOne(proposal.groupId, requestingUserId);
-
     const [owned, visible, memberships] = await Promise.all([
       this.placeOwners.findBy({ userId: requestingUserId }),
       this.placeVisibility.findBy({ userId: requestingUserId }),
@@ -558,18 +549,19 @@ export class SchedulingService {
           proposalId: In(accessibleProposals.map((accessible) => accessible.id)),
         });
 
+    const hiddenIds = new Set(visible.filter((row) => row.hidden).map((row) => row.placeId));
     const placeIds = new Set([
       ...owned.map((row) => row.placeId),
-      ...visible.map((row) => row.placeId),
+      ...visible.filter((row) => !row.hidden).map((row) => row.placeId),
       ...accessibleSuggestions.map((row) => row.placeId),
-    ]);
+    ].filter((placeId) => !hiddenIds.has(placeId)));
     if (placeIds.size === 0) return [];
 
     const visibleIds = new Set(visible.map((row) => row.placeId));
     const discoveredIds = [...placeIds].filter((placeId) => !visibleIds.has(placeId));
     if (discoveredIds.length > 0) {
       await this.placeVisibility.upsert(
-        discoveredIds.map((placeId) => ({ placeId, userId: requestingUserId })),
+        discoveredIds.map((placeId) => ({ placeId, userId: requestingUserId, hidden: false })),
         ['placeId', 'userId'],
       );
     }
@@ -589,16 +581,32 @@ export class SchedulingService {
     );
   }
 
+  async listAvailablePlacesForProposal(
+    proposalId: string,
+    requestingUserId: string,
+  ): Promise<AvailablePlace[]> {
+    const proposal = await this.findProposalOrThrow(proposalId);
+    await this.groupsService.findOne(proposal.groupId, requestingUserId);
+    return this.listAvailablePlaces(requestingUserId);
+  }
+
   async voteForPlace(
     proposalId: string,
     proposalPlaceId: string,
     requestingUserId: string,
+    value: -1 | 1,
   ): Promise<void> {
     const { proposal } = await this.findProposalPlaceOrThrow(proposalId, proposalPlaceId);
     await this.groupsService.findOne(proposal.groupId, requestingUserId);
     this.assertCollecting(proposal);
-    if (await this.placeVotes.existsBy({ proposalPlaceId, userId: requestingUserId })) return;
-    await this.placeVotes.save(this.placeVotes.create({ proposalPlaceId, userId: requestingUserId }));
+    const existing = await this.placeVotes.findOneBy({ proposalPlaceId, userId: requestingUserId });
+    if (existing) {
+      if (existing.value === value) return;
+      existing.value = value;
+      await this.placeVotes.save(existing);
+      return;
+    }
+    await this.placeVotes.save(this.placeVotes.create({ proposalPlaceId, userId: requestingUserId, value }));
   }
 
   async unvoteForPlace(
@@ -610,6 +618,30 @@ export class SchedulingService {
     await this.groupsService.findOne(proposal.groupId, requestingUserId);
     this.assertCollecting(proposal);
     await this.placeVotes.delete({ proposalPlaceId, userId: requestingUserId });
+  }
+
+  async removeProposalPlace(
+    proposalId: string,
+    proposalPlaceId: string,
+    requestingUserId: string,
+  ): Promise<void> {
+    const { proposal, proposalPlace } = await this.findProposalPlaceOrThrow(proposalId, proposalPlaceId);
+    await this.groupsService.findOne(proposal.groupId, requestingUserId);
+    this.assertCollecting(proposal);
+    if (proposalPlace.proposedBy !== requestingUserId) {
+      throw new ForbiddenException('You can only remove places you suggested');
+    }
+    await this.proposalPlaces.remove(proposalPlace);
+  }
+
+  async removeSavedPlace(placeId: string, requestingUserId: string): Promise<void> {
+    if (!(await this.places.findOneBy({ id: placeId }))) {
+      throw new NotFoundException('Place not found');
+    }
+    await this.placeVisibility.upsert(
+      { placeId, userId: requestingUserId, hidden: true },
+      ['placeId', 'userId'],
+    );
   }
 
   async markPlaceOwned(
@@ -625,7 +657,7 @@ export class SchedulingService {
       ['placeId', 'userId'],
     );
     await this.placeVisibility.upsert(
-      { placeId: proposalPlace.placeId, userId: requestingUserId },
+      { placeId: proposalPlace.placeId, userId: requestingUserId, hidden: false },
       ['placeId', 'userId'],
     );
   }
@@ -742,6 +774,30 @@ export class SchedulingService {
     if (proposal.status !== 'collecting') {
       throw new ConflictException('Suggestions and votes can only be changed while the proposal is collecting');
     }
+  }
+
+  private async createSessionForProposal(proposal: PlaySessionProposal): Promise<PlaySession> {
+    const session = await this.sessions.save(
+      this.sessions.create({
+        groupId: proposal.groupId,
+        playedAt: proposal.confirmedStart!,
+        proposalId: proposal.id,
+      }),
+    );
+
+    const suggestedPlaces = await this.proposalPlaces.findBy({ proposalId: proposal.id });
+    if (suggestedPlaces.length > 0) {
+      const owners = await this.placeOwners.findBy({
+        placeId: In(suggestedPlaces.map((row) => row.placeId)),
+      });
+      const hostIds = [...new Set(owners.map((owner) => owner.userId))];
+      if (hostIds.length > 0) {
+        await this.sessionHosts.save(
+          hostIds.map((userId) => this.sessionHosts.create({ sessionId: session.id, userId })),
+        );
+      }
+    }
+    return session;
   }
 
   // Same 'member role can look but not touch' rule as

@@ -340,6 +340,7 @@ CREATE TABLE IF NOT EXISTS place_owners (
 CREATE TABLE IF NOT EXISTS place_visibility (
   place_id  UUID  NOT NULL REFERENCES places(id) ON DELETE CASCADE,
   user_id   TEXT  NOT NULL,
+  hidden    BOOLEAN NOT NULL DEFAULT FALSE,
   PRIMARY KEY (place_id, user_id)
 );
 
@@ -355,6 +356,7 @@ CREATE TABLE IF NOT EXISTS proposal_places (
 CREATE TABLE IF NOT EXISTS proposal_place_votes (
   proposal_place_id  UUID  NOT NULL REFERENCES proposal_places(id) ON DELETE CASCADE,
   user_id             TEXT  NOT NULL,
+  value               SMALLINT NOT NULL DEFAULT 1 CHECK (value IN (-1, 1)),
   PRIMARY KEY (proposal_place_id, user_id)
 );
 

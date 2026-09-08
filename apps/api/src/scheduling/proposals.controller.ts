@@ -70,7 +70,8 @@ export class ProposalsController {
     return this.schedulingService.lockIn(id, req.user.sub, dto.confirmed);
   }
 
-  // POST /proposals/:id/request-confirmation → 'collecting' -> 'confirming'.
+  // POST /proposals/:id/request-confirmation → 'collecting' -> 'confirming',
+  // or directly to 'confirmed' when there is only one attendee.
   @Post(':id/request-confirmation')
   requestConfirmation(@Param('id', ParseUUIDPipe) id: string, @Request() req: AuthenticatedRequest) {
     return this.schedulingService.requestConfirmation(id, req.user.sub);
@@ -172,7 +173,7 @@ export class ProposalsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Request() req: AuthenticatedRequest,
   ) {
-    return this.schedulingService.listAvailablePlaces(id, req.user.sub);
+    return this.schedulingService.listAvailablePlacesForProposal(id, req.user.sub);
   }
 
   @Post(':id/places/:proposalPlaceId/votes')
@@ -182,7 +183,17 @@ export class ProposalsController {
     @Param('proposalPlaceId', ParseUUIDPipe) proposalPlaceId: string,
     @Request() req: AuthenticatedRequest,
   ) {
-    return this.schedulingService.voteForPlace(id, proposalPlaceId, req.user.sub);
+    return this.schedulingService.voteForPlace(id, proposalPlaceId, req.user.sub, 1);
+  }
+
+  @Post(':id/places/:proposalPlaceId/downvotes')
+  @HttpCode(204)
+  downvotePlace(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('proposalPlaceId', ParseUUIDPipe) proposalPlaceId: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.schedulingService.voteForPlace(id, proposalPlaceId, req.user.sub, -1);
   }
 
   @Delete(':id/places/:proposalPlaceId/votes')
@@ -193,6 +204,16 @@ export class ProposalsController {
     @Request() req: AuthenticatedRequest,
   ) {
     return this.schedulingService.unvoteForPlace(id, proposalPlaceId, req.user.sub);
+  }
+
+  @Delete(':id/places/:proposalPlaceId')
+  @HttpCode(204)
+  removePlace(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('proposalPlaceId', ParseUUIDPipe) proposalPlaceId: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.schedulingService.removeProposalPlace(id, proposalPlaceId, req.user.sub);
   }
 
   @Put(':id/places/:proposalPlaceId/ownership')

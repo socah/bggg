@@ -37,10 +37,10 @@ describe('SchedulingService', () => {
   const mockPlaceOwners = { findBy: jest.fn(), upsert: jest.fn(), delete: jest.fn() };
   const mockPlaceVisibility = { findBy: jest.fn(), upsert: jest.fn() };
   const mockProposalPlaces = {
-    findBy: jest.fn(), findOneBy: jest.fn(), countBy: jest.fn(), create: jest.fn(), save: jest.fn(),
+    findBy: jest.fn(), findOneBy: jest.fn(), countBy: jest.fn(), create: jest.fn(), save: jest.fn(), remove: jest.fn(),
   };
   const mockPlaceVotes = {
-    countBy: jest.fn(), existsBy: jest.fn(), create: jest.fn(), save: jest.fn(), delete: jest.fn(),
+    findBy: jest.fn(), findOneBy: jest.fn(), create: jest.fn(), save: jest.fn(), delete: jest.fn(),
   };
   const mockSessionHosts = {
     create: jest.fn(), save: jest.fn(), countBy: jest.fn(), createQueryBuilder: jest.fn(),
@@ -224,7 +224,7 @@ describe('SchedulingService', () => {
       mockProposals.findOneBy.mockResolvedValue(baseProposal());
       mockGroupsService.findOne.mockResolvedValue({ id: GROUP_ID });
       mockPlaceOwners.findBy.mockResolvedValue([{ placeId: 'owned', userId: USER_ID }]);
-      mockPlaceVisibility.findBy.mockResolvedValue([{ placeId: 'seen', userId: USER_ID }]);
+      mockPlaceVisibility.findBy.mockResolvedValue([{ placeId: 'seen', userId: USER_ID, hidden: false }]);
       mockMembers.findBy.mockResolvedValue([{ groupId: GROUP_ID, userId: USER_ID }]);
       mockProposals.findBy.mockResolvedValue([{ id: 'accessible-proposal' }]);
       mockProposalPlaces.findBy.mockResolvedValue([{ placeId: 'discovered' }]);
@@ -238,13 +238,13 @@ describe('SchedulingService', () => {
         .mockResolvedValueOnce(5)
         .mockResolvedValueOnce(1);
 
-      const result = await service.listAvailablePlaces(PROPOSAL_ID, USER_ID);
+      const result = await service.listAvailablePlaces(USER_ID);
 
       expect(result.map((row) => row.place.id)).toEqual(['owned', 'discovered', 'seen']);
       expect(mockPlaceVisibility.upsert).toHaveBeenCalledWith(
         expect.arrayContaining([
-          { placeId: 'owned', userId: USER_ID },
-          { placeId: 'discovered', userId: USER_ID },
+          { placeId: 'owned', userId: USER_ID, hidden: false },
+          { placeId: 'discovered', userId: USER_ID, hidden: false },
         ]),
         ['placeId', 'userId'],
       );
@@ -254,13 +254,87 @@ describe('SchedulingService', () => {
       mockProposals.findOneBy.mockResolvedValue(baseProposal());
       mockProposalPlaces.findOneBy.mockResolvedValue(null);
 
-      await expect(service.voteForPlace(PROPOSAL_ID, 'other-row', USER_ID))
+      await expect(service.voteForPlace(PROPOSAL_ID, 'other-row', USER_ID, 1))
         .rejects.toBeInstanceOf(NotFoundException);
       expect(mockProposalPlaces.findOneBy).toHaveBeenCalledWith({
         id: 'other-row',
         proposalId: PROPOSAL_ID,
       });
       expect(mockPlaceVotes.save).not.toHaveBeenCalled();
+    });
+
+    it('sums signed votes and reports the caller voting and suggestion state', async () => {
+      mockProposals.findOneBy.mockResolvedValue(baseProposal());
+      mockProposalPlaces.findBy.mockResolvedValue([
+        { id: 'pp-1', proposalId: PROPOSAL_ID, placeId: 'place-1', proposedBy: USER_ID },
+      ]);
+      mockPlaces.findBy.mockResolvedValue([{ id: 'place-1', name: 'Cafe' }]);
+      mockPlaceOwners.findBy.mockResolvedValue([]);
+      mockPlaceVotes.findBy.mockResolvedValue([
+        { proposalPlaceId: 'pp-1', userId: USER_ID, value: -1 },
+        { proposalPlaceId: 'pp-1', userId: 'user-2', value: 1 },
+      ]);
+
+      await expect(service.listProposalPlaces(PROPOSAL_ID, USER_ID)).resolves.toEqual([{
+        proposalPlaceId: 'pp-1',
+        place: { id: 'place-1', name: 'Cafe' },
+        voteCount: 0,
+        votedByMe: false,
+        downvotedByMe: true,
+        proposedByMe: true,
+        ownedByMe: false,
+        ownerIds: [],
+      }]);
+    });
+
+    it('lets only the suggester remove a suggested place', async () => {
+      const proposalPlace = { id: 'pp-1', proposalId: PROPOSAL_ID, placeId: 'place-1', proposedBy: USER_ID };
+      mockProposals.findOneBy.mockResolvedValue(baseProposal());
+      mockProposalPlaces.findOneBy.mockResolvedValue(proposalPlace);
+
+      await service.removeProposalPlace(PROPOSAL_ID, 'pp-1', USER_ID);
+      expect(mockProposalPlaces.remove).toHaveBeenCalledWith(proposalPlace);
+
+      await expect(service.removeProposalPlace(PROPOSAL_ID, 'pp-1', 'user-2'))
+        .rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('hides a saved place without deleting the shared place', async () => {
+      mockPlaces.findOneBy.mockResolvedValue({ id: 'place-1', name: 'Cafe' });
+
+      await service.removeSavedPlace('place-1', USER_ID);
+
+      expect(mockPlaceVisibility.upsert).toHaveBeenCalledWith(
+        { placeId: 'place-1', userId: USER_ID, hidden: true },
+        ['placeId', 'userId'],
+      );
+    });
+
+    it('keeps a hidden place out of the saved list even when it is rediscovered', async () => {
+      mockPlaceOwners.findBy.mockResolvedValue([]);
+      mockPlaceVisibility.findBy.mockResolvedValue([{
+        placeId: 'place-1', userId: USER_ID, hidden: true,
+      }]);
+      mockMembers.findBy.mockResolvedValue([{ groupId: GROUP_ID, userId: USER_ID }]);
+      mockProposals.findBy.mockResolvedValue([{ id: PROPOSAL_ID }]);
+      mockProposalPlaces.findBy.mockResolvedValue([{ placeId: 'place-1' }]);
+
+      await expect(service.listAvailablePlaces(USER_ID)).resolves.toEqual([]);
+      expect(mockPlaceVisibility.upsert).not.toHaveBeenCalled();
+    });
+
+    it('replaces an existing place upvote with a downvote', async () => {
+      mockProposals.findOneBy.mockResolvedValue(baseProposal());
+      mockProposalPlaces.findOneBy.mockResolvedValue({
+        id: 'pp-1', proposalId: PROPOSAL_ID, placeId: 'place-1', proposedBy: USER_ID,
+      });
+      mockPlaceVotes.findOneBy.mockResolvedValue({
+        proposalPlaceId: 'pp-1', userId: USER_ID, value: 1,
+      });
+
+      await service.voteForPlace(PROPOSAL_ID, 'pp-1', USER_ID, -1);
+
+      expect(mockPlaceVotes.save).toHaveBeenCalledWith(expect.objectContaining({ value: -1 }));
     });
   });
 
@@ -270,8 +344,8 @@ describe('SchedulingService', () => {
       mockProposals.findOneBy.mockResolvedValue(proposal);
       mockProposals.save.mockImplementation(async (value: PlaySessionProposal) => value);
       mockRsvps.findBy.mockResolvedValue([
-        { userId: 'host-1', availableStart: new Date('2026-08-30T10:00:00Z'), availableEnd: new Date('2026-08-30T12:00:00Z') },
-        { userId: 'guest', availableStart: new Date('2026-08-30T11:00:00Z'), availableEnd: new Date('2026-08-30T13:00:00Z') },
+        { userId: 'host-1', status: 'yes', availableStart: new Date('2026-08-30T10:00:00Z'), availableEnd: new Date('2026-08-30T12:00:00Z') },
+        { userId: 'guest', status: 'yes', availableStart: new Date('2026-08-30T11:00:00Z'), availableEnd: new Date('2026-08-30T13:00:00Z') },
       ]);
       mockProposalPlaces.findBy.mockResolvedValue([{ placeId: 'place-1' }]);
       mockPlaceOwners.findBy.mockResolvedValue([{ placeId: 'place-1', userId: 'host-1' }]);
@@ -281,6 +355,27 @@ describe('SchedulingService', () => {
       expect(result.status).toBe('confirming');
       expect(result.confirmedStart).toEqual(new Date('2026-08-30T11:00:00Z'));
       expect(result.confirmedEnd).toEqual(new Date('2026-08-30T12:00:00Z'));
+    });
+
+    it('directly confirms and creates a session for the sole attendee', async () => {
+      const proposal = baseProposal();
+      const session = { id: 'session-1', groupId: GROUP_ID, proposalId: PROPOSAL_ID };
+      mockProposals.findOneBy.mockResolvedValue(proposal);
+      mockProposals.save.mockImplementation(async (value: PlaySessionProposal) => value);
+      mockRsvps.findBy.mockResolvedValue([{
+        userId: USER_ID,
+        status: 'yes',
+        availableStart: new Date('2026-08-30T10:00:00Z'),
+        availableEnd: new Date('2026-08-30T12:00:00Z'),
+      }]);
+      mockProposalPlaces.findBy.mockResolvedValue([]);
+      mockSessions.create.mockReturnValue(session);
+      mockSessions.save.mockResolvedValue(session);
+
+      const result = await service.requestConfirmation(PROPOSAL_ID, USER_ID);
+
+      expect(result.status).toBe('confirmed');
+      expect(mockSessions.save).toHaveBeenCalledWith(session);
     });
   });
 

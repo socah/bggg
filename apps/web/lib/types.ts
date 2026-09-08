@@ -59,6 +59,8 @@ export interface ProposalPlaceSummary {
   place: { id: string; name: string };
   voteCount: number;
   votedByMe: boolean;
+  downvotedByMe: boolean;
+  proposedByMe: boolean;
   ownedByMe: boolean;
   ownerIds: string[];
 }

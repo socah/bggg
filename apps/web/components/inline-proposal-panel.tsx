@@ -20,7 +20,11 @@ import { Dialog, DialogSheetContent, DialogClose, DialogTitle } from '@/componen
 import { TimePickerDialog } from '@/components/ui/time-picker-dialog';
 import { apiMutate } from '@/lib/api';
 import { formatWindowRange } from '@/lib/datetime';
-import type { GameCardGame, Group, GroupLibraryGame, GroupMemberInfo, Proposal } from '@/lib/types';
+import type { AvailablePlace, GameCardGame, Group, GroupLibraryGame, GroupMemberInfo, Proposal } from '@/lib/types';
+
+type DraftPlace = Pick<AvailablePlace, 'place' | 'ownedByMe'> & {
+  input: { placeId: string } | { name: string };
+};
 
 function MemberName({
   userId,
@@ -92,6 +96,7 @@ export function InlineProposalPanel({
   const [draftHoursOpen, setDraftHoursOpen] = useState(false);
   const [draftTimePickerOpen, setDraftTimePickerOpen] = useState(false);
   const [draftGames, setDraftGames] = useState<GroupLibraryGame[]>([]);
+  const [draftPlaces, setDraftPlaces] = useState<DraftPlace[]>([]);
   const [draftGamePickerOpen, setDraftGamePickerOpen] = useState(false);
   const [draftGameFilter, setDraftGameFilter] = useState('');
   const [placePickerOpen, setPlacePickerOpen] = useState(false);
@@ -139,16 +144,18 @@ export function InlineProposalPanel({
   }, [library.games, draftGameFilter]);
 
   const filteredPlaces = useMemo(() => {
-    const suggestedIds = new Set(existingPlaces.rows.map((row) => row.place.id));
+    const suggestedIds = new Set(
+      isDraft ? draftPlaces.map((row) => row.place.id) : existingPlaces.rows.map((row) => row.place.id),
+    );
     const query = placeFilter.trim().toLowerCase();
     return existingPlaces.available.filter(
       ({ place }) => !suggestedIds.has(place.id) && place.name.toLowerCase().includes(query),
     );
-  }, [existingPlaces.available, existingPlaces.rows, placeFilter]);
+  }, [draftPlaces, existingPlaces.available, existingPlaces.rows, isDraft, placeFilter]);
 
   const placeNameExists = existingPlaces.available.some(
     ({ place }) => place.name.toLowerCase() === placeFilter.trim().toLowerCase(),
-  );
+  ) || draftPlaces.some(({ place }) => place.name.toLowerCase() === placeFilter.trim().toLowerCase());
 
   async function handleSaveDraft(e: React.FormEvent) {
     e.preventDefault();
@@ -182,6 +189,10 @@ export function InlineProposalPanel({
         });
       }
 
+      for (const place of draftPlaces) {
+        await apiMutate(`/proposals/${created.id}/places`, 'POST', place.input);
+      }
+
       onProposalsChanged?.();
       onSelectProposal?.(created);
     } catch (err) {
@@ -205,6 +216,7 @@ export function InlineProposalPanel({
                   onChange={(e) => {
                     setSelectedGroupId(e.target.value);
                     setDraftGames([]);
+                    setDraftPlaces([]);
                   }}
                   disabled={saving || groups.length === 0}
                   className="rounded border border-border bg-surface px-2 py-0.5 text-xs font-normal text-text focus:outline-none"
@@ -459,18 +471,12 @@ export function InlineProposalPanel({
       </div>
 
       {/* 4. Suggested Places Section */}
-      {!isDraft && detail && (
+      {(isDraft || detail) && (
         <div className="border-t border-border pt-3 mt-3">
           <div className="flex items-center justify-between">
             <div className="font-medium">Suggested places</div>
-            {detail.proposal.status === 'collecting' && (
-              <Button
-                type="button"
-                variant="secondary"
-                className="px-2 py-1 text-xs"
-                disabled={existingPlaces.pendingAction !== null}
-                onClick={() => setPlacePickerOpen(true)}
-              >
+            {(isDraft || detail?.proposal.status === 'collecting') && (
+              <Button type="button" variant="secondary" className="px-2 py-1 text-xs" disabled={isDraft ? saving : existingPlaces.pendingAction !== null} onClick={() => setPlacePickerOpen(true)}>
                 Add place
               </Button>
             )}
@@ -478,62 +484,52 @@ export function InlineProposalPanel({
 
           {existingPlaces.loading && <p className="mt-2 text-text-muted">Loading places...</p>}
           {existingPlaces.error && <p className="mt-2 text-accent" role="alert">{existingPlaces.error}</p>}
-          {!existingPlaces.loading && existingPlaces.rows.length === 0 && (
+          {!existingPlaces.loading && (isDraft ? draftPlaces.length === 0 : existingPlaces.rows.length === 0) && (
             <p className="mt-2 text-text-muted">No places suggested yet.</p>
           )}
-          <ul className="mt-2 flex flex-col gap-1">
-            {existingPlaces.rows.map((row) => (
-              <li key={row.proposalPlaceId} className="rounded-sm border border-border bg-surface px-3 py-2 text-sm">
-                <div className="flex flex-wrap items-center gap-3">
-                  {detail.proposal.status === 'collecting' ? (
-                    <button
-                      type="button"
-                      aria-label={row.votedByMe ? 'Remove your vote' : 'Vote for this place'}
-                      className={`inline-flex min-w-12 items-center justify-center gap-1 rounded-full border px-2 py-1 font-semibold transition-colors ${row.votedByMe ? 'border-accent bg-accent text-accent-ink' : 'border-border-strong bg-surface-raised text-text hover:border-accent'}`}
-                      disabled={existingPlaces.pendingAction !== null}
-                      onClick={() => void (row.votedByMe ? existingPlaces.unvote(row.proposalPlaceId) : existingPlaces.vote(row.proposalPlaceId))}
-                    >
-                      <span aria-hidden="true">▲</span>
-                      <span>{row.voteCount}</span>
-                    </button>
-                  ) : (
-                    <span className="inline-flex min-w-12 items-center justify-center gap-1 rounded-full bg-highlight px-2 py-1 font-semibold text-text">
-                      <span aria-hidden="true">▲</span>
-                      <span>{row.voteCount}</span>
-                    </span>
-                  )}
+          {isDraft ? (
+            <ul className="mt-2 flex flex-col gap-1">
+              {draftPlaces.map((row) => (
+                <li key={row.place.id} className="flex items-center justify-between gap-3 rounded-sm border border-border bg-surface px-3 py-2 text-sm">
                   <span className="font-medium">{row.place.name}</span>
-                  {row.ownerIds.length > 0 && (
-                    <span className="text-xs text-text-muted">
-                      Hosted by{' '}
-                      {row.ownerIds.map((ownerId, index) => (
-                        <span key={ownerId}>
-                          {index > 0 && ', '}
-                          <MemberName
-                            userId={ownerId}
-                            members={members}
-                            loading={loadingMembers}
-                            groupId={effectiveGroupId}
-                            fallbackName={ownerId === myId ? myName : undefined}
-                          />
-                        </span>
-                      ))}
-                    </span>
-                  )}
-                  {detail.proposal.status === 'collecting' && (
-                    <button
-                      type="button"
-                      className="ml-auto text-xs text-text-muted underline hover:text-text"
-                      disabled={existingPlaces.pendingAction !== null}
-                      onClick={() => void existingPlaces.setOwned(row.proposalPlaceId, !row.ownedByMe)}
-                    >
-                      {row.ownedByMe ? 'This is no longer my place' : 'This is my place'}
-                    </button>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
+                  <button type="button" className="text-xs text-text-muted underline hover:text-accent" onClick={() => setDraftPlaces((places) => places.filter((place) => place.place.id !== row.place.id))}>Remove</button>
+                </li>
+              ))}
+            </ul>
+          ) : detail ? (
+            <ul className="mt-2 flex flex-col gap-1">
+              {existingPlaces.rows.map((row) => (
+                <li key={row.proposalPlaceId} className="rounded-sm border border-border bg-surface px-3 py-2 text-sm">
+                  <div className="flex flex-wrap items-center gap-3">
+                    {detail.proposal.status === 'collecting' ? (
+                      <div className="flex shrink-0 items-center overflow-hidden rounded-full border border-border-strong">
+                        <button type="button" aria-label={row.votedByMe ? 'Remove your upvote' : 'Upvote this place'} className={`px-2 py-1 font-semibold ${row.votedByMe ? 'bg-accent text-accent-ink' : 'bg-surface-raised hover:bg-highlight'}`} disabled={existingPlaces.pendingAction !== null} onClick={() => void (row.votedByMe ? existingPlaces.unvote(row.proposalPlaceId) : existingPlaces.vote(row.proposalPlaceId))}>▲</button>
+                        <span className="min-w-8 px-1 text-center font-semibold">{row.voteCount}</span>
+                        <button type="button" aria-label={row.downvotedByMe ? 'Remove your downvote' : 'Downvote this place'} className={`px-2 py-1 font-semibold ${row.downvotedByMe ? 'bg-accent text-accent-ink' : 'bg-surface-raised hover:bg-highlight'}`} disabled={existingPlaces.pendingAction !== null} onClick={() => void (row.downvotedByMe ? existingPlaces.unvote(row.proposalPlaceId) : existingPlaces.downvote(row.proposalPlaceId))}>▼</button>
+                      </div>
+                    ) : (
+                      <span className="inline-flex min-w-12 items-center justify-center gap-1 rounded-full bg-highlight px-2 py-1 font-semibold text-text"><span aria-hidden="true">▲</span><span>{row.voteCount}</span></span>
+                    )}
+                    <span className="font-medium">{row.place.name}</span>
+                    {row.ownerIds.length > 0 && (
+                      <span className="text-xs text-text-muted">
+                        Hosted by{' '}
+                        {row.ownerIds.map((ownerId, index) => (
+                          <span key={ownerId}>{index > 0 && ', '}<MemberName userId={ownerId} members={members} loading={loadingMembers} groupId={effectiveGroupId} fallbackName={ownerId === myId ? myName : undefined} /></span>
+                        ))}
+                      </span>
+                    )}
+                    {detail.proposal.status === 'collecting' && (
+                      <div className="ml-auto flex items-center gap-3">
+                        <button type="button" className="text-xs text-text-muted underline hover:text-text" disabled={existingPlaces.pendingAction !== null} onClick={() => void existingPlaces.setOwned(row.proposalPlaceId, !row.ownedByMe)}>{row.ownedByMe ? 'This is no longer my place' : 'This is my place'}</button>
+                        {row.proposedByMe && <button type="button" className="text-xs text-text-muted underline hover:text-accent" disabled={existingPlaces.pendingAction !== null} onClick={() => void existingPlaces.removeSuggestion(row.proposalPlaceId)}>Remove</button>}
+                      </div>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
       )}
 
@@ -553,7 +549,12 @@ export function InlineProposalPanel({
         detail && (
           <div className="border-t border-border pt-3 mt-3">
             {actions.error && <p className="mb-2 text-xs text-accent" role="alert">{actions.error}</p>}
-            <ProposalLifecycleActions proposal={detail.proposal} canManage={canManage} actions={actions} />
+            <ProposalLifecycleActions
+              proposal={detail.proposal}
+              canManage={canManage}
+              actions={actions}
+              soleAttendee={detail.rsvps.filter((rsvp) => rsvp.status !== 'no').length === 1}
+            />
           </div>
         )
       )}
@@ -650,12 +651,16 @@ export function InlineProposalPanel({
           )}
           <ul className="flex flex-col gap-1">
             {filteredPlaces.map(({ place, ownedByMe, suggestionCount }) => (
-              <li key={place.id}>
+              <li key={place.id} className="flex items-center gap-2">
                 <button
                   type="button"
-                  className="block w-full rounded-sm bg-surface px-2 py-1 text-left text-sm hover:bg-surface-raised"
+                  className="block min-w-0 flex-1 rounded-sm bg-surface px-2 py-1 text-left text-sm hover:bg-surface-raised"
                   onClick={() => {
-                    void existingPlaces.suggest({ placeId: place.id });
+                    if (isDraft) {
+                      setDraftPlaces((rows) => [...rows, { place, ownedByMe, input: { placeId: place.id } }]);
+                    } else {
+                      void existingPlaces.suggest({ placeId: place.id });
+                    }
                     setPlacePickerOpen(false);
                     setPlaceFilter('');
                   }}
@@ -665,6 +670,9 @@ export function InlineProposalPanel({
                     {ownedByMe ? 'Your place' : `${suggestionCount} previous suggestion${suggestionCount === 1 ? '' : 's'}`}
                   </span>
                 </button>
+                <button type="button" className="shrink-0 px-2 py-1 text-xs text-text-muted underline hover:text-accent" disabled={existingPlaces.pendingAction !== null} onClick={() => void existingPlaces.removeSaved(place.id)}>
+                  Delete from saved
+                </button>
               </li>
             ))}
             {placeFilter.trim() && !placeNameExists && (
@@ -673,7 +681,12 @@ export function InlineProposalPanel({
                   type="button"
                   className="block w-full rounded-sm border border-dashed border-border-strong px-2 py-1 text-left text-sm hover:bg-surface-raised"
                   onClick={() => {
-                    void existingPlaces.suggest({ name: placeFilter.trim() });
+                    const name = placeFilter.trim();
+                    if (isDraft) {
+                      setDraftPlaces((rows) => [...rows, { place: { id: `new:${name.toLowerCase()}`, name }, ownedByMe: false, input: { name } }]);
+                    } else {
+                      void existingPlaces.suggest({ name });
+                    }
                     setPlacePickerOpen(false);
                     setPlaceFilter('');
                   }}

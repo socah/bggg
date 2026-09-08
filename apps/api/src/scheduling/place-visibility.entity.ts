@@ -1,4 +1,4 @@
-import { Entity, PrimaryColumn } from 'typeorm';
+import { Column, Entity, PrimaryColumn } from 'typeorm';
 
 @Entity('place_visibility')
 export class PlaceVisibility {
@@ -7,4 +7,7 @@ export class PlaceVisibility {
 
   @PrimaryColumn({ name: 'user_id', type: 'text', primaryKeyConstraintName: 'place_visibility_pkey' })
   userId!: string;
+
+  @Column({ type: 'boolean', default: false })
+  hidden!: boolean;
 }

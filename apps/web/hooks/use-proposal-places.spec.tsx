@@ -17,13 +17,15 @@ describe('useProposalPlaces', () => {
   it('loads places and changes ownership through the proposal-scoped endpoint', async () => {
     apiFetch.mockImplementation(async (path) => ({
       ok: true,
-      json: async () => path.endsWith('/available')
+      json: async () => path === '/places/saved'
         ? [{ place: { id: 'place-1', name: 'Clubhouse' }, ownedByMe: true, suggestionCount: 4 }]
         : [{
             proposalPlaceId: 'proposal-place-1',
             place: { id: 'place-1', name: 'Clubhouse' },
             voteCount: 2,
             votedByMe: false,
+            downvotedByMe: false,
+            proposedByMe: true,
             ownedByMe: true,
             ownerIds: ['user-1'],
           }],
@@ -44,5 +46,22 @@ describe('useProposalPlaces', () => {
       'DELETE',
     );
     expect(onChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it('downvotes and removes places through the matching endpoints', async () => {
+    apiFetch.mockResolvedValue({ ok: true, json: async () => [] } as Response);
+    apiMutate.mockResolvedValue({ ok: true } as Response);
+    const { result } = renderHook(() => useProposalPlaces('proposal-1'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.downvote('proposal-place-1');
+      await result.current.removeSuggestion('proposal-place-1');
+      await result.current.removeSaved('place-1');
+    });
+
+    expect(apiMutate).toHaveBeenCalledWith('/proposals/proposal-1/places/proposal-place-1/downvotes', 'POST');
+    expect(apiMutate).toHaveBeenCalledWith('/proposals/proposal-1/places/proposal-place-1', 'DELETE');
+    expect(apiMutate).toHaveBeenCalledWith('/places/place-1/saved', 'DELETE');
   });
 });

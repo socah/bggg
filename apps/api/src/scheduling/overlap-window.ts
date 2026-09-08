@@ -18,18 +18,26 @@ export class NoOverlapError extends Error {
 
 // Computes the trimmed session window from a set of 'yes' RSVP windows.
 //
-// Without a host: the first and last moments where AT LEAST TWO people's
-// windows overlap — not a strict intersection across every window, which
-// is very often empty once 3+ people are involved even though plenty of
-// individual pairs overlap fine.
+// A sole attendee keeps their complete window. Otherwise, without a host:
+// the first and last moments where AT LEAST TWO people's windows overlap —
+// not a strict intersection across every window, which is very often empty
+// once 3+ people are involved even though plenty of pairs overlap fine.
 //
-// With hosts: every valid portion must involve at least two attendees and at
-// least one owner of a suggested place. The returned range is the outer
-// envelope of all such portions, matching the existing no-host semantics.
+// With hosts: a sole attendee must be a host. For multiple attendees, every
+// valid portion must involve at least two attendees and at least one owner of
+// a suggested place. The returned range is the outer envelope of all such
+// portions, matching the existing no-host semantics.
 export function computeOverlapWindow(
   windows: AvailabilityWindow[],
   hostUserIds: readonly string[],
 ): { start: Date; end: Date } {
+  if (windows.length === 1) {
+    const [window] = windows;
+    if (hostUserIds.length > 0 && !hostUserIds.includes(window.userId)) {
+      throw new NoOverlapError('The only attendee is not an owner of a suggested place');
+    }
+    return { start: window.start, end: window.end };
+  }
   if (hostUserIds.length > 0) {
     return computeHostInvolvingWindow(windows, new Set(hostUserIds));
   }

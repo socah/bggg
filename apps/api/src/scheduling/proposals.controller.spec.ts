@@ -56,6 +56,7 @@ describe('ProposalsController', () => {
       PROPOSAL_ID,
       'proposal-place-1',
       'user-1',
+      1,
     );
   });
 

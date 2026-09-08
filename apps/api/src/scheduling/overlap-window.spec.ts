@@ -49,10 +49,10 @@ describe('computeOverlapWindow', () => {
       expect(result).toEqual({ start: hour(3), end: hour(7) });
     });
 
-    it('throws when only a single window is given', () => {
+    it('uses the sole attendee window when only one is given', () => {
       const windows = [window('a', 9, 17)];
 
-      expect(() => computeOverlapWindow(windows, [])).toThrow(NoOverlapError);
+      expect(computeOverlapWindow(windows, [])).toEqual({ start: hour(9), end: hour(17) });
     });
   });
 
@@ -92,6 +92,12 @@ describe('computeOverlapWindow', () => {
       const other = window('other', 13, 16);
 
       expect(() => computeOverlapWindow([other], ['host'])).toThrow(NoOverlapError);
+    });
+
+    it('uses a sole attendee window when that attendee owns a suggested place', () => {
+      const host = window('host', 10, 14);
+
+      expect(computeOverlapWindow([host], ['host'])).toEqual({ start: hour(10), end: hour(14) });
     });
 
     it('uses the widest valid overlap involving any derived host', () => {

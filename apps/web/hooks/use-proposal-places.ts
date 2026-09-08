@@ -13,18 +13,18 @@ export function useProposalPlaces(proposalId: string | null, onChanged?: () => v
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    if (!proposalId) return;
-
     let cancelled = false;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- manual fetch-in-effect (see use-proposal-games.ts).
     setLoading(true);
     setError(null);
     Promise.all([
-      apiFetch(`/proposals/${proposalId}/places`).then((response) => {
-        if (!response.ok) throw new Error(`Unexpected status ${response.status}`);
-        return response.json();
-      }),
-      apiFetch(`/proposals/${proposalId}/places/available`).then((response) => {
+      proposalId
+        ? apiFetch(`/proposals/${proposalId}/places`).then((response) => {
+            if (!response.ok) throw new Error(`Unexpected status ${response.status}`);
+            return response.json();
+          })
+        : Promise.resolve([]),
+      apiFetch('/places/saved').then((response) => {
         if (!response.ok) throw new Error(`Unexpected status ${response.status}`);
         return response.json();
       }),
@@ -74,8 +74,14 @@ export function useProposalPlaces(proposalId: string | null, onChanged?: () => v
       run('suggest', () => apiMutate(`/proposals/${proposalId}/places`, 'POST', input)),
     vote: (id: string) =>
       run(`vote:${id}`, () => apiMutate(`/proposals/${proposalId}/places/${id}/votes`, 'POST')),
+    downvote: (id: string) =>
+      run(`downvote:${id}`, () => apiMutate(`/proposals/${proposalId}/places/${id}/downvotes`, 'POST')),
     unvote: (id: string) =>
       run(`unvote:${id}`, () => apiMutate(`/proposals/${proposalId}/places/${id}/votes`, 'DELETE')),
+    removeSuggestion: (id: string) =>
+      run(`remove:${id}`, () => apiMutate(`/proposals/${proposalId}/places/${id}`, 'DELETE')),
+    removeSaved: (id: string) =>
+      run(`remove-saved:${id}`, () => apiMutate(`/places/${id}/saved`, 'DELETE')),
     setOwned: (id: string, owned: boolean) =>
       run(`ownership:${id}`, () =>
         apiMutate(`/proposals/${proposalId}/places/${id}/ownership`, owned ? 'PUT' : 'DELETE'),
