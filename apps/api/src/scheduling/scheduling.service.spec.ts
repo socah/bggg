@@ -26,7 +26,7 @@ const USER_ID = 'user-1';
 describe('SchedulingService', () => {
   let service: SchedulingService;
 
-  const mockProposals = { findOneBy: jest.fn(), findBy: jest.fn(), save: jest.fn(), remove: jest.fn() };
+  const mockProposals = { find: jest.fn(), findOneBy: jest.fn(), findBy: jest.fn(), save: jest.fn(), remove: jest.fn() };
   const mockRsvps = { findBy: jest.fn() };
   const mockSessions = {
     findOneBy: jest.fn(), findBy: jest.fn(), remove: jest.fn(), create: jest.fn(), save: jest.fn(), countBy: jest.fn(),
@@ -48,7 +48,7 @@ describe('SchedulingService', () => {
   };
   const mockSessionGames = { existsBy: jest.fn().mockResolvedValue(false) };
   const mockMembers = { findOneBy: jest.fn(), findBy: jest.fn() };
-  const mockGroupsService = { findOne: jest.fn() };
+  const mockGroupsService = { findOne: jest.fn(), getMembers: jest.fn() };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -76,6 +76,31 @@ describe('SchedulingService', () => {
   });
 
   afterEach(() => jest.clearAllMocks());
+
+  describe('listProposals', () => {
+    it('includes only yes or confirmed participants', async () => {
+      const proposal = { id: PROPOSAL_ID, groupId: GROUP_ID, proposedDate: '2026-08-20' };
+      mockProposals.find.mockResolvedValue([proposal]);
+      mockSessions.findBy.mockResolvedValue([]);
+      mockRsvps.findBy.mockResolvedValue([
+        { proposalId: PROPOSAL_ID, userId: 'user-yes', status: 'yes', confirmed: false },
+        { proposalId: PROPOSAL_ID, userId: 'user-confirmed', status: 'maybe', confirmed: true },
+        { proposalId: PROPOSAL_ID, userId: 'user-maybe', status: 'maybe', confirmed: false },
+        { proposalId: PROPOSAL_ID, userId: 'user-no', status: 'no', confirmed: false },
+      ]);
+      mockGroupsService.getMembers.mockResolvedValue([
+        { id: 'user-yes', displayName: 'Yes Player', username: 'yes' },
+        { id: 'user-confirmed', displayName: 'Confirmed Player', username: 'confirmed' },
+      ]);
+
+      const result = await service.listProposals(GROUP_ID, USER_ID);
+
+      expect(result[0].participants).toEqual([
+        { id: 'user:user-yes', name: 'Yes Player' },
+        { id: 'user:user-confirmed', name: 'Confirmed Player' },
+      ]);
+    });
+  });
 
   describe('getProposal', () => {
     it('should return the proposal, its rsvps, and its proposed games with vote counts', async () => {
@@ -111,6 +136,7 @@ describe('SchedulingService', () => {
         proposal,
         rsvps,
         canManage: true,
+        session: null,
         places: [],
         games: [{
           proposalGameId: 'pg-1',

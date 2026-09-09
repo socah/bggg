@@ -402,7 +402,8 @@ export class CollectionsService {
         durationMinutes: play.durationMinutes,
         canEdit: play.loggedBy === userId || ['owner', 'admin'].includes(myRoleByGroup.get(session.groupId) ?? ''),
         groupName: groupNameById.get(session.groupId) ?? 'Group',
-      }; }).filter((play): play is NonNullable<typeof play> => play !== null && new Date(play.playedAt).getTime() <= Date.now()),
+      }; }).filter((play): play is NonNullable<typeof play> => play !== null)
+        .sort((a, b) => new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime()),
     };
   }
 

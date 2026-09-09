@@ -7,6 +7,11 @@ export function hhmm(iso: string): string {
   return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
 }
 
+export function formatDateDmy(value: string): string {
+  const [year, month, day] = value.slice(0, 10).split('-');
+  return year && month && day ? `${day}/${month}/${year}` : value;
+}
+
 // "Sat 30 Aug, 18:00 – 23:00 (UTC)" — used for the stored/confirmed window.
 // Times are UTC to match what members entered; the suffix says so.
 export function formatWindowRange(startIso: string | null, endIso: string | null): string {

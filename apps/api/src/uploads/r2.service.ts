@@ -8,6 +8,7 @@ import {
   PutObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  DeleteObjectCommand,
   NotFound,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -194,5 +195,9 @@ export class R2Service {
     return getSignedUrl(this.client, command, {
       expiresIn: GET_PRESIGN_EXPIRY_SECONDS,
     });
+  }
+
+  async deleteObject(key: string): Promise<void> {
+    await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
   }
 }

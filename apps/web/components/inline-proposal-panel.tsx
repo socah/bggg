@@ -62,7 +62,9 @@ export interface InlineProposalPanelProps {
   groups: Group[];
   defaultGroupId?: string;
   onProposalsChanged?: () => void;
+  onPlayLogged?: () => void;
   onSelectProposal?: (proposal: Proposal) => void;
+  embedded?: boolean;
 }
 
 const RSVP_ANSWERS = ['yes', 'maybe', 'no'] as const;
@@ -72,7 +74,9 @@ export function InlineProposalPanel({
   groups,
   defaultGroupId,
   onProposalsChanged,
+  onPlayLogged,
   onSelectProposal,
+  embedded = false,
 }: InlineProposalPanelProps) {
   const isDraft = proposalId === null;
   const { data: session } = useSession();
@@ -106,6 +110,8 @@ export function InlineProposalPanel({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [selectedGame, setSelectedGame] = useState<GameCardGame | null>(null);
   const [playGame, setPlayGame] = useState<GameCardGame | null>(null);
+  const [settingPlaceId, setSettingPlaceId] = useState<string | null>(null);
+  const [placeSelectionError, setPlaceSelectionError] = useState<string | null>(null);
 
   const effectiveGroupId = isDraft
     ? (defaultGroupId || selectedGroupId || groups[0]?.id || '')
@@ -119,6 +125,21 @@ export function InlineProposalPanel({
   const existingPlaces = useProposalPlaces(proposalId, onProposalsChanged);
 
   const canManage = detail?.canManage ?? false;
+
+  async function setSessionPlace(placeId: string) {
+    if (!detail?.session) return;
+    setSettingPlaceId(placeId);
+    setPlaceSelectionError(null);
+    try {
+      await apiMutate(`/groups/${detail.proposal.groupId}/sessions/${detail.session.id}/place`, 'PATCH', { placeId });
+      retryDetail();
+      onProposalsChanged?.();
+    } catch (reason) {
+      setPlaceSelectionError(reason instanceof Error ? reason.message : 'Could not set session place');
+    } finally {
+      setSettingPlaceId(null);
+    }
+  }
 
   const gameRowRefs = useRef(new Map<string, HTMLLIElement>());
   const previousGamePositions = useRef(new Map<string, number>());
@@ -205,7 +226,7 @@ export function InlineProposalPanel({
   }
 
   return (
-    <div className="rounded-md border border-border bg-surface-raised p-4 font-body text-sm shadow-sm transition-all">
+    <div className={`${embedded ? '' : 'rounded-md border border-border shadow-sm'} bg-surface-raised p-4 font-body text-sm transition-all`}>
       {/* 1. Header Bar */}
       <div className="flex items-center justify-between border-b border-border pb-3 mb-3">
         <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted">
@@ -514,6 +535,7 @@ export function InlineProposalPanel({
                       <span className="inline-flex min-w-12 items-center justify-center gap-1 rounded-full bg-highlight px-2 py-1 font-semibold text-text"><span aria-hidden="true">▲</span><span>{row.voteCount}</span></span>
                     )}
                     <span className="font-medium">{row.place.name}</span>
+                    {detail.proposal.status === 'confirmed' && detail.session && canManage && <Button type="button" variant="secondary" className="ml-auto min-h-8 px-2 text-xs" disabled={settingPlaceId !== null || detail.session.place?.id === row.place.id} onClick={() => void setSessionPlace(row.place.id)}>{detail.session.place?.id === row.place.id ? 'Session place' : settingPlaceId === row.place.id ? 'Setting...' : 'Set as session place'}</Button>}
                     {row.ownerIds.length > 0 && (
                       <span className="text-xs text-text-muted">
                         Hosted by{' '}
@@ -533,6 +555,7 @@ export function InlineProposalPanel({
               ))}
             </ul>
           ) : null}
+          {placeSelectionError && <p role="alert" className="mt-2 text-xs text-accent">{placeSelectionError}</p>}
         </div>
       )}
 
@@ -711,8 +734,10 @@ export function InlineProposalPanel({
           proposalId: detail.proposal.id,
           userIds: detail.rsvps.filter((rsvp) => rsvp.status !== 'no').map((rsvp) => rsvp.userId),
         } : undefined}
+        onPlayLogged={onPlayLogged}
       />
       {playGame && detail?.proposal.status === 'confirmed' && <PlayLogDialog
+        inline
         game={playGame}
         open
         defaults={{
@@ -722,6 +747,7 @@ export function InlineProposalPanel({
           userIds: detail.rsvps.filter((rsvp) => rsvp.status !== 'no').map((rsvp) => rsvp.userId),
         }}
         onOpenChange={(open) => { if (!open) setPlayGame(null); }}
+        onLogged={onPlayLogged}
       />}
     </div>
   );

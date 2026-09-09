@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { apiFetch, apiMutate } from '@/lib/api';
+import { formatDateDmy } from '@/lib/datetime';
 import type {
   ChatThread,
   ChatThreadSummary,
@@ -40,8 +41,7 @@ async function loadContext(group: Group): Promise<ChatContext> {
     group,
     threads: await chatResponse.json() as ChatThreadSummary[],
     members: await memberResponse.json() as GroupMemberInfo[],
-    proposals: (await proposalResponse.json() as Proposal[])
-      .filter((proposal) => proposal.status !== 'cancelled'),
+    proposals: await proposalResponse.json() as Proposal[],
   };
 }
 
@@ -51,6 +51,7 @@ export function GroupChatView({ groupId }: { groupId: string | null }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showHiddenProposalChats, setShowHiddenProposalChats] = useState(false);
   const loadKey = groupId ?? 'all';
 
   useEffect(() => {
@@ -166,8 +167,11 @@ export function GroupChatView({ groupId }: { groupId: string | null }) {
       ? 'Notes to self'
       : (selectedMember?.displayName || selectedMember?.username || 'Direct message')
     : selected?.thread.kind === 'proposal'
-      ? `Proposal: ${selectedProposal?.proposedDate ?? 'discussion'}`
+      ? `Proposal: ${selectedProposal ? formatDateDmy(selectedProposal.proposedDate) : 'discussion'}`
       : 'General';
+  const hiddenBefore = new Date();
+  hiddenBefore.setDate(hiddenBefore.getDate() - 7);
+  const hiddenBeforeKey = `${hiddenBefore.getFullYear()}-${String(hiddenBefore.getMonth() + 1).padStart(2, '0')}-${String(hiddenBefore.getDate()).padStart(2, '0')}`;
 
   if (loadedKey !== loadKey) {
     return <p className="text-sm text-text-muted">Loading chats...</p>;
@@ -188,6 +192,13 @@ export function GroupChatView({ groupId }: { groupId: string | null }) {
           {contexts.map((context) => {
             const general = context.threads.find((thread) => thread.kind === 'general');
             const proposalThreads = context.threads.filter((thread) => thread.kind === 'proposal');
+            const hiddenProposalThreads = proposalThreads.filter((thread) => {
+              const proposal = context.proposals.find((candidate) => candidate.id === thread.proposalId);
+              return Boolean(proposal && proposal.proposedDate < hiddenBeforeKey);
+            });
+            const shownProposalThreads = showHiddenProposalChats
+              ? proposalThreads
+              : proposalThreads.filter((thread) => !hiddenProposalThreads.some((hidden) => hidden.id === thread.id));
             return (
               <section key={context.group.id} className="mb-4 last:mb-0">
                 <h2 className="mb-1 text-xs font-semibold uppercase tracking-wider text-text-muted">
@@ -202,7 +213,7 @@ export function GroupChatView({ groupId }: { groupId: string | null }) {
                     General
                   </button>
                 )}
-                {!groupId && proposalThreads.map((thread) => {
+                {shownProposalThreads.map((thread) => {
                   const proposal = context.proposals.find((candidate) => candidate.id === thread.proposalId);
                   return (
                     <button
@@ -211,10 +222,11 @@ export function GroupChatView({ groupId }: { groupId: string | null }) {
                       onClick={() => setSelectedId(thread.id)}
                       className={`w-full rounded-sm px-2 py-2 text-left text-sm ${selected?.thread.id === thread.id ? 'bg-highlight font-semibold' : 'hover:bg-surface'}`}
                     >
-                      Proposal: {proposal?.proposedDate ?? 'discussion'}
+                      Proposal: {proposal ? formatDateDmy(proposal.proposedDate) : 'discussion'}
                     </button>
                   );
                 })}
+                {hiddenProposalThreads.length > 0 && <button type="button" className="mt-1 w-full px-2 py-1 text-left text-xs font-semibold text-text-muted underline" onClick={() => setShowHiddenProposalChats((current) => !current)}>{showHiddenProposalChats ? 'Hide old proposal chats' : `Show hidden chats (${hiddenProposalThreads.length})`}</button>}
               </section>
             );
           })}

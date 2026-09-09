@@ -33,6 +33,9 @@ export class PlaySession {
   @Column({ type: 'text', nullable: true })
   notes!: string | null;
 
+  @Column({ name: 'place_id', type: 'uuid', nullable: true })
+  placeId!: string | null;
+
   // uuid, matching PlaySessionProposal.id — nullable because a session can
   // be logged directly (a spontaneous game night) without ever having gone
   // through a proposal. Set exactly once, when SchedulingService finalizes

@@ -686,9 +686,37 @@ export class SchedulingService {
     await this.placeOwners.delete({ placeId: proposalPlace.placeId, userId: requestingUserId });
   }
 
-  async listProposals(groupId: string, requestingUserId: string): Promise<PlaySessionProposal[]> {
+  async listProposals(groupId: string, requestingUserId: string) {
     await this.groupsService.findOne(groupId, requestingUserId);
-    return this.proposals.find({ where: { groupId }, order: { createdAt: 'DESC' } });
+    const proposals = await this.proposals.find({ where: { groupId }, order: { createdAt: 'DESC' } });
+    if (proposals.length === 0) return [];
+    const [rsvps, members] = await Promise.all([
+      this.rsvps.findBy({ proposalId: In(proposals.map((proposal) => proposal.id)) }),
+      this.groupsService.getMembers(groupId, requestingUserId),
+    ]);
+    const sessions = await this.sessions.findBy({ proposalId: In(proposals.map((proposal) => proposal.id)) });
+    const placeIds = sessions.flatMap((session) => session.placeId ? [session.placeId] : []);
+    const sessionPlaces = placeIds.length ? await this.places.findBy({ id: In(placeIds) }) : [];
+    const memberById = new Map(members.map((member) => [member.id, member]));
+    const requestingMember = members.find((member) => member.id === requestingUserId);
+    const sessionByProposal = new Map(sessions.map((session) => [session.proposalId, session]));
+    const placeById = new Map(sessionPlaces.map((place) => [place.id, place]));
+    return proposals.map((proposal) => ({
+      ...proposal,
+      participants: rsvps
+        .filter((rsvp) => rsvp.proposalId === proposal.id && (rsvp.status === 'yes' || rsvp.confirmed))
+        .map((rsvp) => {
+          const member = memberById.get(rsvp.userId);
+          return { id: `user:${rsvp.userId}`, name: member?.displayName || member?.username || 'Unknown member' };
+        }),
+      session: (() => {
+        const session = sessionByProposal.get(proposal.id);
+        if (!session) return null;
+        const place = session.placeId ? placeById.get(session.placeId) : null;
+        return { id: session.id, place: place ? { id: place.id, name: place.name } : null };
+      })(),
+      canManage: proposal.createdBy === requestingUserId || requestingMember?.role === 'owner' || requestingMember?.role === 'admin',
+    }));
   }
 
   async getMyHostingStats(requestingUserId: string): Promise<{ hostedSessionCount: number }> {
@@ -752,6 +780,7 @@ export class SchedulingService {
     games: ProposalGameWithVotes[];
     places: ProposalPlaceWithVotes[];
     canManage: boolean;
+    session: { id: string; place: { id: string; name: string } | null } | null;
   }> {
     const proposal = await this.findProposalOrThrow(proposalId);
     await this.groupsService.findOne(proposal.groupId, requestingUserId);
@@ -764,7 +793,16 @@ export class SchedulingService {
     const games = await this.listProposalGames(proposalId, requestingUserId);
     const places = await this.listProposalPlaces(proposalId, requestingUserId);
     const canManage = await this.canManageProposal(proposal, requestingUserId);
-    return { proposal, rsvps, games, places, canManage };
+    const session = await this.sessions.findOneBy({ proposalId });
+    const sessionPlace = session?.placeId ? await this.places.findOneBy({ id: session.placeId }) : null;
+    return {
+      proposal,
+      rsvps,
+      games,
+      places,
+      canManage,
+      session: session ? { id: session.id, place: sessionPlace ? { id: sessionPlace.id, name: sessionPlace.name } : null } : null,
+    };
   }
 
   private async findProposalOrThrow(proposalId: string): Promise<PlaySessionProposal> {

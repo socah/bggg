@@ -14,6 +14,11 @@ export interface Group {
 // `string` on the entity, so it's never wrapped in a Date server-side).
 export type ProposalStatus = 'collecting' | 'confirming' | 'confirmed' | 'cancelled';
 
+export interface CalendarParticipant {
+  id: string;
+  name: string;
+}
+
 export interface Proposal {
   id: string;
   groupId: string;
@@ -24,6 +29,9 @@ export interface Proposal {
   confirmedStart: string | null;
   confirmedEnd: string | null;
   createdAt: string;
+  participants?: CalendarParticipant[];
+  session?: { id: string; place: { id: string; name: string } | null } | null;
+  canManage?: boolean;
 }
 
 // The user-level (aggregate) space merges proposals from every group the
@@ -77,6 +85,7 @@ export interface ProposalDetail {
   games: ProposalGameSummary[];
   places: ProposalPlaceSummary[];
   canManage: boolean;
+  session?: { id: string; place: { id: string; name: string } | null } | null;
 }
 
 export type MemberRole = 'owner' | 'admin' | 'member';
@@ -188,6 +197,22 @@ export interface GamePlaySummary {
   durationMinutes: number | null;
   canEdit: boolean;
   groupName: string;
+}
+
+export interface CalendarPlaySummary {
+  id: string;
+  sessionId: string;
+  proposalId: string | null;
+  groupId: string;
+  groupName: string;
+  game: GameCardGame;
+  playedDate: string;
+  status: 'finished' | 'abandoned';
+  durationMinutes: number | null;
+  notes: string | null;
+  canEdit: boolean;
+  sessionParticipants: CalendarParticipant[];
+  sessionPlace: { id: string; name: string } | null;
 }
 
 export interface CollectionGameDetails {

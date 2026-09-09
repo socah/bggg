@@ -9,7 +9,9 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { UserIdentityLink } from '@/components/user-identity-link';
 import { PlayLogDialog, type PlayLogDefaults } from '@/components/play-log-dialog';
+import { DisclosureChevron } from '@/components/ui/disclosure-chevron';
 import { apiFetch } from '@/lib/api';
+import { formatDateDmy } from '@/lib/datetime';
 import type {
   BggSearchResult,
   CollectionGame,
@@ -47,6 +49,10 @@ const RATING_SCALE: Record<number, string> = {
 const WEIGHT_SCALE = ['Light', 'Medium Light', 'Medium', 'Medium Heavy', 'Heavy'];
 const selectClass = 'min-h-10 rounded-sm border-[length:var(--border-w)] border-border bg-surface-raised px-2 text-sm text-text';
 const SORT_LABELS: Record<SortMode, string> = { priority: 'Wishlist priority', source: 'Source', position: 'Position', name: 'Name', rating: 'BGG rating', players: 'Minimum players', time: 'Playing time', year: 'Year published', added: 'Recently added' };
+
+function AnimatedDisclosure({ expanded, children }: { expanded: boolean; children: ReactNode }) {
+  return <div className={`grid transition-[grid-template-rows,opacity] duration-300 ease-in-out ${expanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`} aria-hidden={!expanded} inert={!expanded}><div className="overflow-hidden">{children}</div></div>;
+}
 
 async function responseError(response: Response): Promise<string> {
   try {
@@ -132,6 +138,7 @@ export function GameDetailsSheet({
   busy = false,
   onMutate,
   playDefaults,
+  onPlayLogged,
 }: {
   game: GameCardGame | null;
   open: boolean;
@@ -143,6 +150,7 @@ export function GameDetailsSheet({
   busy?: boolean;
   onMutate?: (path: string, init: RequestInit, success: string) => Promise<boolean>;
   playDefaults?: PlayLogDefaults;
+  onPlayLogged?: () => void;
 }) {
   const [details, setDetails] = useState<CollectionGameDetails | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -156,7 +164,7 @@ export function GameDetailsSheet({
   const [editingPlayId, setEditingPlayId] = useState<string | null>(null);
 
   async function loadDetails(currentGame: GameCardGame) {
-    const response = await apiFetch(`/bgg-account/games/${currentGame.id}/details`);
+    const response = await apiFetch(`/bgg-account/games/${currentGame.id}/details`, { cache: 'no-store' });
     if (!response.ok) throw new Error(await responseError(response));
     const next = (await response.json()) as CollectionGameDetails;
     setDetails(next);
@@ -252,8 +260,6 @@ export function GameDetailsSheet({
           <DialogClose className="rounded-sm px-3 py-2 text-sm font-semibold text-text-muted">Close</DialogClose>
         </div>
 
-        <Button type="button" className="mt-4 w-full" onClick={() => setLogOpen(true)}>Log a play</Button>
-
         {error && <p role="alert" className="mt-4 text-sm text-accent">{error}</p>}
         {!details && !error && <p className="py-12 text-center text-sm text-text-muted">Loading reviews and plays...</p>}
         {details && (
@@ -270,7 +276,7 @@ export function GameDetailsSheet({
                   {mine && <p className="text-xs text-text-muted">Editing your existing review.{imported && ' The rating is updated from BGG when you sync; your other edits stay here.'}</p>}
                   <div className="grid gap-2 sm:grid-cols-3">
                     <label className="text-xs font-semibold text-text-muted">Rating
-                      <Input required type="number" min="1" max="10" step="0.1" value={rating} onChange={(event) => setRating(event.target.value)} className="mt-1" placeholder="1-10" />
+                      <Input required type="number" min="1" max="10" step="0.1" value={rating} onChange={(event) => setRating(event.target.value)} className="mt-1 min-h-10 w-full" placeholder="1-10" />
                     </label>
                     <label className="text-xs font-semibold text-text-muted">Complexity
                       <select value={complexity} onChange={(event) => setComplexity(event.target.value)} className={`mt-1 w-full ${selectClass}`}>
@@ -372,35 +378,30 @@ export function GameDetailsSheet({
             </section>
 
             <section>
-              <h3 className="font-display text-lg">Logged plays <span className="text-sm text-text-muted">({details.plays.length})</span></h3>
+              <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-display text-lg">Logged plays <span className="text-sm text-text-muted">({details.plays.length})</span></h3><Button type="button" className="min-h-9 px-3 text-xs" onClick={() => setLogOpen(true)}>Log a play</Button></div>
               <div className="mt-3 flex flex-col gap-2">
                 {details.plays.length === 0 && <p className="text-sm text-text-muted">No logged plays in your groups.</p>}
-                {details.plays.map((play) => (
-                  <Card key={play.id} className="p-3 text-sm">
-                    <div className="flex justify-between gap-3"><strong>{new Date(play.playedAt).toLocaleDateString()}</strong><span className="text-text-muted">{play.groupName}</span></div>
-                    <p className="mt-1 text-xs text-text-muted">{play.status === 'finished' ? 'Finished' : 'Abandoned'}{play.durationMinutes ? ` · ${play.durationMinutes} min` : ''}</p>
-                    {play.notes && <p className="mt-2 text-text-muted">{play.notes}</p>}
-                    {play.canEdit && <Button type="button" variant="ghost" className="mt-2 min-h-8 px-0 text-xs" onClick={() => setEditingPlayId(play.id)}>Edit play</Button>}
-                  </Card>
-                ))}
+                {details.plays.map((play) => {
+                  const expanded = editingPlayId === play.id;
+                  return <div key={play.id} className="overflow-hidden rounded-sm border border-border bg-surface-raised">
+                    <button type="button" disabled={!play.canEdit} aria-expanded={expanded} className="flex min-h-11 w-full items-center gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-highlight disabled:cursor-default" onClick={() => setEditingPlayId(expanded ? null : play.id)}>
+                      <strong className="shrink-0">{formatDateDmy(play.playedAt)}</strong>
+                      <span className="shrink-0 font-semibold">{expanded ? 'Play details' : play.groupName}</span>
+                      {!expanded && play.notes && <span className="min-w-0 max-w-48 truncate text-xs text-text-muted">{play.notes}</span>}
+                      {play.durationMinutes && <span className="shrink-0 text-xs text-text-muted">{play.durationMinutes} min</span>}
+                      {play.status === 'abandoned' && <span className="shrink-0 text-xs font-semibold text-accent">Abandoned</span>}
+                      <span className="flex-1" />
+                      {play.canEdit && <DisclosureChevron expanded={expanded} />}
+                    </button>
+                    {game && <AnimatedDisclosure expanded={expanded}><div className="border-t border-border"><PlayLogDialog inline embedded game={game} open={expanded} editPlayId={play.id} defaults={{ groupId: play.groupId, playedDate: play.playedAt.slice(0, 10), userIds: [] }} onOpenChange={(open) => { if (!open) setEditingPlayId(null); }} onLogged={() => { void loadDetails(game); onPlayLogged?.(); }} /></div></AnimatedDisclosure>}
+                  </div>;
+                })}
               </div>
             </section>
           </div>
         )}
       </DialogSheetContent>
-      {logOpen && <PlayLogDialog game={game} open={logOpen} defaults={playDefaults} onOpenChange={setLogOpen} onLogged={() => { if (game) void loadDetails(game); }} />}
-      {editingPlayId && game && details?.plays.find((play) => play.id === editingPlayId) && <PlayLogDialog
-        game={game}
-        open
-        editPlayId={editingPlayId}
-        defaults={{
-          groupId: details.plays.find((play) => play.id === editingPlayId)!.groupId,
-          playedDate: details.plays.find((play) => play.id === editingPlayId)!.playedAt.slice(0, 10),
-          userIds: [],
-        }}
-        onOpenChange={(open) => { if (!open) setEditingPlayId(null); }}
-        onLogged={() => void loadDetails(game)}
-      />}
+       {logOpen && <PlayLogDialog game={game} open={logOpen} defaults={playDefaults} onOpenChange={setLogOpen} onLogged={() => { if (game) void loadDetails(game); onPlayLogged?.(); }} />}
     </Dialog>
   );
 }

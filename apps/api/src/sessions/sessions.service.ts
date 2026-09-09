@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, DataSource, In, Repository } from 'typeorm';
+import { Between, DataSource, In, IsNull, Repository } from 'typeorm';
 import { Game } from '../games/game.entity';
 import { GroupMember } from '../groups/group-member.entity';
 import { GroupsService } from '../groups/groups.service';
@@ -16,6 +16,10 @@ import { GuestPlayer } from './guest-player.entity';
 import { PlayResult } from './play-result.entity';
 import { PlaySessionPlayer } from './play-session-player.entity';
 import { UpdatePlayDto } from './dto/update-play.dto';
+import { UploadsService } from '../uploads/uploads.service';
+import { Place } from '../scheduling/place.entity';
+import { PlaceVisibility } from '../scheduling/place-visibility.entity';
+import { UpdateSessionPlaceDto } from './dto/update-session-place.dto';
 
 export function rankMatchingSessions(
   sessions: PlaySession[],
@@ -43,15 +47,18 @@ export class SessionsService {
     @InjectRepository(PlaySessionProposal) private readonly proposals: Repository<PlaySessionProposal>,
     @InjectRepository(PlaySessionRsvp) private readonly rsvps: Repository<PlaySessionRsvp>,
     @InjectRepository(PlaySessionProposalGame) private readonly proposalGames: Repository<PlaySessionProposalGame>,
+    @InjectRepository(Place) private readonly places: Repository<Place>,
+    @InjectRepository(PlaceVisibility) private readonly placeVisibility: Repository<PlaceVisibility>,
     private readonly groupsService: GroupsService,
     private readonly dataSource: DataSource,
+    private readonly uploadsService: UploadsService,
   ) {}
 
   async listPlayers(groupId: string, userId: string) {
     await this.groupsService.findOne(groupId, userId);
     const [members, guests, membership] = await Promise.all([
       this.groupsService.getMembers(groupId, userId),
-      this.guests.find({ where: { groupId }, order: { name: 'ASC' } }),
+      this.guests.find({ where: { groupId, archivedAt: IsNull() }, order: { name: 'ASC' } }),
       this.members.findOneBy({ groupId, userId }),
     ]);
     return {
@@ -70,9 +77,10 @@ export class SessionsService {
       .where('guest.group_id = :groupId', { groupId })
       .andWhere('LOWER(guest.name) = LOWER(:name)', { name })
       .andWhere('guest.linked_user_id IS NULL')
+      .andWhere('guest.archived_at IS NULL')
       .getOne();
     if (duplicate) return duplicate;
-    return this.guests.save(this.guests.create({ groupId, name, createdBy: userId, linkedUserId: null }));
+    return this.guests.save(this.guests.create({ groupId, name, createdBy: userId, linkedUserId: null, archivedAt: null }));
   }
 
   async linkGuest(groupId: string, guestId: string, dto: LinkGuestPlayerDto, userId: string): Promise<GuestPlayer> {
@@ -122,6 +130,92 @@ export class SessionsService {
       guest.linkedUserId = dto.userId;
       return guestRepo.save(guest);
     });
+  }
+
+  async removeGuest(groupId: string, guestId: string, userId: string): Promise<void> {
+    await this.groupsService.findOne(groupId, userId);
+    const manager = await this.members.findOneBy({ groupId, userId });
+    if (manager?.role !== 'owner' && manager?.role !== 'admin') {
+      throw new ForbiddenException('Only group owners and admins can remove guest players');
+    }
+    const guest = await this.guests.findOneBy({ id: guestId, groupId });
+    if (!guest) throw new NotFoundException('Guest player not found');
+    guest.archivedAt = new Date();
+    await this.guests.save(guest);
+  }
+
+  async listPlays(groupId: string, userId: string) {
+    const group = await this.groupsService.findOne(groupId, userId);
+    const sessions = await this.sessions.find({ where: { groupId }, order: { playedAt: 'DESC' } });
+    if (sessions.length === 0) return [];
+    const plays = await this.dataSource.getRepository(PlaySessionGame).findBy({ sessionId: In(sessions.map((session) => session.id)) });
+    const games = plays.length ? await this.games.findBy({ id: In([...new Set(plays.map((play) => play.gameId))]) }) : [];
+    const sessionPlayers = await this.dataSource.getRepository(PlaySessionPlayer).findBy({ sessionId: In(sessions.map((session) => session.id)) });
+    const guestIds = sessionPlayers.flatMap((player) => player.guestPlayerId ? [player.guestPlayerId] : []);
+    const [groupMembers, guestPlayers] = await Promise.all([
+      this.groupsService.getMembers(groupId, userId),
+      guestIds.length ? this.guests.findBy({ id: In(guestIds), groupId }) : [],
+    ]);
+    const sessionById = new Map(sessions.map((session) => [session.id, session]));
+    const gameById = new Map(games.map((game) => [game.id, game]));
+    const placeIds = sessions.flatMap((session) => session.placeId ? [session.placeId] : []);
+    const places = placeIds.length ? await this.places.findBy({ id: In(placeIds) }) : [];
+    const placeById = new Map(places.map((place) => [place.id, place]));
+    const memberById = new Map(groupMembers.map((member) => [member.id, member]));
+    const guestById = new Map(guestPlayers.map((guest) => [guest.id, guest]));
+    const membership = await this.members.findOneBy({ groupId, userId });
+    return plays.map((play) => ({
+      id: play.id,
+      sessionId: play.sessionId,
+      proposalId: sessionById.get(play.sessionId)!.proposalId,
+      groupId,
+      groupName: group.name,
+      game: gameById.get(play.gameId)!,
+      playedDate: sessionById.get(play.sessionId)!.playedAt.toISOString().slice(0, 10),
+      status: play.status,
+      durationMinutes: play.durationMinutes,
+      notes: play.notes,
+      canEdit: play.loggedBy === userId || membership?.role === 'owner' || membership?.role === 'admin',
+      sessionPlace: sessionById.get(play.sessionId)!.placeId
+        ? { id: sessionById.get(play.sessionId)!.placeId!, name: placeById.get(sessionById.get(play.sessionId)!.placeId!)?.name ?? 'Unknown place' }
+        : null,
+      sessionParticipants: sessionPlayers.filter((player) => player.sessionId === play.sessionId).map((player) => {
+        if (player.userId) {
+          const member = memberById.get(player.userId);
+          return { id: `user:${player.userId}`, name: member?.displayName || member?.username || 'Unknown member' };
+        }
+        const guest = guestById.get(player.guestPlayerId!);
+        return { id: `guest:${player.guestPlayerId}`, name: guest?.name || 'Guest player' };
+      }),
+    })).sort((a, b) => b.playedDate.localeCompare(a.playedDate));
+  }
+
+  async updateSessionPlace(groupId: string, sessionId: string, dto: UpdateSessionPlaceDto, userId: string) {
+    await this.groupsService.findOne(groupId, userId);
+    const session = await this.sessions.findOneBy({ id: sessionId, groupId });
+    if (!session) throw new NotFoundException('Session not found');
+    if (dto.placeId !== undefined && dto.name !== undefined) {
+      throw new BadRequestException('Choose an existing place or enter a new one');
+    }
+    const membership = await this.members.findOneBy({ groupId, userId });
+    const proposal = session.proposalId ? await this.proposals.findOneBy({ id: session.proposalId }) : null;
+    const loggedPlay = await this.dataSource.getRepository(PlaySessionGame).findOneBy({ sessionId, loggedBy: userId });
+    if (!['owner', 'admin'].includes(membership?.role ?? '') && proposal?.createdBy !== userId && !loggedPlay) {
+      throw new ForbiddenException('Only a session organizer, logger, or group manager can set the place');
+    }
+
+    let place: Place | null = null;
+    if (dto.name?.trim()) {
+      place = await this.places.save(this.places.create({ name: dto.name.trim(), createdBy: userId }));
+      const groupMembers = await this.members.findBy({ groupId });
+      await this.placeVisibility.upsert(groupMembers.map((member) => ({ placeId: place!.id, userId: member.userId, hidden: false })), ['placeId', 'userId']);
+    } else if (dto.placeId) {
+      place = await this.places.findOneBy({ id: dto.placeId });
+      if (!place) throw new NotFoundException('Place not found');
+    }
+    session.placeId = place?.id ?? null;
+    await this.sessions.save(session);
+    return { id: session.id, place: place ? { id: place.id, name: place.name } : null };
   }
 
   async createPlay(groupId: string, dto: CreatePlayDto, userId: string) {
@@ -316,6 +410,28 @@ export class SessionsService {
       if (dto.notes !== undefined) play.notes = dto.notes?.trim() || null;
       const saved = await entityManager.getRepository(PlaySessionGame).save(play);
       return { ...saved, sessionId: session.id, results };
+    });
+  }
+
+  async removePlay(groupId: string, playId: string, userId: string): Promise<void> {
+    await this.groupsService.findOne(groupId, userId);
+    const playRepo = this.dataSource.getRepository(PlaySessionGame);
+    const play = await playRepo.findOneBy({ id: playId });
+    if (!play) throw new NotFoundException('Play not found');
+    const session = await this.sessions.findOneBy({ id: play.sessionId, groupId });
+    if (!session) throw new NotFoundException('Play not found');
+    const membership = await this.members.findOneBy({ groupId, userId });
+    if (play.loggedBy !== userId && membership?.role !== 'owner' && membership?.role !== 'admin') {
+      throw new ForbiddenException('Only the logger or a group manager can delete this play');
+    }
+
+    await this.uploadsService.deleteObjectsForPlay(playId);
+    await this.dataSource.transaction(async (entityManager) => {
+      await entityManager.getRepository(PlaySessionGame).remove(play);
+      const remaining = await entityManager.getRepository(PlaySessionGame).countBy({ sessionId: session.id });
+      if (remaining === 0 && !session.proposalId) {
+        await entityManager.getRepository(PlaySession).remove(session);
+      }
     });
   }
 }

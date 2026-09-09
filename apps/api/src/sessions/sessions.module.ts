@@ -13,6 +13,9 @@ import { PlayResult } from './play-result.entity';
 import { PlaySessionPlayer } from './play-session-player.entity';
 import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
+import { UploadsModule } from '../uploads/uploads.module';
+import { Place } from '../scheduling/place.entity';
+import { PlaceVisibility } from '../scheduling/place-visibility.entity';
 
 @Module({
   imports: [
@@ -27,8 +30,11 @@ import { SessionsService } from './sessions.service';
       PlaySessionProposal,
       PlaySessionRsvp,
       PlaySessionProposalGame,
+      Place,
+      PlaceVisibility,
     ]),
     GroupsModule,
+    UploadsModule,
   ],
   controllers: [SessionsController],
   providers: [SessionsService],

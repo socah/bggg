@@ -133,6 +133,11 @@ export class UploadsService {
     })));
   }
 
+  async deleteObjectsForPlay(playId: string): Promise<void> {
+    const photos = await this.playPhotoRepository.findBy({ playId });
+    await Promise.all(photos.map((photo) => this.r2Service.deleteObject(photo.key)));
+  }
+
   private async assertPlayAccess(userId: string, sessionId: string, playId: string): Promise<void> {
     const [session, play] = await Promise.all([
       this.sessions.findOneBy({ id: sessionId }),

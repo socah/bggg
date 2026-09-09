@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, IsNull, Not, Repository, type FindOptionsWhere } from 'typeorm';
+import { In, IsNull, Repository, type FindOptionsWhere } from 'typeorm';
 import { Message } from './message.entity';
 import { GroupsService } from '../groups/groups.service';
 import { ChatThread } from './chat-thread.entity';
@@ -29,7 +29,7 @@ export class ChatService {
     await this.groupsService.findOne(groupId, requestingUserId);
     await this.getOrCreateThread({ groupId, kind: 'general' });
 
-    const proposals = await this.proposalRepository.findBy({ groupId, status: Not('cancelled') });
+    const proposals = await this.proposalRepository.findBy({ groupId });
     await Promise.all(
       proposals.map((proposal) =>
         this.getOrCreateThread({ groupId, kind: 'proposal', proposalId: proposal.id }),

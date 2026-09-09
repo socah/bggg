@@ -1,12 +1,24 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 
+const apiFetch = jest.fn<typeof fetch>();
+
+jest.unstable_mockModule('@/lib/api', () => ({ apiFetch }));
+
 jest.unstable_mockModule('@/components/inline-proposal-panel', () => ({
   InlineProposalPanel: ({ proposalId, draftDate }: { proposalId: string | null; draftDate?: string }) => proposalId ? <div>Existing proposal</div> : <div>Proposal draft {draftDate}</div>,
 }));
 
 jest.unstable_mockModule('@/components/calendar-play-launcher', () => ({
   CalendarPlayLauncher: ({ date }: { date: string }) => <button type="button">Log play {date}</button>,
+}));
+
+jest.unstable_mockModule('@/components/play-log-dialog', () => ({
+  PlayLogDialog: ({ editPlayId, inline }: { editPlayId?: string; inline?: boolean }) => <div>{inline ? 'Inline' : 'Modal'} logged play {editPlayId}</div>,
+}));
+
+jest.unstable_mockModule('@/components/session-place-control', () => ({
+  SessionPlaceControl: () => <div>Session place</div>,
 }));
 
 const { CalendarMonthGrid } = await import('./calendar-month-grid');
@@ -33,6 +45,7 @@ describe('CalendarMonthGrid', () => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date(2026, 4, 1));
     global.ResizeObserver = ResizeObserverMock as typeof ResizeObserver;
+    apiFetch.mockReset();
   });
 
   afterEach(() => {
@@ -58,7 +71,7 @@ describe('CalendarMonthGrid', () => {
     );
 
     const day = screen.getByRole('button', { name: 'May 15, 2026, 1 proposal' });
-    expect(day.className).toContain('justify-start');
+    expect(day.parentElement?.className).toContain('justify-start');
     expect(day.getAttribute('aria-pressed')).toBe('false');
     expect(day.getAttribute('aria-expanded')).toBe('false');
 
@@ -96,8 +109,8 @@ describe('CalendarMonthGrid', () => {
     const weekendHeadings = screen.getAllByText('S');
     expect(weekendHeadings[0].className).toContain('text-accent');
     expect(weekendHeadings[1].className).toContain('text-accent');
-    expect(within(screen.getByRole('button', { name: 'May 2, 2026' })).getByText('2').className).toContain('text-accent');
-    expect(within(screen.getByRole('button', { name: 'May 3, 2026' })).getByText('3').className).toContain('text-accent');
+    expect(within(screen.getByRole('button', { name: 'May 2, 2026' }).parentElement!).getByText('2').className).toContain('text-accent');
+    expect(within(screen.getByRole('button', { name: 'May 3, 2026' }).parentElement!).getByText('3').className).toContain('text-accent');
   });
 
   it('offers only play logging before today', () => {
@@ -114,10 +127,53 @@ describe('CalendarMonthGrid', () => {
     expect(screen.getByRole('button', { name: 'Log play 2026-05-01' })).toBeTruthy();
   });
 
+  it('keeps the play action below the selected date while collapsing', () => {
+    render(<CalendarMonthGrid proposals={[]} />);
+    const day = screen.getByRole('button', { name: 'May 1, 2026' });
+    fireEvent.click(day);
+    const launcherColumn = screen.getByRole('button', { name: 'Log play 2026-05-01' }).parentElement!;
+    expect(launcherColumn.style.gridColumnStart).toBe('5');
+
+    fireEvent.click(day);
+    expect(launcherColumn.style.gridColumnStart).toBe('5');
+  });
+
   it('offers only proposal creation after today', () => {
     render(<CalendarMonthGrid proposals={[]} />);
     fireEvent.click(screen.getByRole('button', { name: 'May 2, 2026' }));
     expect(screen.getByText('Proposal draft 2026-05-02')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Log play 2026-05-02' })).toBeNull();
+  });
+
+  it('shows logged plays returned for the calendar group', async () => {
+    apiFetch.mockResolvedValue({
+      ok: true,
+      json: async () => [{
+        id: 'play-1',
+        sessionId: 'session-1',
+        proposalId: null,
+        groupId: 'group-1',
+        groupName: 'Thursday Games',
+        game: { id: 1, bggId: 230802, name: 'Azul', image: null, thumbnail: null, minPlayers: 2, maxPlayers: 4, playingTime: 45, yearPublished: 2017, rating: 7.7 },
+        playedDate: '2026-05-01',
+        status: 'finished',
+        durationMinutes: 45,
+        notes: null,
+        canEdit: true,
+        sessionParticipants: [{ id: 'user:user-1', name: 'Alice' }, { id: 'guest:guest-1', name: 'Bob' }],
+        sessionPlace: null,
+      }],
+    } as Response);
+
+    render(<CalendarMonthGrid proposals={[]} groups={[{ id: 'group-1', name: 'Thursday Games', ownerId: 'user-1', isSolo: false, createdAt: '' }]} />);
+
+    expect(await screen.findByRole('button', { name: 'Played Azul - Thursday Games' })).toBeTruthy();
+    expect(screen.getByText('Logged session - Thursday Games')).toBeTruthy();
+    expect(screen.getByLabelText('Alice, Bob')).toBeTruthy();
+    expect(screen.getByTitle('Alice').getAttribute('style')).not.toBe(screen.getByTitle('Bob').getAttribute('style'));
+    expect(apiFetch).toHaveBeenCalledWith('/groups/group-1/plays', { cache: 'no-store' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Played Azul - Thursday Games' }));
+    expect(screen.getByText('Inline logged play play-1')).toBeTruthy();
   });
 });

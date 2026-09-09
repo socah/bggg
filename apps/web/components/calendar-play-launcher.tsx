@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogClose, DialogSheetContent, DialogTitle } from '@/components/ui/dialog';
 import type { GameCardGame, Group } from '@/lib/types';
 
-export function CalendarPlayLauncher({ date, groups, defaultGroupId }: { date: string; groups: Group[]; defaultGroupId?: string }) {
+export function CalendarPlayLauncher({ date, groups, defaultGroupId, onLogged, onSelectGame }: { date: string; groups: Group[]; defaultGroupId?: string; onLogged?: () => void; onSelectGame?: (game: GameCardGame, groupId: string) => void }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [groupId, setGroupId] = useState(defaultGroupId ?? groups[0]?.id ?? '');
   const [filter, setFilter] = useState('');
@@ -29,9 +29,9 @@ export function CalendarPlayLauncher({ date, groups, defaultGroupId }: { date: s
         <input type="search" value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Filter games..." className="mb-3 min-h-10 w-full rounded-sm border border-border bg-surface px-2 text-sm" />
         {library.loading && <p className="text-sm text-text-muted">Loading games...</p>}
         {library.error && <p role="alert" className="text-sm text-accent">{library.error}</p>}
-        <div className="flex flex-col gap-1">{filteredGames.map((candidate) => <button type="button" key={candidate.id} className="rounded-sm bg-surface p-2 text-left text-sm font-semibold hover:bg-highlight" onClick={() => { setGame(candidate); setPickerOpen(false); }}>{candidate.name}</button>)}</div>
+        <div className="flex flex-col gap-1">{filteredGames.map((candidate) => <button type="button" key={candidate.id} className="rounded-sm bg-surface p-2 text-left text-sm font-semibold hover:bg-highlight" onClick={() => { if (onSelectGame) onSelectGame(candidate, effectiveGroupId); else setGame(candidate); setPickerOpen(false); }}>{candidate.name}</button>)}</div>
       </DialogSheetContent>
     </Dialog>
-    {game && <PlayLogDialog game={game} open defaults={{ groupId: effectiveGroupId, playedDate: date, userIds: [] }} onOpenChange={(open) => { if (!open) setGame(null); }} />}
+    {game && !onSelectGame && <PlayLogDialog game={game} open defaults={{ groupId: effectiveGroupId, playedDate: date, userIds: [] }} onOpenChange={(open) => { if (!open) setGame(null); }} onLogged={onLogged} />}
   </>;
 }

@@ -399,6 +399,7 @@ CREATE TABLE IF NOT EXISTS play_sessions (
   group_id     UUID         NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
   played_at    TIMESTAMPTZ  NOT NULL,
   notes        TEXT,                   -- session-level notes (e.g. "hosted at Alice's")
+  place_id     UUID         REFERENCES places(id) ON DELETE SET NULL,
   proposal_id  UUID         REFERENCES play_session_proposals(id),
   created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
