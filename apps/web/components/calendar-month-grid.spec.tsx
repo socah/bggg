@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 
 jest.unstable_mockModule('@/components/inline-proposal-panel', () => ({
-  InlineProposalPanel: () => null,
+  InlineProposalPanel: ({ proposalId, draftDate }: { proposalId: string | null; draftDate?: string }) => proposalId ? <div>Existing proposal</div> : <div>Proposal draft {draftDate}</div>,
+}));
+
+jest.unstable_mockModule('@/components/calendar-play-launcher', () => ({
+  CalendarPlayLauncher: ({ date }: { date: string }) => <button type="button">Log play {date}</button>,
 }));
 
 const { CalendarMonthGrid } = await import('./calendar-month-grid');
@@ -94,5 +98,26 @@ describe('CalendarMonthGrid', () => {
     expect(weekendHeadings[1].className).toContain('text-accent');
     expect(within(screen.getByRole('button', { name: 'May 2, 2026' })).getByText('2').className).toContain('text-accent');
     expect(within(screen.getByRole('button', { name: 'May 3, 2026' })).getByText('3').className).toContain('text-accent');
+  });
+
+  it('offers only play logging before today', () => {
+    render(<CalendarMonthGrid proposals={[]} />);
+    fireEvent.click(screen.getByRole('button', { name: 'April 30, 2026' }));
+    expect(screen.getByRole('button', { name: 'Log play 2026-04-30' })).toBeTruthy();
+    expect(screen.queryByText('Proposal draft 2026-04-30')).toBeNull();
+  });
+
+  it('offers proposal creation and play logging today', () => {
+    render(<CalendarMonthGrid proposals={[]} />);
+    fireEvent.click(screen.getByRole('button', { name: 'May 1, 2026' }));
+    expect(screen.getByText('Proposal draft 2026-05-01')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Log play 2026-05-01' })).toBeTruthy();
+  });
+
+  it('offers only proposal creation after today', () => {
+    render(<CalendarMonthGrid proposals={[]} />);
+    fireEvent.click(screen.getByRole('button', { name: 'May 2, 2026' }));
+    expect(screen.getByText('Proposal draft 2026-05-02')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Log play 2026-05-02' })).toBeNull();
   });
 });

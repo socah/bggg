@@ -383,18 +383,26 @@ export class CollectionsService {
       ? await this.groups.findBy({ id: In([...new Set(sessions.map((session) => session.groupId))]) })
       : [];
     const groupNameById = new Map(groupRows.map((group) => [group.id, group.name]));
-    const statusBySession = new Map(playRows.map((row) => [row.sessionId, row.status]));
+    const sessionById = new Map(sessions.map((session) => [session.id, session]));
+    const myRoleByGroup = new Map(myMemberships.map((membership) => [membership.groupId, membership.role]));
 
     return {
       game,
       reviews: reviewViews,
-      plays: sessions.map((session) => ({
-        id: session.id,
+      plays: playRows.map((play) => {
+        const session = sessionById.get(play.sessionId);
+        if (!session) return null;
+        return {
+        id: play.id,
+        sessionId: session.id,
+        groupId: session.groupId,
         playedAt: session.playedAt,
-        notes: session.notes,
-        status: statusBySession.get(session.id),
+        notes: play.notes ?? session.notes,
+        status: play.status,
+        durationMinutes: play.durationMinutes,
+        canEdit: play.loggedBy === userId || ['owner', 'admin'].includes(myRoleByGroup.get(session.groupId) ?? ''),
         groupName: groupNameById.get(session.groupId) ?? 'Group',
-      })).filter((play) => new Date(play.playedAt).getTime() <= Date.now()),
+      }; }).filter((play): play is NonNullable<typeof play> => play !== null && new Date(play.playedAt).getTime() <= Date.now()),
     };
   }
 

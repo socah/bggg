@@ -11,6 +11,7 @@ import { SchedulingModule } from './scheduling/scheduling.module';
 import { CalendarModule } from './calendar/calendar.module';
 import { CollectionsModule } from './collections/collections.module';
 import { UsersModule } from './users/users.module';
+import { SessionsModule } from './sessions/sessions.module';
 
 // AppModule is the root of the dependency graph. NestFactory starts here.
 // Every feature module must be listed in `imports` for its routes and
@@ -47,6 +48,7 @@ import { UsersModule } from './users/users.module';
     UploadsModule,
     InvitesModule,
     SchedulingModule,
+    SessionsModule,
     CalendarModule,
     UsersModule,
   ],

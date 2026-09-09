@@ -14,6 +14,7 @@ import { ProposalRsvpSection } from '@/components/proposal-rsvp-section';
 import { UserIdentityLink } from '@/components/user-identity-link';
 import { ProposalChat } from '@/components/proposal-chat';
 import { GameDetailsSheet } from '@/components/personal-collection';
+import { PlayLogDialog } from '@/components/play-log-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogSheetContent, DialogClose, DialogTitle } from '@/components/ui/dialog';
@@ -104,6 +105,7 @@ export function InlineProposalPanel({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [selectedGame, setSelectedGame] = useState<GameCardGame | null>(null);
+  const [playGame, setPlayGame] = useState<GameCardGame | null>(null);
 
   const effectiveGroupId = isDraft
     ? (defaultGroupId || selectedGroupId || groups[0]?.id || '')
@@ -454,14 +456,15 @@ export function InlineProposalPanel({
                       <span>{voteCount}</span>
                     </span>
                   )}
-                  <button type="button" onClick={() => setSelectedGame(game)} className="flex min-w-0 flex-1 items-center gap-3 text-left font-medium">
+                   <button type="button" onClick={() => setSelectedGame(game)} className="flex min-w-0 flex-1 items-center gap-3 text-left font-medium">
                     {game.thumbnail || game.image ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={game.thumbnail || game.image || ''} alt="" className="size-12 shrink-0 rounded-sm object-cover" />
                     ) : <span className="size-12 shrink-0 rounded-sm bg-surface-raised" />}
                     <span className="truncate underline-offset-2 hover:underline">{game.name}</span>
-                  </button>
-                  {detail.proposal.status === 'collecting' && proposedByMe && <button type="button" className="ml-auto text-xs text-text-muted underline hover:text-accent" disabled={existingGames.pendingAction !== null} onClick={() => void existingGames.removeSuggestion(proposalGameId)}>Remove</button>}
+                   </button>
+                   {detail.proposal.status === 'confirmed' && <Button type="button" variant="secondary" className="min-h-9 shrink-0 px-3 text-xs" onClick={() => setPlayGame(game)}>Log play</Button>}
+                   {detail.proposal.status === 'collecting' && proposedByMe && <button type="button" className="ml-auto text-xs text-text-muted underline hover:text-accent" disabled={existingGames.pendingAction !== null} onClick={() => void existingGames.removeSuggestion(proposalGameId)}>Remove</button>}
                 </li>
               ))}
             </ul>
@@ -698,7 +701,28 @@ export function InlineProposalPanel({
           </ul>
         </DialogSheetContent>
       </Dialog>
-      <GameDetailsSheet game={selectedGame} open={Boolean(selectedGame)} onOpenChange={(open) => { if (!open) setSelectedGame(null); }} />
+      <GameDetailsSheet
+        game={selectedGame}
+        open={Boolean(selectedGame)}
+        onOpenChange={(open) => { if (!open) setSelectedGame(null); }}
+        playDefaults={detail?.proposal.status === 'confirmed' ? {
+          groupId: detail.proposal.groupId,
+          playedDate: detail.proposal.proposedDate,
+          proposalId: detail.proposal.id,
+          userIds: detail.rsvps.filter((rsvp) => rsvp.status !== 'no').map((rsvp) => rsvp.userId),
+        } : undefined}
+      />
+      {playGame && detail?.proposal.status === 'confirmed' && <PlayLogDialog
+        game={playGame}
+        open
+        defaults={{
+          groupId: detail.proposal.groupId,
+          playedDate: detail.proposal.proposedDate,
+          proposalId: detail.proposal.id,
+          userIds: detail.rsvps.filter((rsvp) => rsvp.status !== 'no').map((rsvp) => rsvp.userId),
+        }}
+        onOpenChange={(open) => { if (!open) setPlayGame(null); }}
+      />}
     </div>
   );
 }

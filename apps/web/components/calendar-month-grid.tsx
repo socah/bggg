@@ -7,6 +7,7 @@ import { InlineProposalPanel } from '@/components/inline-proposal-panel';
 import { Button } from '@/components/ui/button';
 import { proposalStatusClasses } from '@/components/proposal-status-badge';
 import { cn } from '@/lib/cn';
+import { CalendarPlayLauncher } from '@/components/calendar-play-launcher';
 
 const MAX_BADGES_PER_DAY = 3;
 
@@ -68,6 +69,9 @@ function WeekRowExpander({
   const currentDate = isExpanded ? date : cachedDate;
   const currentProposals = isExpanded ? dayProposals : cachedProposals;
   const currentDraftOpen = isExpanded ? draftOpen : cachedDraftOpen;
+  const today = toDateKey(new Date());
+  const canPropose = Boolean(currentDate && currentDate >= today);
+  const canLogPlay = Boolean(currentDate && currentDate <= today);
 
   useEffect(() => {
     if (!isExpanded || !contentRef.current) return;
@@ -95,13 +99,16 @@ function WeekRowExpander({
       <div ref={contentRef}>
         {currentDate && (
           currentProposals.length === 0 ? (
-            <InlineProposalPanel
-              proposalId={null}
-              draftDate={currentDate}
-              groups={groups}
-              defaultGroupId={defaultGroupId}
-              onProposalsChanged={onProposalsChanged}
-            />
+            <div className="flex flex-col gap-3">
+              {canPropose && <InlineProposalPanel
+                proposalId={null}
+                draftDate={currentDate}
+                groups={groups}
+                defaultGroupId={defaultGroupId}
+                onProposalsChanged={onProposalsChanged}
+              />}
+              {canLogPlay && <div className="flex justify-start"><CalendarPlayLauncher date={currentDate} groups={groups} defaultGroupId={defaultGroupId} /></div>}
+            </div>
           ) : (
             <div className="flex flex-col gap-3">
               {currentProposals.map((proposal) => (
@@ -114,7 +121,7 @@ function WeekRowExpander({
                 />
               ))}
 
-              {currentDraftOpen ? (
+              {canPropose && currentDraftOpen ? (
                 <InlineProposalPanel
                   proposalId={null}
                   draftDate={currentDate}
@@ -125,7 +132,7 @@ function WeekRowExpander({
                     onSetDraftOpen(false);
                   }}
                 />
-              ) : (
+              ) : canPropose ? (
                 <div className="flex justify-start">
                   <Button
                     type="button"
@@ -136,7 +143,8 @@ function WeekRowExpander({
                     + Add proposal
                   </Button>
                 </div>
-              )}
+              ) : null}
+              {canLogPlay && <div className="flex justify-start"><CalendarPlayLauncher date={currentDate} groups={groups} defaultGroupId={defaultGroupId} /></div>}
             </div>
           )
         )}

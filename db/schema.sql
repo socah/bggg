@@ -412,7 +412,7 @@ CREATE TABLE IF NOT EXISTS play_session_hosts (
 );
 
 -- ── PLAY SESSION GAMES ────────────────────────────────────────────────────
--- Which games were played during a session. Multiple games per session allowed.
+-- Each row is one play, so the same game can be logged more than once per session.
 -- status: whether the game reached a conclusion.
 --   'finished'  — game completed normally; results in play_session_game_results
 --   'abandoned' — game started but did not finish (ran out of time, someone left, etc.)
@@ -421,43 +421,59 @@ CREATE TABLE IF NOT EXISTS play_session_hosts (
 -- No winner column here — winners are tracked per-player in play_session_game_results,
 -- which supports competitive (one winner), ties (multiple), co-op (all or none), and DNF.
 CREATE TABLE IF NOT EXISTS play_session_games (
+  id          UUID  PRIMARY KEY DEFAULT gen_random_uuid(),
   session_id  UUID  NOT NULL REFERENCES play_sessions(id) ON DELETE CASCADE,
   game_id     INT   NOT NULL REFERENCES games(id)         ON DELETE CASCADE,
   status      TEXT  NOT NULL DEFAULT 'finished'
                     CHECK (status IN ('finished', 'abandoned')),
+  duration_minutes INT CHECK (duration_minutes > 0 AND duration_minutes <= 10080),
+  notes       TEXT,
+  logged_by   TEXT  NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
-  PRIMARY KEY (session_id, game_id)
+CREATE INDEX IF NOT EXISTS idx_play_session_games_session ON play_session_games(session_id);
+
+-- Reusable group-wide identities for players without platform accounts.
+-- Linking rewrites their historical participation to linked_user_id.
+CREATE TABLE IF NOT EXISTS guest_players (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  group_id       UUID NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  name           TEXT NOT NULL CHECK (LENGTH(BTRIM(name)) > 0),
+  linked_user_id TEXT,
+  created_by     TEXT NOT NULL,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- ── PLAY SESSION GAME RESULTS ─────────────────────────────────────────────
--- One row per player per game within a session.
+-- One result row per session participant per play.
 -- is_winner: true for competitive winner, all true for co-op win, all false for co-op loss,
 --   multiple true for a tie, all false for an abandoned game.
 -- The composite FK references the composite PK of play_session_games — this ensures
 -- a result row can only exist for a game that is actually listed in the session.
 -- ON DELETE CASCADE on users: if a user is deleted, their result rows go with them.
 --   The game record and other players' results are unaffected.
-CREATE TABLE IF NOT EXISTS play_session_game_results (
-  session_id  UUID    NOT NULL,
-  game_id     INT     NOT NULL,
-  user_id     INT     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  is_winner   BOOLEAN NOT NULL DEFAULT false,
-
-  PRIMARY KEY (session_id, game_id, user_id),
-  FOREIGN KEY (session_id, game_id)
-    REFERENCES play_session_games(session_id, game_id) ON DELETE CASCADE
-);
-
 -- ── PLAY SESSION PLAYERS ──────────────────────────────────────────────────
 -- Tracks which group members attended the session — not all members play every night.
 -- notes: per-player personal note ("I had a terrible opening hand but recovered").
 --   Separate from the session-level notes, which are shared context for everyone.
 CREATE TABLE IF NOT EXISTS play_session_players (
-  session_id  UUID  NOT NULL REFERENCES play_sessions(id) ON DELETE CASCADE,
-  user_id     INT   NOT NULL REFERENCES users(id)         ON DELETE CASCADE,
-  notes       TEXT,
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  session_id      UUID NOT NULL REFERENCES play_sessions(id) ON DELETE CASCADE,
+  user_id         TEXT,
+  guest_player_id UUID REFERENCES guest_players(id) ON DELETE RESTRICT,
+  CHECK ((user_id IS NULL) <> (guest_player_id IS NULL))
+);
 
-  PRIMARY KEY (session_id, user_id)
+CREATE UNIQUE INDEX IF NOT EXISTS uq_play_session_player_user ON play_session_players(session_id, user_id) WHERE user_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_play_session_player_guest ON play_session_players(session_id, guest_player_id) WHERE guest_player_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS play_session_game_results (
+  play_id           UUID    NOT NULL REFERENCES play_session_games(id) ON DELETE CASCADE,
+  session_player_id UUID    NOT NULL REFERENCES play_session_players(id) ON DELETE CASCADE,
+  is_winner         BOOLEAN NOT NULL DEFAULT false,
+  score             TEXT,
+  PRIMARY KEY (play_id, session_player_id)
 );
 
 -- ── PLAY PHOTOS ───────────────────────────────────────────────────────────
@@ -488,6 +504,7 @@ CREATE TABLE IF NOT EXISTS play_session_players (
 CREATE TABLE IF NOT EXISTS play_photos (
   id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
   session_id  UUID         NOT NULL REFERENCES play_sessions(id) ON DELETE CASCADE,
+  play_id     UUID         REFERENCES play_session_games(id) ON DELETE CASCADE,
   uploaded_by TEXT         NOT NULL,
   key         TEXT         NOT NULL UNIQUE,
   size_bytes  INT          NOT NULL,

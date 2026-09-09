@@ -13,6 +13,7 @@ import { PlaceVisibility } from './place-visibility.entity';
 import { ProposalPlace } from './proposal-place.entity';
 import { ProposalPlaceVote } from './proposal-place-vote.entity';
 import { PlaySessionHost } from './play-session-host.entity';
+import { PlaySessionGame } from './play-session-game.entity';
 import { SchedulingService } from './scheduling.service';
 import { GroupProposalsController } from './group-proposals.controller';
 import { ProposalsController } from './proposals.controller';
@@ -34,6 +35,7 @@ import { GroupsModule } from '../groups/groups.module';
       ProposalPlace,
       ProposalPlaceVote,
       PlaySessionHost,
+      PlaySessionGame,
       // Re-registered here so listProposalGames can resolve a proposal-game
       // row's gameId to the real game's name — same "each module gets its own
       // scoped repository for a shared entity" pattern as GroupMember below.

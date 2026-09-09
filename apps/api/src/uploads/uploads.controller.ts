@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, Post, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Request, UseGuards } from '@nestjs/common';
 import { UploadsService } from './uploads.service';
 import { PresignUploadDto } from './dto/presign-upload.dto';
 import { ConfirmUploadDto } from './dto/confirm-upload.dto';
@@ -29,5 +29,10 @@ export class UploadsController {
   @HttpCode(201)
   confirm(@Body() dto: ConfirmUploadDto, @Request() req: AuthenticatedRequest) {
     return this.uploadsService.confirm(req.user.sub, dto);
+  }
+
+  @Get('plays/:playId')
+  listForPlay(@Param('playId', ParseUUIDPipe) playId: string, @Request() req: AuthenticatedRequest) {
+    return this.uploadsService.listForPlay(req.user.sub, playId);
   }
 }

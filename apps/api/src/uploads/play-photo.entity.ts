@@ -18,6 +18,9 @@ export class PlayPhoto {
   @Column({ name: 'session_id', type: 'uuid' })
   sessionId!: string;
 
+  @Column({ name: 'play_id', type: 'uuid', nullable: true })
+  playId!: string | null;
+
   // Stores the JWT `sub` claim of the user who uploaded this photo — same
   // ownership-anchor pattern as Group.ownerId.
   @Column({ name: 'uploaded_by', type: 'text' })

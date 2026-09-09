@@ -17,6 +17,7 @@ import { PlaceVisibility } from './place-visibility.entity';
 import { ProposalPlace } from './proposal-place.entity';
 import { ProposalPlaceVote } from './proposal-place-vote.entity';
 import { PlaySessionHost } from './play-session-host.entity';
+import { PlaySessionGame } from './play-session-game.entity';
 
 const GROUP_ID = 'group-1';
 const PROPOSAL_ID = 'proposal-1';
@@ -45,6 +46,7 @@ describe('SchedulingService', () => {
   const mockSessionHosts = {
     create: jest.fn(), save: jest.fn(), countBy: jest.fn(), createQueryBuilder: jest.fn(),
   };
+  const mockSessionGames = { existsBy: jest.fn().mockResolvedValue(false) };
   const mockMembers = { findOneBy: jest.fn(), findBy: jest.fn() };
   const mockGroupsService = { findOne: jest.fn() };
 
@@ -64,6 +66,7 @@ describe('SchedulingService', () => {
         { provide: getRepositoryToken(ProposalPlace), useValue: mockProposalPlaces },
         { provide: getRepositoryToken(ProposalPlaceVote), useValue: mockPlaceVotes },
         { provide: getRepositoryToken(PlaySessionHost), useValue: mockSessionHosts },
+        { provide: getRepositoryToken(PlaySessionGame), useValue: mockSessionGames },
         { provide: getRepositoryToken(GroupMember), useValue: mockMembers },
         { provide: GroupsService, useValue: mockGroupsService },
       ],

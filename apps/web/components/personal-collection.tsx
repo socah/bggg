@@ -8,6 +8,7 @@ import { Dialog, DialogClose, DialogContent, DialogSheetContent, DialogTitle } f
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { UserIdentityLink } from '@/components/user-identity-link';
+import { PlayLogDialog, type PlayLogDefaults } from '@/components/play-log-dialog';
 import { apiFetch } from '@/lib/api';
 import type {
   BggSearchResult,
@@ -130,6 +131,7 @@ export function GameDetailsSheet({
   lists = [],
   busy = false,
   onMutate,
+  playDefaults,
 }: {
   game: GameCardGame | null;
   open: boolean;
@@ -140,6 +142,7 @@ export function GameDetailsSheet({
   lists?: PersonalGameList[];
   busy?: boolean;
   onMutate?: (path: string, init: RequestInit, success: string) => Promise<boolean>;
+  playDefaults?: PlayLogDefaults;
 }) {
   const [details, setDetails] = useState<CollectionGameDetails | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -149,6 +152,8 @@ export function GameDetailsSheet({
   const [depth, setDepth] = useState('');
   const [body, setBody] = useState('');
   const [targetListId, setTargetListId] = useState('');
+  const [logOpen, setLogOpen] = useState(false);
+  const [editingPlayId, setEditingPlayId] = useState<string | null>(null);
 
   async function loadDetails(currentGame: GameCardGame) {
     const response = await apiFetch(`/bgg-account/games/${currentGame.id}/details`);
@@ -246,6 +251,8 @@ export function GameDetailsSheet({
           </div>
           <DialogClose className="rounded-sm px-3 py-2 text-sm font-semibold text-text-muted">Close</DialogClose>
         </div>
+
+        <Button type="button" className="mt-4 w-full" onClick={() => setLogOpen(true)}>Log a play</Button>
 
         {error && <p role="alert" className="mt-4 text-sm text-accent">{error}</p>}
         {!details && !error && <p className="py-12 text-center text-sm text-text-muted">Loading reviews and plays...</p>}
@@ -371,7 +378,9 @@ export function GameDetailsSheet({
                 {details.plays.map((play) => (
                   <Card key={play.id} className="p-3 text-sm">
                     <div className="flex justify-between gap-3"><strong>{new Date(play.playedAt).toLocaleDateString()}</strong><span className="text-text-muted">{play.groupName}</span></div>
+                    <p className="mt-1 text-xs text-text-muted">{play.status === 'finished' ? 'Finished' : 'Abandoned'}{play.durationMinutes ? ` · ${play.durationMinutes} min` : ''}</p>
                     {play.notes && <p className="mt-2 text-text-muted">{play.notes}</p>}
+                    {play.canEdit && <Button type="button" variant="ghost" className="mt-2 min-h-8 px-0 text-xs" onClick={() => setEditingPlayId(play.id)}>Edit play</Button>}
                   </Card>
                 ))}
               </div>
@@ -379,6 +388,19 @@ export function GameDetailsSheet({
           </div>
         )}
       </DialogSheetContent>
+      {logOpen && <PlayLogDialog game={game} open={logOpen} defaults={playDefaults} onOpenChange={setLogOpen} onLogged={() => { if (game) void loadDetails(game); }} />}
+      {editingPlayId && game && details?.plays.find((play) => play.id === editingPlayId) && <PlayLogDialog
+        game={game}
+        open
+        editPlayId={editingPlayId}
+        defaults={{
+          groupId: details.plays.find((play) => play.id === editingPlayId)!.groupId,
+          playedDate: details.plays.find((play) => play.id === editingPlayId)!.playedAt.slice(0, 10),
+          userIds: [],
+        }}
+        onOpenChange={(open) => { if (!open) setEditingPlayId(null); }}
+        onLogged={() => void loadDetails(game)}
+      />}
     </Dialog>
   );
 }

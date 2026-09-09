@@ -20,6 +20,7 @@ import { PlaceVisibility } from './place-visibility.entity';
 import { ProposalPlace } from './proposal-place.entity';
 import { ProposalPlaceVote } from './proposal-place-vote.entity';
 import { PlaySessionHost } from './play-session-host.entity';
+import { PlaySessionGame } from './play-session-game.entity';
 import { GroupsService } from '../groups/groups.service';
 import { CreateProposalDto } from './dto/create-proposal.dto';
 import { RsvpDto } from './dto/rsvp.dto';
@@ -92,6 +93,8 @@ export class SchedulingService {
     private readonly placeVotes: Repository<ProposalPlaceVote>,
     @InjectRepository(PlaySessionHost)
     private readonly sessionHosts: Repository<PlaySessionHost>,
+    @InjectRepository(PlaySessionGame)
+    private readonly sessionGames: Repository<PlaySessionGame>,
     // Own registration of GroupMember, same "each module registers its own
     // repository for a shared entity" pattern InvitesModule already uses —
     // see the comment in groups.module.ts.
@@ -305,7 +308,12 @@ export class SchedulingService {
     if (proposal.status === 'confirmed') {
       const session = await this.sessions.findOneBy({ proposalId: proposal.id });
       if (session) {
-        await this.sessions.remove(session);
+        if (await this.sessionGames.existsBy({ sessionId: session.id })) {
+          session.proposalId = null;
+          await this.sessions.save(session);
+        } else {
+          await this.sessions.remove(session);
+        }
       }
     }
 
@@ -323,7 +331,12 @@ export class SchedulingService {
 
     const session = await this.sessions.findOneBy({ proposalId });
     if (session) {
-      await this.sessions.remove(session);
+      if (await this.sessionGames.existsBy({ sessionId: session.id })) {
+        session.proposalId = null;
+        await this.sessions.save(session);
+      } else {
+        await this.sessions.remove(session);
+      }
     }
     await this.proposals.remove(proposal);
   }

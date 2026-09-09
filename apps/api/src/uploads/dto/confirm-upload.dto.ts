@@ -11,4 +11,7 @@ export class ConfirmUploadDto {
   // uuid, matching PlaySession.id (topic 3_scheduling).
   @IsUUID()
   sessionId!: string;
+
+  @IsUUID()
+  playId!: string;
 }

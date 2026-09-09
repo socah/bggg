@@ -11,16 +11,25 @@ import { PlayPhoto } from './play-photo.entity';
 import { R2Service } from './r2.service';
 import { PresignUploadDto } from './dto/presign-upload.dto';
 import { ConfirmUploadDto } from './dto/confirm-upload.dto';
+import { PlaySession } from '../scheduling/play-session.entity';
+import { PlaySessionGame } from '../scheduling/play-session-game.entity';
+import { GroupsService } from '../groups/groups.service';
 
 @Injectable()
 export class UploadsService {
   constructor(
     @InjectRepository(PlayPhoto)
     private readonly playPhotoRepository: Repository<PlayPhoto>,
+    @InjectRepository(PlaySession)
+    private readonly sessions: Repository<PlaySession>,
+    @InjectRepository(PlaySessionGame)
+    private readonly plays: Repository<PlaySessionGame>,
     private readonly r2Service: R2Service,
+    private readonly groupsService: GroupsService,
   ) {}
 
   async presign(userId: string, dto: PresignUploadDto) {
+    await this.assertPlayAccess(userId, dto.sessionId, dto.playId);
     // Approximate free-tier storage guard: sum every confirmed photo's real
     // size and check whether this upload would push the bucket over the
     // configured cap before we even bother signing a URL. See
@@ -53,6 +62,7 @@ export class UploadsService {
     userId: string,
     dto: ConfirmUploadDto,
   ): Promise<PlayPhoto & { url: string }> {
+    await this.assertPlayAccess(userId, dto.sessionId, dto.playId);
     // Defense in depth: even though buildObjectKey() only ever produces keys
     // under play-photos/<userId>/..., nothing stops a client from calling
     // /uploads/confirm with an arbitrary key string it didn't get from a
@@ -76,6 +86,7 @@ export class UploadsService {
 
     const photo = this.playPhotoRepository.create({
       sessionId: dto.sessionId,
+      playId: dto.playId,
       uploadedBy: userId,
       key: dto.key,
       sizeBytes: head.sizeBytes,
@@ -107,5 +118,27 @@ export class UploadsService {
       .getRawOne<{ total: string }>();
 
     return parseInt(row?.total ?? '0', 10);
+  }
+
+  async listForPlay(userId: string, playId: string) {
+    const play = await this.plays.findOneBy({ id: playId });
+    if (!play) throw new NotFoundException('Play not found');
+    await this.assertPlayAccess(userId, play.sessionId, playId);
+    const photos = await this.playPhotoRepository.find({ where: { playId }, order: { createdAt: 'ASC' } });
+    return Promise.all(photos.map(async (photo) => ({
+      id: photo.id,
+      url: await this.r2Service.createPresignedGetUrl(photo.key),
+      uploadedBy: photo.uploadedBy,
+      createdAt: photo.createdAt,
+    })));
+  }
+
+  private async assertPlayAccess(userId: string, sessionId: string, playId: string): Promise<void> {
+    const [session, play] = await Promise.all([
+      this.sessions.findOneBy({ id: sessionId }),
+      this.plays.findOneBy({ id: playId, sessionId }),
+    ]);
+    if (!session || !play) throw new NotFoundException('Play not found');
+    await this.groupsService.findOne(session.groupId, userId);
   }
 }

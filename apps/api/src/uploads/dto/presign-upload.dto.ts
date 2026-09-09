@@ -9,6 +9,9 @@ export class PresignUploadDto {
   @IsUUID()
   sessionId!: string;
 
+  @IsUUID()
+  playId!: string;
+
   // Checked again against the allowlist in R2Service.createPresignedUploadUrl.
   // Validated here too so a request with a garbage value 400s immediately,
   // before any signing work happens.

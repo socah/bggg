@@ -180,9 +180,13 @@ export interface GameReview {
 
 export interface GamePlaySummary {
   id: string;
+  sessionId: string;
+  groupId: string;
   playedAt: string;
   notes: string | null;
   status: 'finished' | 'abandoned';
+  durationMinutes: number | null;
+  canEdit: boolean;
   groupName: string;
 }
 
