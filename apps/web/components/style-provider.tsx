@@ -5,7 +5,7 @@ import { createContext, useContext, useEffect, useState } from 'react';
 export type Style = 'playful' | 'tactile' | 'clipart' | 'mixed' | 'comic';
 const STYLES: Style[] = ['playful', 'tactile', 'clipart', 'mixed', 'comic'];
 const STORAGE_KEY = 'bggg-style';
-const DEFAULT_STYLE: Style = 'playful';
+const DEFAULT_STYLE: Style = 'tactile';
 
 interface StyleContextValue {
   style: Style;
@@ -29,9 +29,8 @@ const NO_FLASH_SCRIPT = `
   try {
     var stored = localStorage.getItem('${STORAGE_KEY}');
     var valid = ${JSON.stringify(STYLES)};
-    if (stored && valid.indexOf(stored) !== -1 && stored !== '${DEFAULT_STYLE}') {
-      document.documentElement.setAttribute('data-style', stored);
-    }
+    var style = stored && valid.indexOf(stored) !== -1 ? stored : '${DEFAULT_STYLE}';
+    document.documentElement.setAttribute('data-style', style);
   } catch (e) {}
 })();
 `;
@@ -61,11 +60,7 @@ export function StyleProvider({ children }: { children: React.ReactNode }) {
 
   function setStyle(next: Style) {
     setStyleState(next);
-    if (next === DEFAULT_STYLE) {
-      document.documentElement.removeAttribute('data-style');
-    } else {
-      document.documentElement.setAttribute('data-style', next);
-    }
+    document.documentElement.setAttribute('data-style', next);
     try {
       localStorage.setItem(STORAGE_KEY, next);
     } catch {

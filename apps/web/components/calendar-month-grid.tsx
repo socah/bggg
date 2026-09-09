@@ -35,6 +35,16 @@ function badgeLabel(item: CalendarItem): string {
   return hasGroupName(item) ? `${base} — ${item.groupName}` : base;
 }
 
+function compactBadgeLabel(item: CalendarItem): string {
+  const labels: Record<CalendarItem['status'], string> = {
+    collecting: 'RSVP',
+    confirming: 'Confirming',
+    confirmed: 'Set',
+    cancelled: 'Cancelled',
+  };
+  return labels[item.status];
+}
+
 function participantHue(id: string): number {
   let hash = 0;
   for (const character of id) hash = (hash * 31 + character.charCodeAt(0)) | 0;
@@ -335,8 +345,8 @@ export function CalendarMonthGrid({
                     .filter((play) => !play.proposalId)
                     .map((play) => [play.sessionId, play])).values()];
                   const dayItems = [
-                    ...dayProposals.map((item) => ({ id: `proposal:${item.id}`, kind: 'session' as const, label: badgeLabel(item), className: proposalStatusClasses(item.status), participants: item.participants ?? [] })),
-                    ...directSessions.map((session) => ({ id: `session:${session.sessionId}`, kind: 'session' as const, label: `Logged session${defaultGroupId ? '' : ` - ${session.groupName}`}`, className: 'bg-surface text-text-muted', participants: session.sessionParticipants })),
+                    ...dayProposals.map((item) => ({ id: `proposal:${item.id}`, kind: 'session' as const, label: compactBadgeLabel(item), title: badgeLabel(item), className: proposalStatusClasses(item.status), participants: item.participants ?? [] })),
+                    ...directSessions.map((session) => ({ id: `session:${session.sessionId}`, kind: 'session' as const, label: 'Logged', title: `Logged session${defaultGroupId ? '' : ` - ${session.groupName}`}`, className: 'bg-surface text-text-muted', participants: session.sessionParticipants })),
                     ...dayPlays.map((play) => ({ id: `play:${play.id}`, kind: 'play' as const, label: `Played ${play.game.name}${defaultGroupId ? '' : ` - ${play.groupName}`}`, className: 'bg-highlight text-text', play })),
                   ];
                   const isSelected = activeDate === key;
@@ -349,7 +359,7 @@ export function CalendarMonthGrid({
                     <div
                       key={key}
                       className={cn(
-                        'relative flex min-h-20 w-full flex-col justify-start rounded border p-1 text-left text-xs transition-colors',
+                        '@container/day relative flex min-h-20 w-full flex-col justify-start rounded border p-1 text-left text-xs transition-colors',
                         isSelected ? 'border-primary ring-1 ring-primary' : 'border-border',
                         inMonth ? 'bg-surface-raised hover:bg-surface' : 'bg-surface text-text-muted hover:bg-surface-raised/50'
                       )}
@@ -359,7 +369,7 @@ export function CalendarMonthGrid({
                       <span className="flex items-center justify-between font-medium">
                         <span className={cn(inMonth && (date.getDay() === 6 || date.getDay() === 0) && 'text-accent')}>{date.getDate()}</span>
                       </span>
-                      {dayItems.filter((item) => item.kind === 'session').map((item) => <span key={item.id} title={`${item.label}${item.participants.length ? `: ${item.participants.map((participant) => participant.name).join(', ')}` : ''}`} className={cn('mt-1 flex w-full min-w-0 items-center gap-1 rounded px-1 font-medium', item.className)}><span className="min-w-0 truncate">{item.label}</span>{item.participants.length > 0 && <ParticipantIcons participants={item.participants} />}</span>)}
+                      {dayItems.filter((item) => item.kind === 'session').map((item) => <span key={item.id} title={`${item.title}${item.participants.length ? `: ${item.participants.map((participant) => participant.name).join(', ')}` : ''}`} className={cn('mt-1 flex w-full min-w-0 items-center gap-1 rounded px-1 font-medium', item.className)}><span className="shrink-0">{item.label}</span>{item.participants.length > 0 && <span className="ml-auto hidden @min-[8rem]/day:block"><ParticipantIcons participants={item.participants.slice(0, 3)} /></span>}</span>)}
                       {dayPlays.length > 0 && <span className="mt-1 flex flex-wrap gap-1">
                         {dayItems.filter((item) => item.kind === 'play').map((item) => {
                           if (item.kind !== 'play') return null;

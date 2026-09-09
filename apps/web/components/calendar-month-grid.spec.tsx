@@ -82,9 +82,9 @@ describe('CalendarMonthGrid', () => {
   });
 
   it.each([
-    ['collecting', 'Collecting RSVPs'],
-    ['confirming', 'Awaiting confirmation'],
-    ['confirmed', 'Confirmed session'],
+    ['collecting', 'RSVP'],
+    ['confirming', 'Confirming'],
+    ['confirmed', 'Set'],
   ] as const)('labels a %s proposal with its lifecycle stage', (status, label) => {
     render(
       <CalendarMonthGrid proposals={[{
@@ -168,8 +168,9 @@ describe('CalendarMonthGrid', () => {
     render(<CalendarMonthGrid proposals={[]} groups={[{ id: 'group-1', name: 'Thursday Games', ownerId: 'user-1', isSolo: false, createdAt: '' }]} />);
 
     expect(await screen.findByRole('button', { name: 'Played Azul - Thursday Games' })).toBeTruthy();
-    expect(screen.getByText('Logged session - Thursday Games')).toBeTruthy();
-    expect(screen.getByLabelText('Alice, Bob')).toBeTruthy();
+    expect(screen.getByText('Logged')).toBeTruthy();
+    expect(screen.getByTitle('Logged session - Thursday Games: Alice, Bob')).toBeTruthy();
+    expect(screen.getByLabelText('Alice, Bob').parentElement?.className).toContain('hidden');
     expect(screen.getByTitle('Alice').getAttribute('style')).not.toBe(screen.getByTitle('Bob').getAttribute('style'));
     expect(apiFetch).toHaveBeenCalledWith('/groups/group-1/plays', { cache: 'no-store' });
 
