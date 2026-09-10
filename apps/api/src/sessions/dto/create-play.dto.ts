@@ -47,6 +47,10 @@ export class CreatePlayDto {
 
   @IsOptional()
   @IsUUID()
+  sessionId?: string;
+
+  @IsOptional()
+  @IsUUID()
   proposalId?: string;
 
   @IsOptional()

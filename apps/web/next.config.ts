@@ -10,6 +10,9 @@ const withPWA = withPWAInit({
   // Service workers must be served from the root of the scope they protect.
   dest: 'public',
   customWorkerSrc: 'worker',
+  fallbacks: {
+    document: '/offline',
+  },
 
   // Disabled in dev — a caching SW would make hot reload invisible.
   disable: process.env.NODE_ENV === 'development',
@@ -41,7 +44,10 @@ const withPWA = withPWAInit({
   workboxOptions: {
     runtimeCaching: [
       {
-        urlPattern: ({ url }: { url: URL }) => url.pathname.startsWith('/auth/'),
+        urlPattern: ({ url }: { url: URL }) => url.pathname === '/auth'
+          || url.pathname.startsWith('/auth/')
+          || url.pathname.startsWith('/web/auth/')
+          || url.pathname.startsWith('/api/'),
         handler: 'NetworkOnly',
       },
     ],

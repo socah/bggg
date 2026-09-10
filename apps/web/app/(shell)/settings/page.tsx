@@ -4,6 +4,7 @@ import { CalendarFeedSettings } from '@/components/calendar-feed-settings';
 import { ProfileSettings } from '@/components/profile-settings';
 import { DeleteAccountSettings } from '@/components/delete-account-settings';
 import { NotificationSettings } from '@/components/notification-settings';
+import { InstallAppSettings } from '@/components/install-app-settings';
 
 export default function PersonalSettingsPage() {
   return (
@@ -24,6 +25,13 @@ export default function PersonalSettingsPage() {
         <h2 className="font-display text-xl">Appearance</h2>
         <div className="mt-4">
           <AppearanceSettings />
+        </div>
+      </section>
+      <section>
+        <h2 className="font-display text-xl">App</h2>
+        <p className="mt-1 text-sm text-text-muted">Install BGGG for quick access and a standalone app experience.</p>
+        <div className="mt-4">
+          <InstallAppSettings />
         </div>
       </section>
       <section>

@@ -4,6 +4,7 @@ import { SessionProvider } from 'next-auth/react';
 import { ThemeProvider } from '@/components/theme-provider';
 import { StyleProvider } from '@/components/style-provider';
 import { ThemeColorSync } from '@/components/theme-color-sync';
+import { InstallAppProvider } from '@/components/install-app-provider';
 
 // Auth.js's client helpers (getSession, signOut, useSession) read their
 // base path from this provider's config at mount time — auth.ts sets
@@ -19,7 +20,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <ThemeProvider>
         <StyleProvider>
           <ThemeColorSync />
-          {children}
+          <InstallAppProvider>{children}</InstallAppProvider>
         </StyleProvider>
       </ThemeProvider>
     </SessionProvider>

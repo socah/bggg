@@ -45,15 +45,18 @@ export function NotificationSettings() {
     void Promise.all([
       apiFetch('/notifications/configuration').then((response) => response.json() as Promise<Configuration>),
       apiFetch('/notifications/preferences').then((response) => response.json() as Promise<Preferences>),
-      supported
-        ? navigator.serviceWorker.getRegistration().then((registration) => registration?.pushManager.getSubscription() ?? null)
-        : Promise.resolve(null),
+      supported ? navigator.serviceWorker.getRegistration().then((registration) => registration?.pushManager.getSubscription() ?? null) : Promise.resolve(null),
     ]).then(([nextConfiguration, nextPreferences, nextSubscription]) => {
       if (cancelled) return;
       setConfiguration(nextConfiguration);
       setPreferences(nextPreferences);
       setSubscription(nextSubscription);
       if (supported) setPermission(Notification.permission);
+      if (supported && !nextSubscription) {
+        void navigator.serviceWorker.ready
+          .then((registration) => registration.pushManager.getSubscription())
+          .then((readySubscription) => { if (!cancelled) setSubscription(readySubscription); });
+      }
     }).catch((cause: unknown) => {
       if (!cancelled) setError(cause instanceof Error ? cause.message : 'Could not load notification settings');
     });

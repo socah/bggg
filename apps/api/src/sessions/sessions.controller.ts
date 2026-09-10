@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query, Request, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '../auth/auth.guard';
 import { CreateGuestPlayerDto } from './dto/create-guest-player.dto';
 import { CreatePlayDto } from './dto/create-play.dto';
@@ -6,6 +6,7 @@ import { LinkGuestPlayerDto } from './dto/link-guest-player.dto';
 import { SessionsService } from './sessions.service';
 import { UpdatePlayDto } from './dto/update-play.dto';
 import { UpdateSessionPlaceDto } from './dto/update-session-place.dto';
+import { PlayPlayersQueryDto } from './dto/play-players-query.dto';
 
 interface AuthenticatedRequest {
   user: { sub: string };
@@ -17,8 +18,8 @@ export class SessionsController {
   constructor(private readonly sessionsService: SessionsService) {}
 
   @Get('play-players')
-  listPlayers(@Param('groupId', ParseUUIDPipe) groupId: string, @Request() req: AuthenticatedRequest) {
-    return this.sessionsService.listPlayers(groupId, req.user.sub);
+  listPlayers(@Param('groupId', ParseUUIDPipe) groupId: string, @Query() query: PlayPlayersQueryDto, @Request() req: AuthenticatedRequest) {
+    return this.sessionsService.listPlayers(groupId, req.user.sub, query);
   }
 
   @Post('guest-players')

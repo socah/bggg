@@ -20,6 +20,7 @@ import { UploadsService } from '../uploads/uploads.service';
 import { Place } from '../scheduling/place.entity';
 import { PlaceVisibility } from '../scheduling/place-visibility.entity';
 import { UpdateSessionPlaceDto } from './dto/update-session-place.dto';
+import type { PlayPlayersQueryDto } from './dto/play-players-query.dto';
 
 export function rankMatchingSessions(
   sessions: PlaySession[],
@@ -54,17 +55,25 @@ export class SessionsService {
     private readonly uploadsService: UploadsService,
   ) {}
 
-  async listPlayers(groupId: string, userId: string) {
+  async listPlayers(groupId: string, userId: string, query: PlayPlayersQueryDto = {}) {
     await this.groupsService.findOne(groupId, userId);
-    const [members, guests, membership] = await Promise.all([
+    const [members, guests, membership, session] = await Promise.all([
       this.groupsService.getMembers(groupId, userId),
       this.guests.find({ where: { groupId, archivedAt: IsNull() }, order: { name: 'ASC' } }),
       this.members.findOneBy({ groupId, userId }),
+      query.playedDate ? this.findSessionForDate(groupId, query.playedDate, query.proposalId) : null,
     ]);
+    const sessionPlayers = session
+      ? await this.dataSource.getRepository(PlaySessionPlayer).findBy({ sessionId: session.id })
+      : [];
     return {
       members,
       guests,
       canManageGuests: membership?.role === 'owner' || membership?.role === 'admin',
+      sessionId: session?.id ?? null,
+      sessionPlayerIds: sessionPlayers.map((player) => player.userId
+        ? `user:${player.userId}`
+        : `guest:${player.guestPlayerId}`),
     };
   }
 
@@ -254,14 +263,22 @@ export class SessionsService {
     const start = new Date(`${dto.playedDate}T00:00:00.000Z`);
     const end = new Date(`${dto.playedDate}T23:59:59.999Z`);
     return this.dataSource.transaction(async (entityManager) => {
+      // Serializes the get-or-create path for this group and day so two
+      // simultaneous play logs cannot both decide that no session exists.
+      await entityManager.query(`SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))`, [groupId, dto.playedDate]);
       const sessionRepo = entityManager.getRepository(PlaySession);
-      let session = proposal
-        ? await sessionRepo.findOneBy({ proposalId: proposal.id })
-        : null;
-      const candidates = session ? [] : await sessionRepo.find({
+      const candidates = await sessionRepo.find({
         where: { groupId, playedAt: Between(start, end) },
-        order: { playedAt: 'ASC' },
+        order: { playedAt: 'ASC', id: 'ASC' },
       });
+      let session = dto.sessionId
+        ? candidates.find((candidate) => candidate.id === dto.sessionId) ?? null
+        : proposal
+          ? candidates.find((candidate) => candidate.proposalId === proposal.id) ?? null
+          : null;
+      if (dto.sessionId && !session) {
+        throw new BadRequestException('The selected session must belong to this group and date');
+      }
       if (!session && candidates.length > 0) {
         const proposalIds = candidates.flatMap((candidate) => candidate.proposalId ? [candidate.proposalId] : []);
         const [candidateRsvps, candidateGames] = await Promise.all([
@@ -332,6 +349,18 @@ export class SessionsService {
       await resultRepo.save(results);
       return { ...play, sessionId: session.id, game, results };
     });
+  }
+
+  private async findSessionForDate(groupId: string, playedDate: string, proposalId?: string): Promise<PlaySession | null> {
+    const start = new Date(`${playedDate}T00:00:00.000Z`);
+    const end = new Date(`${playedDate}T23:59:59.999Z`);
+    const candidates = await this.sessions.find({
+      where: { groupId, playedAt: Between(start, end) },
+      order: { playedAt: 'ASC', id: 'ASC' },
+    });
+    if (candidates.length === 0) return null;
+    return (proposalId ? candidates.find((candidate) => candidate.proposalId === proposalId) : null)
+      ?? candidates[0];
   }
 
   async getPlay(groupId: string, playId: string, userId: string) {
