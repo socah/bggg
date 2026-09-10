@@ -726,6 +726,7 @@ export function InlineProposalPanel({
       </Dialog>
       <GameDetailsSheet
         game={selectedGame}
+        groupId={effectiveGroupId}
         open={Boolean(selectedGame)}
         onOpenChange={(open) => { if (!open) setSelectedGame(null); }}
         playDefaults={detail?.proposal.status === 'confirmed' ? {

@@ -528,6 +528,26 @@ describe('CollectionsService', () => {
         id: 5, source: 'bgg', rating: 9, body: 'App edit', complexityScore: 3,
       }));
     });
+
+    it('allows a comment without a rating', async () => {
+      mockGamesService.findByIds.mockResolvedValue([makeGame()]);
+      mockReviewsRepo.findOneBy.mockResolvedValue(null);
+      mockReviewsRepo.create.mockImplementation((data) => data);
+      mockReviewsRepo.save.mockImplementation((data) => Promise.resolve(data));
+
+      await service.upsertReview('user-1', 1, { body: 'Worth playing again.' });
+
+      expect(mockReviewsRepo.save).toHaveBeenCalledWith(expect.objectContaining({
+        rating: null, body: 'Worth playing again.', source: 'manual',
+      }));
+    });
+
+    it('rejects an empty review', async () => {
+      mockGamesService.findByIds.mockResolvedValue([makeGame()]);
+      mockReviewsRepo.findOneBy.mockResolvedValue(null);
+
+      await expect(service.upsertReview('user-1', 1, { body: '  ' })).rejects.toThrow('A review must contain');
+    });
   });
 
   describe('saved games', () => {

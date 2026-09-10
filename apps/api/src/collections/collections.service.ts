@@ -411,11 +411,14 @@ export class CollectionsService {
     const [game] = await this.games.findByIds([gameId]);
     if (!game) throw new NotFoundException('Game not found');
     const existing = await this.reviews.findOneBy({ userId, gameId });
+    if (dto.rating == null && dto.complexityScore == null && dto.depthScore == null && !dto.body?.trim()) {
+      throw new BadRequestException('A review must contain a rating, complexity, depth, or comment.');
+    }
     return this.reviews.save(this.reviews.create({
       ...existing,
       userId,
       gameId,
-      rating: dto.rating,
+      rating: dto.rating ?? existing?.rating ?? null,
       complexityScore: dto.complexityScore ?? null,
       depthScore: dto.depthScore ?? null,
       body: dto.body?.trim() || null,

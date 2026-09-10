@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogClose, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { UserIdentityLink } from '@/components/user-identity-link';
 import { apiFetch } from '@/lib/api';
 import { useGroups } from '@/hooks/use-groups';
 import type { GameCardGame, GroupMemberInfo } from '@/lib/types';
@@ -286,8 +287,8 @@ export function PlayLogDialog({
 
   const availableGuests = roster?.guests.filter((guest) => !guest.linkedUserId) ?? [];
   const rosterPlayers = [
-    ...(roster?.members ?? []).map((member) => ({ key: `user:${member.id}`, name: member.displayName || member.username, guest: null })),
-    ...availableGuests.map((guest) => ({ key: `guest:${guest.id}`, name: `${guest.name} (guest)`, guest })),
+    ...(roster?.members ?? []).map((member) => ({ key: `user:${member.id}`, name: member.username, member, guest: null })),
+    ...availableGuests.map((guest) => ({ key: `guest:${guest.id}`, name: `${guest.name} (guest)`, member: null, guest })),
   ];
   const selectedPlayers = rosterPlayers.filter((player) => players[player.key]?.selected);
   const guestWithSettings = availableGuests.find((guest) => guest.id === guestSettingsId);
@@ -329,7 +330,7 @@ export function PlayLogDialog({
               {selectedPlayers.map((player) => {
                  const value = players[player.key] ?? { selected: false, isWinner: false, score: '' };
                  return <div key={player.key} className="grid gap-2 rounded-sm border border-border bg-surface p-3 sm:grid-cols-[minmax(0,1fr)_auto_10rem_auto] sm:items-center">
-                   <div className="flex min-w-0 items-center justify-between gap-2"><strong className="truncate">{player.name}</strong>{player.guest && roster?.canManageGuests && <button type="button" className="min-h-9 shrink-0 px-2 text-xs font-semibold text-text-muted underline" onClick={() => { setGuestSettingsId(player.guest!.id); setGuestSettingsOpen(true); }}>Settings</button>}</div>
+                    <div className="flex min-w-0 items-center justify-between gap-2"><strong className="truncate">{player.member ? <UserIdentityLink user={player.member} groupId={groupId} /> : player.name}</strong>{player.guest && roster?.canManageGuests && <button type="button" className="min-h-9 shrink-0 px-2 text-xs font-semibold text-text-muted underline" onClick={() => { setGuestSettingsId(player.guest!.id); setGuestSettingsOpen(true); }}>Settings</button>}</div>
                    <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={value.isWinner} disabled={saving || !value.selected} onChange={(event) => updatePlayer(player.key, { isWinner: event.target.checked })} />Winner</label>
                    <Input aria-label={`${player.name} score`} placeholder="Score" maxLength={100} value={value.score} disabled={saving || !value.selected} onChange={(event) => updatePlayer(player.key, { score: event.target.value })} />
                    <button type="button" className="min-h-9 px-2 text-xs font-semibold text-accent" disabled={saving} onClick={() => updatePlayer(player.key, { selected: false, isWinner: false, score: '' })}>Remove</button>
@@ -340,7 +341,7 @@ export function PlayLogDialog({
             <div className={`grid transition-[grid-template-rows,opacity,margin] duration-300 ease-in-out ${playerPickerOpen ? 'mt-3 grid-rows-[1fr] opacity-100' : 'mt-0 grid-rows-[0fr] opacity-0'}`} aria-hidden={!playerPickerOpen} inert={!playerPickerOpen}>
               <div className="overflow-hidden"><div className="rounded-sm border border-border bg-surface-raised p-3">
               <div className="flex flex-col gap-1">
-                {rosterPlayers.filter((player) => !players[player.key]?.selected).map((player) => <div key={player.key} className="flex min-h-10 items-center justify-between gap-2 border-b border-border py-1 last:border-0"><span className="text-sm font-semibold">{player.name}</span><span className="flex gap-1">{player.guest && roster?.canManageGuests && <button type="button" className="px-2 text-xs text-text-muted underline" onClick={() => { setGuestSettingsId(player.guest!.id); setGuestSettingsOpen(true); }}>Settings</button>}<Button type="button" variant="ghost" className="min-h-8 px-2 text-xs" onClick={() => updatePlayer(player.key, { selected: true })}>Add</Button></span></div>)}
+                 {rosterPlayers.filter((player) => !players[player.key]?.selected).map((player) => <div key={player.key} className="flex min-h-10 items-center justify-between gap-2 border-b border-border py-1 last:border-0"><span className="text-sm font-semibold">{player.member ? <UserIdentityLink user={player.member} groupId={groupId} /> : player.name}</span><span className="flex gap-1">{player.guest && roster?.canManageGuests && <button type="button" className="px-2 text-xs text-text-muted underline" onClick={() => { setGuestSettingsId(player.guest!.id); setGuestSettingsOpen(true); }}>Settings</button>}<Button type="button" variant="ghost" className="min-h-8 px-2 text-xs" onClick={() => updatePlayer(player.key, { selected: true })}>Add</Button></span></div>)}
               </div>
               <div className="mt-3 flex gap-2">
                 <Input aria-label="New guest player name" placeholder="Player without an account" maxLength={100} value={guestName} disabled={saving || !groupId} onChange={(event) => setGuestName(event.target.value)} />

@@ -87,7 +87,7 @@ export function GroupLibrary({ groupId }: { groupId: string }) {
       <div className={view === 'compact' ? 'grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6' : 'flex flex-col gap-3'}>
         {visibleGames.map((game) => <LibraryGame key={game.id} game={game} view={view} onOpen={() => setSelected(game)} />)}
       </div>
-      <GameDetailsSheet game={selected} open={Boolean(selected)} onOpenChange={(open) => { if (!open) setSelected(null); }} />
+      <GameDetailsSheet game={selected} groupId={groupId} open={Boolean(selected)} onOpenChange={(open) => { if (!open) setSelected(null); }} />
     </div>
   );
 }

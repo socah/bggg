@@ -129,6 +129,7 @@ export function LibraryGame({
 
 export function GameDetailsSheet({
   game,
+  groupId,
   open,
   onOpenChange,
   collectionGame,
@@ -141,6 +142,7 @@ export function GameDetailsSheet({
   onPlayLogged,
 }: {
   game: GameCardGame | null;
+  groupId?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   collectionGame?: CollectionGame;
@@ -186,7 +188,7 @@ export function GameDetailsSheet({
 
   async function saveReview(event: FormEvent) {
     event.preventDefault();
-    if (!game || !rating) return;
+    if (!game || (!rating && !complexity && !depth && !body.trim())) return;
     setSaving(true);
     setError(null);
     try {
@@ -194,7 +196,7 @@ export function GameDetailsSheet({
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          rating: Number(rating),
+          ...(rating && { rating: Number(rating) }),
           ...(complexity && { complexityScore: Number(complexity) }),
           ...(depth && { depthScore: Number(depth) }),
           body: body.trim(),
@@ -267,7 +269,7 @@ export function GameDetailsSheet({
             {game?.owners && game.owners.length > 0 && (
               <section>
                 <h3 className="font-display text-lg">Owned by</h3>
-                <p className="mt-2 text-sm">{game.owners.map((owner) => owner.displayName || owner.username).join(', ')}</p>
+                <p className="mt-2 text-sm">{game.owners.map((owner, index) => <span key={owner.id}>{index > 0 && ', '}<UserIdentityLink user={owner} groupId={groupId} /></span>)}</p>
               </section>
             )}
             <section>
@@ -276,7 +278,7 @@ export function GameDetailsSheet({
                   {mine && <p className="text-xs text-text-muted">Editing your existing review.{imported && ' The rating is updated from BGG when you sync; your other edits stay here.'}</p>}
                   <div className="grid gap-2 sm:grid-cols-3">
                     <label className="text-xs font-semibold text-text-muted">Rating
-                      <Input required type="number" min="1" max="10" step="0.1" value={rating} onChange={(event) => setRating(event.target.value)} className="mt-1 min-h-10 w-full" placeholder="1-10" />
+                      <Input type="number" min="1" max="10" step="0.1" value={rating} onChange={(event) => setRating(event.target.value)} className="mt-1 min-h-10 w-full" placeholder="1-10" />
                     </label>
                     <label className="text-xs font-semibold text-text-muted">Complexity
                       <select value={complexity} onChange={(event) => setComplexity(event.target.value)} className={`mt-1 w-full ${selectClass}`}>
@@ -294,7 +296,7 @@ export function GameDetailsSheet({
                     <textarea value={body} onChange={(event) => setBody(event.target.value)} rows={4} maxLength={5000} className="mt-1 w-full resize-y rounded-sm border-[length:var(--border-w)] border-border bg-surface-raised p-2 font-body text-sm text-text" placeholder="What did you think?" />
                   </label>
                   <div className="flex flex-wrap gap-2">
-                    <Button type="submit" disabled={saving || !rating}>{saving ? 'Saving...' : mine ? 'Update review' : 'Save review'}</Button>
+                    <Button type="submit" disabled={saving || (!rating && !complexity && !depth && !body.trim())}>{saving ? 'Saving...' : mine ? 'Update review' : 'Save review'}</Button>
                     {mine && !imported && <Button type="button" variant="secondary" disabled={saving} onClick={() => void deleteReview()}>Delete review</Button>}
                   </div>
               </form>
