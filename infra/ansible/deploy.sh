@@ -90,7 +90,8 @@ fi
 # checks above — unlike the Vault/DuckDNS values, a first-ever deploy is
 # *expected* to run with these still blank.
 for var in KEYCLOAK_ADMIN_PASSWORD KEYCLOAK_API_SERVICE_SECRET LETSENCRYPT_EMAIL \
-           AUTH_SECRET AUTH_KEYCLOAK_SECRET R2_ENDPOINT R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY; do
+           AUTH_SECRET AUTH_KEYCLOAK_SECRET R2_ENDPOINT R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY \
+           VAPID_SUBJECT VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY; do
   if [ -z "${!var:-}" ]; then
     echo "Warning: $var isn't set in Infisical's /ENV_VARS — see roles/app_deploy/defaults/main.yml." >&2
   fi
@@ -112,4 +113,7 @@ ansible-playbook -i "$SCRIPT_DIR/inventory.ini" "$SCRIPT_DIR/playbook.yml" \
   -e r2_endpoint="${R2_ENDPOINT:-}" \
   -e r2_access_key_id="${R2_ACCESS_KEY_ID:-}" \
   -e r2_secret_access_key="${R2_SECRET_ACCESS_KEY:-}" \
+  -e vapid_subject="${VAPID_SUBJECT:-}" \
+  -e vapid_public_key="${VAPID_PUBLIC_KEY:-}" \
+  -e vapid_private_key="${VAPID_PRIVATE_KEY:-}" \
   "$@"

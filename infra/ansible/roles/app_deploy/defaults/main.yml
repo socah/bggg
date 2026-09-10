@@ -131,3 +131,9 @@ bgg_api_token: ""
 r2_endpoint: ""
 r2_access_key_id: ""
 r2_secret_access_key: ""
+
+# Web Push application-server identity and key pair. Keep the private key in
+# Infisical and deploy all three values together.
+vapid_subject: ""
+vapid_public_key: ""
+vapid_private_key: ""

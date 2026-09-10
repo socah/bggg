@@ -6,6 +6,7 @@ import { GroupsService } from '../groups/groups.service';
 import { ChatThread } from './chat-thread.entity';
 import { PlaySessionProposal } from '../scheduling/play-session-proposal.entity';
 import { ChatThreadDismissal } from './chat-thread-dismissal.entity';
+import { NotificationsService } from '../notifications/notifications.service';
 
 export interface ChatThreadSummary extends ChatThread {
   lastMessage: Message | null;
@@ -23,6 +24,7 @@ export class ChatService {
     @InjectRepository(PlaySessionProposal)
     private readonly proposalRepository: Repository<PlaySessionProposal>,
     private readonly groupsService: GroupsService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async listThreads(groupId: string, requestingUserId: string): Promise<ChatThreadSummary[]> {
@@ -146,8 +148,8 @@ export class ChatService {
   }
 
   async saveMessage(threadId: string, senderId: string, body: string): Promise<Message> {
-    await this.getAuthorizedThread(threadId, senderId);
-    return this.messageRepository.manager.transaction(async (manager) => {
+    const thread = await this.getAuthorizedThread(threadId, senderId);
+    const message = await this.messageRepository.manager.transaction(async (manager) => {
       const messages = manager.getRepository(Message);
       const threads = manager.getRepository(ChatThread);
       const message = await messages.save(
@@ -156,6 +158,8 @@ export class ChatService {
       await threads.update(threadId, { updatedAt: new Date() });
       return message;
     });
+    void this.notifications.notifyChatMessage(thread, senderId, message.body);
+    return message;
   }
 
   async canAccessThread(threadId: string, userId: string): Promise<boolean> {

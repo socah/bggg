@@ -276,6 +276,9 @@
     R2_ENDPOINT: "{{ r2_endpoint }}"
     R2_ACCESS_KEY_ID: "{{ r2_access_key_id }}"
     R2_SECRET_ACCESS_KEY: "{{ r2_secret_access_key }}"
+    VAPID_SUBJECT: "{{ vapid_subject }}"
+    VAPID_PUBLIC_KEY: "{{ vapid_public_key }}"
+    VAPID_PRIVATE_KEY: "{{ vapid_private_key }}"
   # This task's own env vars exist only for the lifetime of this one SSH
   # command — they're never written to a file on the server, so
   # bootstrap_db_password doesn't linger anywhere after 'docker compose
@@ -335,6 +338,9 @@
     R2_ENDPOINT: "{{ r2_endpoint }}"
     R2_ACCESS_KEY_ID: "{{ r2_access_key_id }}"
     R2_SECRET_ACCESS_KEY: "{{ r2_secret_access_key }}"
+    VAPID_SUBJECT: "{{ vapid_subject }}"
+    VAPID_PUBLIC_KEY: "{{ vapid_public_key }}"
+    VAPID_PRIVATE_KEY: "{{ vapid_private_key }}"
   no_log: true
 
 # --import-realm deliberately skips realms that already exist, so changing the
@@ -376,6 +382,9 @@
     R2_ENDPOINT: "{{ r2_endpoint }}"
     R2_ACCESS_KEY_ID: "{{ r2_access_key_id }}"
     R2_SECRET_ACCESS_KEY: "{{ r2_secret_access_key }}"
+    VAPID_SUBJECT: "{{ vapid_subject }}"
+    VAPID_PUBLIC_KEY: "{{ vapid_public_key }}"
+    VAPID_PRIVATE_KEY: "{{ vapid_private_key }}"
   register: pg_ready
   until: pg_ready.rc == 0
   retries: 30
@@ -420,5 +429,8 @@
     R2_ENDPOINT: "{{ r2_endpoint }}"
     R2_ACCESS_KEY_ID: "{{ r2_access_key_id }}"
     R2_SECRET_ACCESS_KEY: "{{ r2_secret_access_key }}"
+    VAPID_SUBJECT: "{{ vapid_subject }}"
+    VAPID_PUBLIC_KEY: "{{ vapid_public_key }}"
+    VAPID_PRIVATE_KEY: "{{ vapid_private_key }}"
   changed_when: true
   no_log: true

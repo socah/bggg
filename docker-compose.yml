@@ -292,6 +292,9 @@ services:
       # invite links. The API container cannot infer the public origin from
       # its internal Docker hostname.
       PUBLIC_APP_URL: https://${DOMAIN_NAME}
+      VAPID_SUBJECT: ${VAPID_SUBJECT}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
       BGG_API_TOKEN: ${BGG_API_TOKEN}
       # Cloudflare R2 — read by apps/api/src/uploads/r2.service.ts for
       # presigned photo upload/download URLs. No R2_PUBLIC_URL_BASE: this

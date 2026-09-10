@@ -20,6 +20,7 @@ import { ProposalsController } from './proposals.controller';
 import { HostingStatsController } from './hosting-stats.controller';
 import { PlacesController } from './places.controller';
 import { GroupsModule } from '../groups/groups.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { GroupsModule } from '../groups/groups.module';
     // "is this user a member of this group" check — same pattern
     // ChatModule uses to inject GroupsService into ChatService.
     GroupsModule,
+    NotificationsModule,
   ],
   controllers: [GroupProposalsController, ProposalsController, PlacesController, HostingStatsController],
   providers: [SchedulingService],

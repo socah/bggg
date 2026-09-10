@@ -9,6 +9,7 @@ const withPWA = withPWAInit({
   // Generated sw.js lands in public/ so Next.js serves it at /sw.js.
   // Service workers must be served from the root of the scope they protect.
   dest: 'public',
+  customWorkerSrc: 'worker',
 
   // Disabled in dev — a caching SW would make hot reload invisible.
   disable: process.env.NODE_ENV === 'development',

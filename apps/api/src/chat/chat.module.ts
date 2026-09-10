@@ -8,6 +8,7 @@ import { ChatThread } from './chat-thread.entity';
 import { PlaySessionProposal } from '../scheduling/play-session-proposal.entity';
 import { ChatController, DirectChatsController } from './chat.controller';
 import { ChatThreadDismissal } from './chat-thread-dismissal.entity';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { ChatThreadDismissal } from './chat-thread-dismissal.entity';
     // GroupsModule exports GroupsService (see groups.module.ts) — importing
     // it here is what makes GroupsService injectable into ChatService.
     GroupsModule,
+    NotificationsModule,
   ],
   controllers: [ChatController, DirectChatsController],
   providers: [ChatService, ChatGateway],

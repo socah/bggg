@@ -16,6 +16,7 @@ next-env.d.ts
 apps/web/public/sw.js
 apps/web/public/swe-worker-*.js
 apps/web/public/workbox-*.js
+apps/web/public/worker-*.js
 
 # Environment files — real values never go in Git
 .env

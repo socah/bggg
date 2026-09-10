@@ -611,6 +611,28 @@ CREATE TABLE IF NOT EXISTS account_deletion_jobs (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Browser push endpoints and per-user delivery choices. User ids are Keycloak
+-- subjects, matching group_members and the rest of the application schema.
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id TEXT NOT NULL,
+  endpoint TEXT NOT NULL UNIQUE,
+  p256dh TEXT NOT NULL,
+  auth TEXT NOT NULL,
+  expiration_time BIGINT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS push_subscriptions_user_id_idx ON push_subscriptions(user_id);
+
+CREATE TABLE IF NOT EXISTS notification_preferences (
+  user_id TEXT PRIMARY KEY,
+  chat_messages BOOLEAN NOT NULL DEFAULT true,
+  proposal_updates BOOLEAN NOT NULL DEFAULT true,
+  show_message_previews BOOLEAN NOT NULL DEFAULT false,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE INDEX IF NOT EXISTS messages_thread_history_idx ON messages(thread_id, created_at DESC, id DESC);
 
 -- Migration-only archive for legacy messages whose unconstrained group_id no

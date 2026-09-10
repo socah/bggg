@@ -39,6 +39,7 @@ describe('ChatService', () => {
     assertMember: jest.fn(),
     assertUsersShareGroup: jest.fn(),
   };
+  const notifications = { notifyChatMessage: jest.fn() };
 
   let service: ChatService;
 
@@ -55,6 +56,7 @@ describe('ChatService', () => {
       dismissalRepository as never,
       proposalRepository as never,
       groupsService as never,
+      notifications as never,
     );
   });
 

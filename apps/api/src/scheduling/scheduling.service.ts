@@ -28,6 +28,7 @@ import { ProposeGameDto } from './dto/propose-game.dto';
 import { SuggestPlaceDto } from './dto/suggest-place.dto';
 import { computeOverlapWindow, NoOverlapError } from './overlap-window';
 import { resolveAvailabilityWindow } from './resolve-window';
+import { NotificationsService } from '../notifications/notifications.service';
 
 // One entry of GET /proposals/:id/games (and the games array inside
 // GET /proposals/:id). proposalGameId is the join-row id the vote
@@ -104,6 +105,7 @@ export class SchedulingService {
     // rather than reimplemented, same reasoning as ChatService injecting
     // GroupsService instead of querying GroupMember itself.
     private readonly groupsService: GroupsService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async createProposal(
@@ -139,6 +141,7 @@ export class SchedulingService {
       }),
     );
 
+    this.notifyProposal(proposal, requestingUserId, 'A new proposal was created');
     return proposal;
   }
 
@@ -184,7 +187,9 @@ export class SchedulingService {
           availableEnd,
         });
 
-    return this.rsvps.save(rsvp);
+    const saved = await this.rsvps.save(rsvp);
+    this.notifyProposal(proposal, requestingUserId, 'An RSVP changed');
+    return saved;
   }
 
   // POST /proposals/:id/request-confirmation — normally the 'collecting' ->
@@ -236,11 +241,15 @@ export class SchedulingService {
       }
       await this.createSessionForProposal(proposal);
       proposal.status = 'confirmed';
-      return this.proposals.save(proposal);
+      const saved = await this.proposals.save(proposal);
+      this.notifyProposal(saved, requestingUserId, 'The proposal was confirmed');
+      return saved;
     }
 
     proposal.status = 'confirming';
-    return this.proposals.save(proposal);
+    const saved = await this.proposals.save(proposal);
+    this.notifyProposal(saved, requestingUserId, 'Confirmation was requested');
+    return saved;
   }
 
   // PATCH /proposals/:id/rsvp/lock-in — the per-user lock-in step
@@ -263,7 +272,9 @@ export class SchedulingService {
     }
 
     rsvp.confirmed = confirmed;
-    return this.rsvps.save(rsvp);
+    const saved = await this.rsvps.save(rsvp);
+    this.notifyProposal(proposal, requestingUserId, 'A participant changed their confirmation');
+    return saved;
   }
 
   // POST /proposals/:id/finalize — the 'confirming' -> 'confirmed'
@@ -282,6 +293,7 @@ export class SchedulingService {
 
     proposal.status = 'confirmed';
     await this.proposals.save(proposal);
+    this.notifyProposal(proposal, requestingUserId, 'The proposal was confirmed');
 
     return session;
   }
@@ -322,7 +334,9 @@ export class SchedulingService {
     proposal.status = 'collecting';
     proposal.confirmedStart = null;
     proposal.confirmedEnd = null;
-    return this.proposals.save(proposal);
+    const saved = await this.proposals.save(proposal);
+    this.notifyProposal(saved, requestingUserId, 'The proposal was reopened');
+    return saved;
   }
 
   async removeProposal(proposalId: string, requestingUserId: string): Promise<void> {
@@ -339,6 +353,7 @@ export class SchedulingService {
       }
     }
     await this.proposals.remove(proposal);
+    this.notifyProposal(proposal, requestingUserId, 'The proposal was deleted');
   }
 
   async proposeGame(
@@ -356,13 +371,15 @@ export class SchedulingService {
     const existing = await this.proposalGames.findOneBy({ proposalId, gameId: dto.gameId });
     if (existing) return existing;
 
-    return this.proposalGames.save(
+    const saved = await this.proposalGames.save(
       this.proposalGames.create({
         proposalId,
         gameId: dto.gameId,
         proposedBy: requestingUserId,
       }),
     );
+    this.notifyProposal(proposal, requestingUserId, 'A game was suggested');
+    return saved;
   }
 
   async voteForGame(proposalId: string, proposalGameId: string, requestingUserId: string, value: -1 | 1): Promise<void> {
@@ -378,10 +395,12 @@ export class SchedulingService {
       if (existing.value === value) return;
       existing.value = value;
       await this.gameVotes.save(existing);
+      this.notifyProposal(proposal, requestingUserId, 'A game vote changed');
       return;
     }
 
     await this.gameVotes.save(this.gameVotes.create({ proposalGameId, userId: requestingUserId, value }));
+    this.notifyProposal(proposal, requestingUserId, 'A game vote changed');
   }
 
   async unvoteForGame(proposalId: string, proposalGameId: string, requestingUserId: string): Promise<void> {
@@ -392,7 +411,8 @@ export class SchedulingService {
     await this.groupsService.findOne(proposal.groupId, requestingUserId);
     this.assertCollecting(proposal);
 
-    await this.gameVotes.delete({ proposalGameId, userId: requestingUserId });
+    const result = await this.gameVotes.delete({ proposalGameId, userId: requestingUserId });
+    if (result.affected) this.notifyProposal(proposal, requestingUserId, 'A game vote changed');
   }
 
   async removeProposalGame(proposalId: string, proposalGameId: string, requestingUserId: string): Promise<void> {
@@ -405,6 +425,7 @@ export class SchedulingService {
       throw new ForbiddenException('You can only remove games you suggested');
     }
     await this.proposalGames.remove(proposalGame);
+    this.notifyProposal(proposal, requestingUserId, 'A suggested game was removed');
   }
 
   async listProposalGames(
@@ -502,6 +523,7 @@ export class SchedulingService {
       members.map((member) => ({ placeId: place.id, userId: member.userId })),
       ['placeId', 'userId'],
     );
+    if (!existing) this.notifyProposal(proposal, requestingUserId, 'A place was suggested');
     return proposalPlace;
   }
 
@@ -617,9 +639,11 @@ export class SchedulingService {
       if (existing.value === value) return;
       existing.value = value;
       await this.placeVotes.save(existing);
+      this.notifyProposal(proposal, requestingUserId, 'A place vote changed');
       return;
     }
     await this.placeVotes.save(this.placeVotes.create({ proposalPlaceId, userId: requestingUserId, value }));
+    this.notifyProposal(proposal, requestingUserId, 'A place vote changed');
   }
 
   async unvoteForPlace(
@@ -630,7 +654,8 @@ export class SchedulingService {
     const { proposal } = await this.findProposalPlaceOrThrow(proposalId, proposalPlaceId);
     await this.groupsService.findOne(proposal.groupId, requestingUserId);
     this.assertCollecting(proposal);
-    await this.placeVotes.delete({ proposalPlaceId, userId: requestingUserId });
+    const result = await this.placeVotes.delete({ proposalPlaceId, userId: requestingUserId });
+    if (result.affected) this.notifyProposal(proposal, requestingUserId, 'A place vote changed');
   }
 
   async removeProposalPlace(
@@ -645,6 +670,7 @@ export class SchedulingService {
       throw new ForbiddenException('You can only remove places you suggested');
     }
     await this.proposalPlaces.remove(proposalPlace);
+    this.notifyProposal(proposal, requestingUserId, 'A suggested place was removed');
   }
 
   async removeSavedPlace(placeId: string, requestingUserId: string): Promise<void> {
@@ -684,6 +710,10 @@ export class SchedulingService {
     await this.groupsService.findOne(proposal.groupId, requestingUserId);
     this.assertCollecting(proposal);
     await this.placeOwners.delete({ placeId: proposalPlace.placeId, userId: requestingUserId });
+  }
+
+  private notifyProposal(proposal: PlaySessionProposal, actorId: string, message: string): void {
+    void this.notifications.notifyProposalUpdate(proposal, actorId, message);
   }
 
   async listProposals(groupId: string, requestingUserId: string) {

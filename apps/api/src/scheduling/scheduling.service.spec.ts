@@ -18,6 +18,7 @@ import { ProposalPlace } from './proposal-place.entity';
 import { ProposalPlaceVote } from './proposal-place-vote.entity';
 import { PlaySessionHost } from './play-session-host.entity';
 import { PlaySessionGame } from './play-session-game.entity';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const GROUP_ID = 'group-1';
 const PROPOSAL_ID = 'proposal-1';
@@ -49,6 +50,7 @@ describe('SchedulingService', () => {
   const mockSessionGames = { existsBy: jest.fn().mockResolvedValue(false) };
   const mockMembers = { findOneBy: jest.fn(), findBy: jest.fn() };
   const mockGroupsService = { findOne: jest.fn(), getMembers: jest.fn() };
+  const mockNotifications = { notifyProposalUpdate: jest.fn() };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -69,6 +71,7 @@ describe('SchedulingService', () => {
         { provide: getRepositoryToken(PlaySessionGame), useValue: mockSessionGames },
         { provide: getRepositoryToken(GroupMember), useValue: mockMembers },
         { provide: GroupsService, useValue: mockGroupsService },
+        { provide: NotificationsService, useValue: mockNotifications },
       ],
     }).compile();
 

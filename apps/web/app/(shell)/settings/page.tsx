@@ -3,6 +3,7 @@ import { BggAccountSettings } from '@/components/bgg-account-settings';
 import { CalendarFeedSettings } from '@/components/calendar-feed-settings';
 import { ProfileSettings } from '@/components/profile-settings';
 import { DeleteAccountSettings } from '@/components/delete-account-settings';
+import { NotificationSettings } from '@/components/notification-settings';
 
 export default function PersonalSettingsPage() {
   return (
@@ -23,6 +24,13 @@ export default function PersonalSettingsPage() {
         <h2 className="font-display text-xl">Appearance</h2>
         <div className="mt-4">
           <AppearanceSettings />
+        </div>
+      </section>
+      <section>
+        <h2 className="font-display text-xl">Notifications</h2>
+        <p className="mt-1 text-sm text-text-muted">Choose which updates can reach this device.</p>
+        <div className="mt-4">
+          <NotificationSettings />
         </div>
       </section>
       <section>
