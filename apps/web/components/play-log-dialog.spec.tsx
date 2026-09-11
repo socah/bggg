@@ -92,6 +92,34 @@ describe('PlayLogDialog', () => {
     expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
   });
 
+  it('does not show only the current user while an edited play is loading', async () => {
+    let resolvePlay!: (response: Response) => void;
+    const playResponse = new Promise<Response>((resolve) => { resolvePlay = resolve; });
+    apiFetch.mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('/play-players')) return { ok: true, json: async () => roster } as Response;
+      if (url.endsWith('/plays/play-1')) return playResponse;
+      if (url.endsWith('/uploads/plays/play-1')) return { ok: true, json: async () => [] } as Response;
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    render(<PlayLogDialog inline game={{ id: 42, name: 'Azul' } as never} open editPlayId="play-1" defaults={{ groupId: 'group-1', playedDate: '2026-09-10', userIds: [] }} onOpenChange={jest.fn()} />);
+
+    expect(await screen.findByText('Loading players...')).toBeTruthy();
+    await waitFor(() => expect(apiFetch.mock.calls.some(([path]) => String(path).includes('/play-players'))).toBe(true));
+    expect(screen.queryByLabelText('alice score')).toBeNull();
+    expect(screen.queryByText('No players selected.')).toBeNull();
+    expect(apiFetch.mock.calls.find(([path]) => String(path).endsWith('/plays/play-1'))?.[1]).toEqual({ cache: 'no-store' });
+
+    resolvePlay({ ok: true, json: async () => ({ status: 'finished', durationMinutes: null, notes: null, players: [
+      { userId: 'user-1', guestPlayerId: null, isWinner: false, score: null },
+      { userId: null, guestPlayerId: 'guest-1', isWinner: false, score: null },
+    ] }) } as Response);
+
+    expect(await screen.findByLabelText('alice score')).toBeTruthy();
+    expect(screen.getByLabelText('Bob (guest) score')).toBeTruthy();
+  });
+
   it('allows a failed immediate creation to be retried', async () => {
     let attempts = 0;
     apiFetch.mockImplementation(async (input, init) => {

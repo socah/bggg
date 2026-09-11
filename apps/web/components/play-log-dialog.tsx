@@ -92,6 +92,7 @@ export function PlayLogDialog({
   const [photos, setPhotos] = useState<File[]>([]);
   const [existingPhotos, setExistingPhotos] = useState<Array<{ id: string; url: string }>>([]);
   const [loadingRoster, setLoadingRoster] = useState(false);
+  const [loadingPlay, setLoadingPlay] = useState(Boolean(editPlayId));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createdPlayId, setCreatedPlayId] = useState<string | null>(null);
@@ -121,13 +122,14 @@ export function PlayLogDialog({
     setCreatedPlayId(null);
     setCreationFailed(false);
     setCreationAttempt(0);
+    setLoadingPlay(Boolean(editPlayId));
     createStarted.current = false;
     setRoster(null);
     setSessionId(null);
     setGuestName('');
     setLinkTargets({});
     setPlayers(Object.fromEntries((defaultUsersKey ? defaultUsersKey.split(',') : []).map((id) => [`user:${id}`, { selected: true, isWinner: false, score: '' }])));
-  }, [open, game?.id, defaults?.groupId, defaults?.playedDate, defaultUsersKey]);
+  }, [open, game?.id, editPlayId, defaults?.groupId, defaults?.playedDate, defaultUsersKey]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- groups load after the dialog opens.
@@ -136,7 +138,7 @@ export function PlayLogDialog({
 
   useEffect(() => {
     if (!open || !editPlayId || !defaults?.groupId) return;
-    apiFetch(`/groups/${defaults.groupId}/plays/${editPlayId}`)
+    apiFetch(`/groups/${defaults.groupId}/plays/${editPlayId}`, { cache: 'no-store' })
       .then(async (response) => {
         if (!response.ok) throw new Error('Unable to load this play');
         return response.json() as Promise<{ status: 'finished' | 'abandoned'; durationMinutes: number | null; notes: string | null; players: Array<{ userId: string | null; guestPlayerId: string | null; isWinner: boolean; score: string | null }> }>;
@@ -147,7 +149,8 @@ export function PlayLogDialog({
         setNotes(play.notes ?? '');
         setPlayers(Object.fromEntries(play.players.map((player) => [player.userId ? `user:${player.userId}` : `guest:${player.guestPlayerId}`, { selected: true, isWinner: player.isWinner, score: player.score ?? '' }])));
       })
-      .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Unable to load this play'));
+      .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Unable to load this play'))
+      .finally(() => setLoadingPlay(false));
     apiFetch(`/uploads/plays/${editPlayId}`)
       .then((response) => response.ok ? response.json() as Promise<Array<{ id: string; url: string }>> : [])
       .then(setExistingPhotos)
@@ -170,6 +173,7 @@ export function PlayLogDialog({
         if (!editPlayId && next.sessionPlayerIds.length > 0) {
           return Object.fromEntries(next.sessionPlayerIds.map((id) => [id, current[id] ?? { selected: true, isWinner: false, score: '' }]));
         }
+        if (editPlayId) return current;
         if (Object.values(current).some((value) => value.selected)) return current;
         const me = next.members.find((member) => member.isCurrentUser);
         return me ? { [`user:${me.id}`]: { selected: true, isWinner: false, score: '' } } : current;
@@ -407,9 +411,9 @@ export function PlayLogDialog({
           <section>
             <div className="flex items-center justify-between gap-3">
               <h3 className="font-display text-lg">Players</h3>
-              <Button type="button" variant="secondary" className="min-h-9 px-3 text-xs" disabled={saving || loadingRoster} onClick={() => setPlayerPickerOpen((current) => !current)} aria-expanded={playerPickerOpen}>+ Add player</Button>
+              <Button type="button" variant="secondary" className="min-h-9 px-3 text-xs" disabled={saving || loadingRoster || loadingPlay} onClick={() => setPlayerPickerOpen((current) => !current)} aria-expanded={playerPickerOpen}>+ Add player</Button>
             </div>
-            {loadingRoster && <p className="mt-2 text-sm text-text-muted">Loading players...</p>}
+            {(loadingRoster || loadingPlay) && <p className="mt-2 text-sm text-text-muted">Loading players...</p>}
             <div className="mt-2 flex flex-col gap-2">
               {selectedPlayers.map((player) => {
                  const value = players[player.key] ?? { selected: false, isWinner: false, score: '' };
@@ -420,7 +424,7 @@ export function PlayLogDialog({
                     <button type="button" className="col-start-2 row-start-1 min-h-8 px-1 text-xs font-semibold text-accent sm:col-auto sm:row-auto sm:min-h-9 sm:px-2" disabled={saving || !currentPlayId || selectedPlayers.length === 1} onClick={() => updatePlayer(player.key, { selected: false, isWinner: false, score: '' }, true)}>Remove</button>
                  </div>;
                })}
-              {!loadingRoster && selectedPlayers.length === 0 && <p className="text-sm text-text-muted">No players selected.</p>}
+              {!loadingRoster && !loadingPlay && selectedPlayers.length === 0 && <p className="text-sm text-text-muted">No players selected.</p>}
             </div>
             <div className={`grid transition-[grid-template-rows,opacity,margin] duration-300 ease-in-out ${playerPickerOpen ? 'mt-3 grid-rows-[1fr] opacity-100' : 'mt-0 grid-rows-[0fr] opacity-0'}`} aria-hidden={!playerPickerOpen} inert={!playerPickerOpen}>
               <div className="overflow-hidden"><div className="rounded-sm border border-border bg-surface-raised p-3">
