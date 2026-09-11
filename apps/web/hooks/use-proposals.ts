@@ -2,7 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { apiFetch } from '@/lib/api';
-import type { Group, Proposal, ProposalWithGroup } from '@/lib/types';
+import type { Proposal, ProposalWithGroup } from '@/lib/types';
+import { fetchGroups } from '@/lib/groups-client';
+
+const groupProposalCache = new Map<string, Proposal[]>();
+let aggregateProposalCache: ProposalWithGroup[] | null = null;
 
 // Cancelled proposals are never shown on the calendar (design spec's "What's
 // shown" rule) — filtered here so both hooks below get it for free.
@@ -14,7 +18,9 @@ async function fetchGroupProposals(groupId: string): Promise<Proposal[]> {
   const response = await apiFetch(`/groups/${groupId}/proposals`);
   if (!response.ok) throw new Error('Failed to load proposals');
   const proposals: Proposal[] = await response.json();
-  return proposals.filter(isVisible);
+  const visible = proposals.filter(isVisible);
+  groupProposalCache.set(groupId, visible);
+  return visible;
 }
 
 interface ProposalsResult<T> {
@@ -26,11 +32,11 @@ interface ProposalsResult<T> {
 
 // Group-level space: every non-cancelled proposal for one group.
 export function useGroupProposals(groupId: string): ProposalsResult<Proposal> {
-  const [proposals, setProposals] = useState<Proposal[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [proposals, setProposals] = useState<Proposal[]>(() => groupProposalCache.get(groupId) ?? []);
+  const [loading, setLoading] = useState(() => !groupProposalCache.has(groupId));
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
-  const loadedGroupId = useRef<string | null>(null);
+  const loadedGroupId = useRef<string | null>(groupProposalCache.has(groupId) ? groupId : null);
 
   useEffect(() => {
     let cancelled = false;
@@ -43,10 +49,16 @@ export function useGroupProposals(groupId: string): ProposalsResult<Proposal> {
     /* eslint-enable react-hooks/set-state-in-effect */
     fetchGroupProposals(groupId)
       .then((data) => {
-        if (!cancelled) setProposals(data);
+        if (!cancelled) {
+          setProposals(data);
+        }
       })
       .catch(() => {
-        if (!cancelled) setError("Could not load this month's schedule");
+        if (!cancelled) {
+          groupProposalCache.delete(groupId);
+          setProposals([]);
+          setError("Could not load this month's schedule");
+        }
       })
       .finally(() => {
         if (!cancelled) {
@@ -65,11 +77,11 @@ export function useGroupProposals(groupId: string): ProposalsResult<Proposal> {
 // User-level space: fan out across every group the user belongs to and
 // merge, tagging each proposal with its source group's name.
 export function useAggregateProposals(): ProposalsResult<ProposalWithGroup> {
-  const [proposals, setProposals] = useState<ProposalWithGroup[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [proposals, setProposals] = useState<ProposalWithGroup[]>(() => aggregateProposalCache ?? []);
+  const [loading, setLoading] = useState(() => aggregateProposalCache === null);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
-  const hasLoaded = useRef(false);
+  const hasLoaded = useRef(aggregateProposalCache !== null);
 
   useEffect(() => {
     let cancelled = false;
@@ -78,19 +90,26 @@ export function useAggregateProposals(): ProposalsResult<ProposalWithGroup> {
     setError(null);
     /* eslint-enable react-hooks/set-state-in-effect */
 
-    apiFetch('/groups')
-      .then((res) => res.json())
-      .then(async (groups: Group[]) => {
+    fetchGroups(true)
+      .then(async (groups) => {
         const perGroup = await Promise.all(
           groups.map(async (group) => {
             const groupProposals = await fetchGroupProposals(group.id);
             return groupProposals.map((proposal) => ({ ...proposal, groupName: group.name }));
           }),
         );
-        if (!cancelled) setProposals(perGroup.flat());
+        if (!cancelled) {
+          aggregateProposalCache = perGroup.flat();
+          setProposals(aggregateProposalCache);
+        }
       })
       .catch(() => {
-        if (!cancelled) setError('Could not load your schedule');
+        if (!cancelled) {
+          aggregateProposalCache = null;
+          groupProposalCache.clear();
+          setProposals([]);
+          setError('Could not load your schedule');
+        }
       })
       .finally(() => {
         if (!cancelled) {

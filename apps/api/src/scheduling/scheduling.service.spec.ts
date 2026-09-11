@@ -261,9 +261,9 @@ describe('SchedulingService', () => {
       mockProposals.findBy.mockResolvedValue([{ id: 'accessible-proposal' }]);
       mockProposalPlaces.findBy.mockResolvedValue([{ placeId: 'discovered' }]);
       mockPlaces.findBy.mockResolvedValue([
-        { id: 'seen', name: 'Alpha' },
-        { id: 'discovered', name: 'Beta' },
-        { id: 'owned', name: 'Zulu' },
+        { id: 'seen', name: 'Alpha', createdBy: 'user-2' },
+        { id: 'discovered', name: 'Beta', createdBy: USER_ID },
+        { id: 'owned', name: 'Zulu', createdBy: USER_ID },
       ]);
       mockProposalPlaces.countBy
         .mockResolvedValueOnce(2)
@@ -273,6 +273,7 @@ describe('SchedulingService', () => {
       const result = await service.listAvailablePlaces(USER_ID);
 
       expect(result.map((row) => row.place.id)).toEqual(['owned', 'discovered', 'seen']);
+      expect(result.map((row) => row.canEdit)).toEqual([true, true, false]);
       expect(mockPlaceVisibility.upsert).toHaveBeenCalledWith(
         expect.arrayContaining([
           { placeId: 'owned', userId: USER_ID, hidden: false },
@@ -340,6 +341,24 @@ describe('SchedulingService', () => {
         { placeId: 'place-1', userId: USER_ID, hidden: true },
         ['placeId', 'userId'],
       );
+      expect(mockPlaces.save).not.toHaveBeenCalled();
+    });
+
+    it('lets only the creator rename a canonical place', async () => {
+      const place = { id: 'place-1', name: 'Old name', createdBy: USER_ID };
+      mockPlaces.findOneBy.mockResolvedValue(place);
+      mockPlaces.save.mockImplementation(async (value: Place) => value);
+
+      await expect(service.updatePlace('place-1', { name: '  New name  ' }, USER_ID))
+        .resolves.toEqual({ id: 'place-1', name: 'New name' });
+      expect(mockPlaces.save).toHaveBeenCalledWith(expect.objectContaining({
+        id: 'place-1',
+        name: 'New name',
+      }));
+
+      mockPlaces.findOneBy.mockResolvedValue({ ...place, createdBy: 'user-2' });
+      await expect(service.updatePlace('place-1', { name: 'Nope' }, USER_ID))
+        .rejects.toBeInstanceOf(ForbiddenException);
     });
 
     it('keeps a hidden place out of the saved list even when it is rediscovered', async () => {

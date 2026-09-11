@@ -1,12 +1,12 @@
 'use client';
 
-import { DragEvent, FormEvent, ReactNode, useEffect, useRef, useState } from 'react';
+import { DragEvent, FormEvent, ReactNode, useEffect, useEffectEvent, useRef, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogClose, DialogContent, DialogSheetContent, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { CollectionListAccordion } from '@/components/collection-list-accordion';
 import { UserIdentityLink } from '@/components/user-identity-link';
 import { PlayLogDialog, type PlayLogDefaults } from '@/components/play-log-dialog';
 import { DisclosureChevron } from '@/components/ui/disclosure-chevron';
@@ -87,14 +87,14 @@ export function LibraryGame({
   note?: ReactNode;
   actions?: ReactNode;
 }) {
-  const image = game.image || game.thumbnail;
+  const image = game.thumbnail || game.image;
   if (view === 'list') {
     return (
       <Card className="flex min-h-24 items-center gap-3 p-3 transition-transform hover:-translate-y-0.5">
         <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-center gap-4 text-left">
           {image ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={image} alt="" className="h-20 w-20 shrink-0 rounded-sm object-cover" />
+            <img src={image} alt="" loading="lazy" decoding="async" className="h-20 w-20 shrink-0 rounded-sm object-cover" />
           ) : <div className="h-20 w-20 shrink-0 rounded-sm bg-surface" />}
           <div className="min-w-0 flex-1">
             <h3 className="truncate font-display text-lg">{game.name}</h3>
@@ -113,7 +113,7 @@ export function LibraryGame({
       <button type="button" onClick={onOpen} className="flex flex-1 flex-col text-left">
         {image ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={image} alt="" className="aspect-[4/3] w-full object-cover" />
+          <img src={image} alt="" loading="lazy" decoding="async" className="aspect-[4/3] w-full object-cover" />
         ) : <div className="aspect-[4/3] w-full bg-surface" />}
         <div className="flex flex-1 flex-col gap-2 p-3">
           <h3 className="line-clamp-2 font-display text-base leading-tight">{game.name}</h3>
@@ -164,6 +164,32 @@ export function GameDetailsSheet({
   const [targetListId, setTargetListId] = useState('');
   const [logOpen, setLogOpen] = useState(false);
   const [editingPlayId, setEditingPlayId] = useState<string | null>(null);
+  const historyEntry = useRef(false);
+  const closeFromHistory = useEffectEvent(() => onOpenChange(false));
+
+  useEffect(() => {
+    if (!open) return;
+    historyEntry.current = true;
+    window.history.pushState({ ...window.history.state, gameDetailsSheet: true }, '', window.location.href);
+    function handlePopState() {
+      if (!historyEntry.current) return;
+      historyEntry.current = false;
+      closeFromHistory();
+    }
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      historyEntry.current = false;
+    };
+  }, [open]);
+
+  function changeOpen(nextOpen: boolean) {
+    if (!nextOpen && historyEntry.current) {
+      historyEntry.current = false;
+      window.history.back();
+    }
+    onOpenChange(nextOpen);
+  }
 
   async function loadDetails(currentGame: GameCardGame) {
     const response = await apiFetch(`/bgg-account/games/${currentGame.id}/details`, { cache: 'no-store' });
@@ -250,12 +276,18 @@ export function GameDetailsSheet({
   const containingLists = game ? lists.filter((list) => list.items.some((item) => item.id === game.id)) : [];
   const availableLists = game ? lists.filter((list) => !list.items.some((item) => item.id === game.id)) : [];
   const hasAvailableList = !collectionGame || !wishlistGame || !savedGame || availableLists.length > 0;
+  const detailsArtwork = game?.thumbnail || game?.image;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={changeOpen}>
       <DialogSheetContent className="w-full sm:w-[36rem] sm:max-w-[90vw]">
         <div className="flex items-start justify-between gap-3">
-          <div>
+          {detailsArtwork && (
+            // BGG image hosts are external and vary at runtime.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={detailsArtwork} alt={game ? `${game.name} cover` : ''} decoding="async" className="h-24 w-20 shrink-0 rounded-sm object-cover" />
+          )}
+          <div className="min-w-0 flex-1">
             <DialogTitle className="font-display text-2xl">{game?.name}</DialogTitle>
             {game && <p className="mt-1 text-sm text-text-muted">BGG rating {game.rating.toFixed(1)}</p>}
           </div>
@@ -422,14 +454,25 @@ function sortGames(games: Array<CollectionGame | PersonalListGame>, sort: SortMo
   });
 }
 
+interface CollectionSnapshot {
+  linked: boolean;
+  collection: CollectionGame[];
+  wishlist: CollectionGame[];
+  saved: CollectionGame[];
+  lists: PersonalGameList[];
+}
+
+let collectionSnapshot: CollectionSnapshot | null = null;
+
 export function PersonalCollection() {
-  const [collection, setCollection] = useState<CollectionGame[]>([]);
-  const [wishlist, setWishlist] = useState<CollectionGame[]>([]);
-  const [saved, setSaved] = useState<CollectionGame[]>([]);
-  const [lists, setLists] = useState<PersonalGameList[]>([]);
-  const [linked, setLinked] = useState<boolean | null>(null);
+  const [collection, setCollection] = useState<CollectionGame[]>(() => collectionSnapshot?.collection ?? []);
+  const [wishlist, setWishlist] = useState<CollectionGame[]>(() => collectionSnapshot?.wishlist ?? []);
+  const [saved, setSaved] = useState<CollectionGame[]>(() => collectionSnapshot?.saved ?? []);
+  const [lists, setLists] = useState<PersonalGameList[]>(() => collectionSnapshot?.lists ?? []);
+  const [linked, setLinked] = useState<boolean | null>(() => collectionSnapshot?.linked ?? null);
   const [tab, setTab] = useState<LibraryTab>('collection');
-  const [view, setView] = useState<ViewMode>('compact');
+  const [expanded, setExpanded] = useState(false);
+  const [view, setView] = useState<ViewMode>('list');
   const [sort, setSort] = useState<SortMode>('name');
   const [filter, setFilter] = useState('');
   const [playerCount, setPlayerCount] = useState('');
@@ -462,18 +505,30 @@ export function PersonalCollection() {
     for (const response of [accountResponse, gamesResponse, wishlistResponse, savedResponse, listsResponse]) {
       if (!response.ok) throw new Error(await responseError(response));
     }
-    const { account } = (await accountResponse.json()) as { account: object | null };
-    setLinked(Boolean(account));
-    setCollection((await gamesResponse.json()) as CollectionGame[]);
-    setWishlist((await wishlistResponse.json()) as CollectionGame[]);
-    setSaved((await savedResponse.json()) as CollectionGame[]);
-    setLists((await listsResponse.json()) as PersonalGameList[]);
+    const [{ account }, nextCollection, nextWishlist, nextSaved, nextLists] = await Promise.all([
+      accountResponse.json() as Promise<{ account: object | null }>,
+      gamesResponse.json() as Promise<CollectionGame[]>,
+      wishlistResponse.json() as Promise<CollectionGame[]>,
+      savedResponse.json() as Promise<CollectionGame[]>,
+      listsResponse.json() as Promise<PersonalGameList[]>,
+    ]);
+    collectionSnapshot = { linked: Boolean(account), collection: nextCollection, wishlist: nextWishlist, saved: nextSaved, lists: nextLists };
+    setLinked(collectionSnapshot.linked);
+    setCollection(nextCollection);
+    setWishlist(nextWishlist);
+    setSaved(nextSaved);
+    setLists(nextLists);
   }
 
   useEffect(() => {
     // Initial API synchronization intentionally updates state from its async callbacks.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadGames().catch((reason: unknown) => {
+      collectionSnapshot = null;
+      setCollection([]);
+      setWishlist([]);
+      setSaved([]);
+      setLists([]);
       setMessage(reason instanceof Error ? reason.message : 'Unable to load your games');
       setLinked(false);
     });
@@ -605,6 +660,7 @@ export function PersonalCollection() {
 
   function changeTab(value: LibraryTab) {
     setTab(value);
+    setExpanded(true);
     if (sort === 'priority' && value !== 'wishlist') setSort('name');
   }
 
@@ -622,6 +678,13 @@ export function PersonalCollection() {
       body: JSON.stringify({ tiers }),
     }, success);
   }
+
+  const listEntries: Array<{ value: LibraryTab; label: string; count: number }> = [
+    { value: 'collection', label: 'Collection', count: collection.length },
+    { value: 'wishlist', label: 'Wishlist', count: wishlist.length },
+    { value: 'saved', label: 'Saved', count: saved.length },
+    ...lists.map((list) => ({ value: `list:${list.id}` as LibraryTab, label: `${list.type === 'tier' ? 'Tier: ' : ''}${list.name}`, count: list.items.length })),
+  ];
 
   function addTier(event: FormEvent) {
     event.preventDefault();
@@ -684,17 +747,8 @@ export function PersonalCollection() {
 
       {message && <p role="status" className="text-sm text-text-muted">{message}</p>}
 
-      <div className="flex items-center overflow-x-auto border-b border-border">
-        <Tabs value={tab} onValueChange={(value) => changeTab(value as LibraryTab)}>
-          <TabsList>
-            <TabsTrigger value="collection">Collection ({collection.length})</TabsTrigger>
-            <TabsTrigger value="wishlist">Wishlist ({wishlist.length})</TabsTrigger>
-            <TabsTrigger value="saved">Saved ({saved.length})</TabsTrigger>
-            {lists.map((list) => <TabsTrigger key={list.id} value={`list:${list.id}`}>{list.type === 'tier' ? 'Tier: ' : ''}{list.name} ({list.items.length})</TabsTrigger>)}
-          </TabsList>
-        </Tabs>
-        <button type="button" onClick={() => setCreateListOpen(true)} className="mx-2 flex size-9 shrink-0 items-center justify-center rounded-sm border-[length:var(--border-w)] border-border text-xl font-semibold text-accent-2" aria-label="Create a game list">+</button>
-        {activeList && <Button type="button" variant="secondary" className="ml-auto min-h-9 shrink-0 px-3" disabled={busy} onClick={() => { if (window.confirm(`Delete ${activeList.name}?`)) void mutate(`/bgg-account/lists/${activeList.id}`, { method: 'DELETE' }, `Deleted ${activeList.name}.`).then((deleted) => { if (deleted) setTab('collection'); }); }}>Delete list</Button>}
+      <div className="flex justify-end">
+        <button type="button" onClick={() => setCreateListOpen(true)} className="flex min-h-10 items-center justify-center rounded-sm border-[length:var(--border-w)] border-border px-3 text-sm font-semibold text-accent-2" aria-label="Create a game list">+ New list</button>
       </div>
 
       <Dialog open={createListOpen} onOpenChange={setCreateListOpen}>
@@ -709,6 +763,12 @@ export function PersonalCollection() {
         </DialogContent>
       </Dialog>
 
+      <div className="flex flex-col gap-2">
+      {listEntries.map((entry) => {
+        const isExpanded = expanded && tab === entry.value;
+        const entryList = entry.value.startsWith('list:') ? lists.find((list) => `list:${list.id}` === entry.value) : undefined;
+        return <CollectionListAccordion key={entry.value} label={entry.label} count={entry.count} expanded={isExpanded} onToggle={() => { if (tab === entry.value) setExpanded((current) => !current); else changeTab(entry.value); }} actions={isExpanded && entryList ? <Button type="button" variant="secondary" className="min-h-9 shrink-0 px-3" disabled={busy} onClick={() => { if (window.confirm(`Delete ${entryList.name}?`)) void mutate(`/bgg-account/lists/${entryList.id}`, { method: 'DELETE' }, `Deleted ${entryList.name}.`).then((deleted) => { if (deleted) { setTab('collection'); setExpanded(false); } }); }}>Delete list</Button> : undefined}>
+        {tab === entry.value && <>
       <Card className="p-4">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Filter by title" aria-label="Filter by title" />
@@ -778,6 +838,10 @@ export function PersonalCollection() {
           })}
         </div>
       )}
+        </>}
+        </CollectionListAccordion>;
+      })}
+      </div>
 
       <GameDetailsSheet game={selected} open={Boolean(selected)} onOpenChange={(open) => { if (!open) setSelected(null); }} collectionGame={collection.find((game) => game.id === selected?.id)} wishlistGame={wishlist.find((game) => game.id === selected?.id)} savedGame={saved.find((game) => game.id === selected?.id)} lists={lists} busy={busy} onMutate={mutate} />
     </div>

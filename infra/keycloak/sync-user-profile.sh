@@ -28,4 +28,5 @@ until run_kcadm config credentials \
 done
 
 run_kcadm update users/profile -r "$REALM" -f "$PROFILE_FILE" >/dev/null
-echo "Keycloak user profile synchronized — email and names are optional."
+run_kcadm update "realms/$REALM" -s loginTheme=bggg >/dev/null
+echo "Keycloak user profile and login theme synchronized — email and names are optional."

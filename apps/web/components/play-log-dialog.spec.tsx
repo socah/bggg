@@ -36,7 +36,7 @@ describe('PlayLogDialog', () => {
 
   afterEach(cleanup);
 
-  it('defaults to every existing session participant and submits the existing session id', async () => {
+  it('immediately creates a play with every existing session participant', async () => {
     render(<PlayLogDialog
       inline
       game={{ id: 42, name: 'Azul' } as never}
@@ -49,7 +49,6 @@ describe('PlayLogDialog', () => {
     expect(screen.getByText('alice')).not.toBeNull();
     expect(screen.queryByRole('button', { name: 'Minimize' })).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Log play' }));
     await waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(2));
     const [, init] = apiFetch.mock.calls[1];
     const payload = JSON.parse(String(init?.body));
@@ -58,5 +57,58 @@ describe('PlayLogDialog', () => {
       expect.objectContaining({ userId: 'user-1' }),
       expect.objectContaining({ guestPlayerId: 'guest-1' }),
     ]));
+    expect(screen.queryByRole('button', { name: 'Log play' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+    expect(await screen.findByRole('button', { name: 'Delete play' })).toBeTruthy();
+  });
+
+  it('saves edited text fields on blur without save or cancel buttons', async () => {
+    apiFetch.mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes('/play-players')) return { ok: true, json: async () => roster } as Response;
+      if (url.endsWith('/plays/play-1') && !init?.method) return { ok: true, json: async () => ({ status: 'finished', durationMinutes: null, notes: 'Old note', players: [{ userId: 'user-1', guestPlayerId: null, isWinner: false, score: null }] }) } as Response;
+      if (url.endsWith('/uploads/plays/play-1')) return { ok: true, json: async () => [] } as Response;
+      if (url.endsWith('/plays/play-1') && init?.method === 'PATCH') return { ok: true, json: async () => ({}) } as Response;
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    render(<PlayLogDialog
+      inline
+      game={{ id: 42, name: 'Azul' } as never}
+      open
+      editPlayId="play-1"
+      defaults={{ groupId: 'group-1', playedDate: '2026-09-10', userIds: [] }}
+      onOpenChange={jest.fn()}
+    />);
+
+    const notes = await screen.findByDisplayValue('Old note');
+    fireEvent.change(notes, { target: { value: 'Updated note' } });
+    fireEvent.blur(notes);
+
+    await waitFor(() => expect(apiFetch.mock.calls.some(([path, init]) => String(path).endsWith('/plays/play-1') && init?.method === 'PATCH')).toBe(true));
+    const patchCall = apiFetch.mock.calls.find(([path, init]) => String(path).endsWith('/plays/play-1') && init?.method === 'PATCH');
+    expect(JSON.parse(String(patchCall?.[1]?.body)).notes).toBe('Updated note');
+    expect(screen.queryByRole('button', { name: 'Save changes' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+  });
+
+  it('allows a failed immediate creation to be retried', async () => {
+    let attempts = 0;
+    apiFetch.mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes('/play-players')) return { ok: true, json: async () => roster } as Response;
+      if (url.endsWith('/plays') && init?.method === 'POST') {
+        attempts += 1;
+        if (attempts === 1) throw new Error('Network unavailable');
+        return { ok: true, json: async () => ({ id: 'play-2', sessionId: 'session-1' }) } as Response;
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    render(<PlayLogDialog inline game={{ id: 42, name: 'Azul' } as never} open defaults={{ groupId: 'group-1', playedDate: '2026-09-10', userIds: [] }} onOpenChange={jest.fn()} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry creating play' }));
+    expect(await screen.findByRole('button', { name: 'Delete play' })).toBeTruthy();
+    expect(attempts).toBe(2);
   });
 });

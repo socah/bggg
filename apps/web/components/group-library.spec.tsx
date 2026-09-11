@@ -57,7 +57,8 @@ describe('GroupLibrary', () => {
 
     const { container } = render(<GroupLibrary groupId="group-1" />);
 
-    expect(container.querySelector('img')?.getAttribute('src')).toBe('https://example.test/gloomhaven-large.jpg');
+    expect(container.querySelector('img')?.getAttribute('src')).toBe('https://example.test/gloomhaven.jpg');
+    expect(container.querySelector('img')?.getAttribute('loading')).toBe('lazy');
     expect(screen.getByRole('heading', { name: 'Gloomhaven' })).toBeTruthy();
     expect(screen.getByText('1–4 players')).toBeTruthy();
     expect(screen.getByText('2017')).toBeTruthy();

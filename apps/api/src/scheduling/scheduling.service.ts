@@ -26,6 +26,7 @@ import { CreateProposalDto } from './dto/create-proposal.dto';
 import { RsvpDto } from './dto/rsvp.dto';
 import { ProposeGameDto } from './dto/propose-game.dto';
 import { SuggestPlaceDto } from './dto/suggest-place.dto';
+import { UpdatePlaceDto } from './dto/update-place.dto';
 import { computeOverlapWindow, NoOverlapError } from './overlap-window';
 import { resolveAvailabilityWindow } from './resolve-window';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -57,6 +58,7 @@ export interface ProposalPlaceWithVotes {
 export interface AvailablePlace {
   place: { id: string; name: string };
   ownedByMe: boolean;
+  canEdit: boolean;
   suggestionCount: number;
 }
 
@@ -606,6 +608,7 @@ export class SchedulingService {
     const result = await Promise.all(places.map(async (place) => ({
       place: { id: place.id, name: place.name },
       ownedByMe: ownedIds.has(place.id),
+      canEdit: place.createdBy === requestingUserId,
       suggestionCount: await this.proposalPlaces.countBy({ placeId: place.id }),
     })));
     return result.sort((left, right) =>
@@ -681,6 +684,22 @@ export class SchedulingService {
       { placeId, userId: requestingUserId, hidden: true },
       ['placeId', 'userId'],
     );
+  }
+
+  async updatePlace(
+    placeId: string,
+    dto: UpdatePlaceDto,
+    requestingUserId: string,
+  ): Promise<{ id: string; name: string }> {
+    const place = await this.places.findOneBy({ id: placeId });
+    if (!place) throw new NotFoundException('Place not found');
+    if (place.createdBy !== requestingUserId) {
+      throw new ForbiddenException('You can only rename places you created');
+    }
+
+    place.name = dto.name.trim();
+    const updated = await this.places.save(place);
+    return { id: updated.id, name: updated.name };
   }
 
   async markPlaceOwned(

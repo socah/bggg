@@ -5,6 +5,7 @@ import { ProfileSettings } from '@/components/profile-settings';
 import { DeleteAccountSettings } from '@/components/delete-account-settings';
 import { NotificationSettings } from '@/components/notification-settings';
 import { InstallAppSettings } from '@/components/install-app-settings';
+import { SavedPlaceSettings } from '@/components/saved-place-settings';
 
 export default function PersonalSettingsPage() {
   return (
@@ -19,6 +20,13 @@ export default function PersonalSettingsPage() {
         <h2 className="font-display text-xl">BoardGameGeek</h2>
         <div className="mt-4">
           <BggAccountSettings />
+        </div>
+      </section>
+      <section>
+        <h2 className="font-display text-xl">Saved places</h2>
+        <p className="mt-1 text-sm text-text-muted">Rename places you created or remove places you no longer use.</p>
+        <div className="mt-4">
+          <SavedPlaceSettings />
         </div>
       </section>
       <section>

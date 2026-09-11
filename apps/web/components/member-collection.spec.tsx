@@ -1,5 +1,5 @@
 import { describe, expect, it, jest } from '@jest/globals';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { GameCardGame, GroupMemberProfile } from '@/lib/types';
 
 const game = (id: number, name: string): GameCardGame => ({
@@ -21,7 +21,7 @@ const member: GroupMemberProfile = {
   displayName: 'Bob Example',
   role: 'member',
   isCurrentUser: false,
-  collection: [{ ...game(1, 'Owned Game'), source: 'manual', addedAt: '2026-09-01' }],
+  collection: [{ ...game(1, 'Owned Game'), thumbnail: '/thumb.jpg', image: '/full.jpg', source: 'manual', addedAt: '2026-09-01' }],
   wishlist: [{ ...game(2, 'Wanted Game'), source: 'bgg', addedAt: '2026-09-02', wishlistPriority: 2 }],
   saved: [{ ...game(3, 'Saved Game'), source: 'manual', addedAt: '2026-09-03' }],
   lists: [{
@@ -48,13 +48,26 @@ describe('MemberCollection', () => {
   it('loads every selected-member list without owner controls', async () => {
     render(<MemberCollection groupId="group-1" userId="user-2" />);
 
-    await waitFor(() => expect(screen.getByRole('tab', { name: 'Collection (1)' })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Collection (1)' })).toBeTruthy());
     expect(apiFetch).toHaveBeenCalledWith('/groups/group-1/members/user-2');
-    expect(screen.getByRole('tab', { name: 'Wishlist (1)' })).toBeTruthy();
-    expect(screen.getByRole('tab', { name: 'Saved (1)' })).toBeTruthy();
-    expect(screen.getByRole('tab', { name: 'Favorites (1)' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Wishlist (1)' }).getAttribute('aria-expanded')).toBe('false');
+    expect(screen.getByRole('button', { name: 'Saved (1)' }).getAttribute('aria-expanded')).toBe('false');
+    expect(screen.getByRole('button', { name: 'Favorites (1)' }).getAttribute('aria-expanded')).toBe('false');
+    expect(screen.getByRole('button', { name: 'Collection (1)' }).getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByText('Owned Game')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Collection (1)' }));
+    expect(screen.getByRole('button', { name: 'Collection (1)' }).getAttribute('aria-expanded')).toBe('true');
     expect(screen.getByText('Owned Game')).toBeTruthy();
+    expect(document.querySelector('img')?.getAttribute('src')).toBe('/thumb.jpg');
+    expect(document.querySelector('img')?.getAttribute('loading')).toBe('lazy');
+    fireEvent.click(screen.getByRole('button', { name: 'Collection (1)' }));
+    expect(screen.getByRole('button', { name: 'Collection (1)' }).getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(screen.getByRole('button', { name: 'Favorites (1)' }));
+    expect(screen.getByRole('button', { name: 'Favorites (1)' }).getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText('Favorite Game')).toBeTruthy();
     expect(screen.queryByText('Sync BGG')).toBeNull();
     expect(screen.queryByLabelText('Create a game list')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Delete list' })).toBeNull();
   });
 });

@@ -10,7 +10,7 @@ jest.unstable_mockModule('@/components/inline-proposal-panel', () => ({
 }));
 
 jest.unstable_mockModule('@/components/calendar-play-launcher', () => ({
-  CalendarPlayLauncher: ({ date }: { date: string }) => <button type="button">Log play {date}</button>,
+  CalendarPlayLauncher: ({ date, onSelectGame }: { date: string; onSelectGame?: (game: never, groupId: string) => void }) => <button type="button" onClick={() => onSelectGame?.({ id: 42, name: 'Azul' } as never, 'group-1')}>Log play {date}</button>,
 }));
 
 jest.unstable_mockModule('@/components/play-log-dialog', () => ({
@@ -127,15 +127,47 @@ describe('CalendarMonthGrid', () => {
     expect(screen.getByRole('button', { name: 'Log play 2026-05-01' })).toBeTruthy();
   });
 
-  it('keeps the play action below the selected date while collapsing', () => {
+  it('expands the play action inside the selected date cell', () => {
     render(<CalendarMonthGrid proposals={[]} />);
     const day = screen.getByRole('button', { name: 'May 1, 2026' });
     fireEvent.click(day);
-    const launcherColumn = screen.getByRole('button', { name: 'Log play 2026-05-01' }).parentElement!;
-    expect(launcherColumn.style.gridColumnStart).toBe('5');
+    const launcher = screen.getByRole('button', { name: 'Log play 2026-05-01' });
+    expect(day.parentElement?.contains(launcher)).toBe(true);
+    expect(launcher.parentElement?.className).toContain('opacity-100');
 
     fireEvent.click(day);
-    expect(launcherColumn.style.gridColumnStart).toBe('5');
+    expect(launcher.parentElement?.className).toContain('opacity-0');
+  });
+
+  it('does not add week-panel spacing for an empty past date', () => {
+    render(<CalendarMonthGrid proposals={[]} />);
+    const day = screen.getByRole('button', { name: 'April 30, 2026' });
+    fireEvent.click(day);
+
+    const week = day.parentElement?.parentElement?.parentElement;
+    expect(week?.children[1]?.className).toContain('my-0');
+  });
+
+  it('uses the same spacing between week rows and date columns', () => {
+    const { container } = render(<CalendarMonthGrid proposals={[]} />);
+    const week = container.querySelector('.grid-cols-7.gap-x-1');
+    expect(week?.parentElement?.parentElement?.className).toContain('gap-1');
+  });
+
+  it('marks and highlights today', () => {
+    render(<CalendarMonthGrid proposals={[]} />);
+    const today = screen.getByRole('button', { name: 'May 1, 2026' });
+    expect(today.getAttribute('aria-current')).toBe('date');
+    expect(today.parentElement?.className).toContain('bg-highlight/20');
+  });
+
+  it('mounts a new play editor only in the currently expanded week', () => {
+    jest.setSystemTime(new Date(2026, 4, 31));
+    render(<CalendarMonthGrid proposals={[]} groups={[{ id: 'group-1', name: 'Thursday Games', ownerId: 'user-1', isSolo: false, createdAt: '' }]} />);
+    fireEvent.click(screen.getByRole('button', { name: 'May 1, 2026' }));
+    fireEvent.click(screen.getByRole('button', { name: 'May 8, 2026' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Log play 2026-05-08' }));
+    expect(screen.getAllByText('Inline logged play').length).toBe(1);
   });
 
   it('offers only proposal creation after today', () => {

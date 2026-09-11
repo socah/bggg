@@ -1,6 +1,7 @@
 {
   "realm": "boardgame",
   "enabled": true,
+  "loginTheme": "bggg",
 
   "sslRequired": "external",
   "registrationAllowed": false,

@@ -7,20 +7,20 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogClose, DialogSheetContent, DialogTitle } from '@/components/ui/dialog';
 import type { GameCardGame, Group } from '@/lib/types';
 
-export function CalendarPlayLauncher({ date, groups, defaultGroupId, onLogged, onSelectGame }: { date: string; groups: Group[]; defaultGroupId?: string; onLogged?: () => void; onSelectGame?: (game: GameCardGame, groupId: string) => void }) {
+export function CalendarPlayLauncher({ date, groups, defaultGroupId, onLogged, onSelectGame, compact = false }: { date: string; groups: Group[]; defaultGroupId?: string; onLogged?: () => void; onSelectGame?: (game: GameCardGame, groupId: string) => void; compact?: boolean }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [groupId, setGroupId] = useState(defaultGroupId ?? groups[0]?.id ?? '');
   const [filter, setFilter] = useState('');
   const [game, setGame] = useState<GameCardGame | null>(null);
   const effectiveGroupId = defaultGroupId || groupId || groups[0]?.id || '';
-  const library = useGroupLibrary(effectiveGroupId || null);
+  const library = useGroupLibrary(pickerOpen ? effectiveGroupId || null : null);
   const filteredGames = useMemo(() => {
     const query = filter.trim().toLowerCase();
     return query ? library.games.filter((candidate) => candidate.name.toLowerCase().includes(query)) : library.games;
   }, [filter, library.games]);
 
   return <>
-    <Button type="button" variant="secondary" className="px-3 text-xs" disabled={groups.length === 0} onClick={() => setPickerOpen(true)}>Log a play</Button>
+    <Button type="button" variant="secondary" className={compact ? 'min-h-9 w-full min-w-0 max-w-full whitespace-normal px-0.5 text-[0.6rem] leading-tight @min-[5rem]/day:px-2 @min-[5rem]/day:text-xs' : 'px-3 text-xs'} disabled={groups.length === 0} onClick={() => setPickerOpen(true)}>Log a play</Button>
     <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
       <DialogSheetContent aria-describedby={undefined}>
         <DialogTitle className="font-display text-xl">Choose a game</DialogTitle>

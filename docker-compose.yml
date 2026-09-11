@@ -172,6 +172,7 @@ services:
       # existing realm by sync-user-profile.sh after Keycloak starts.
       - ./infra/keycloak/user-profile.json:/opt/keycloak/user-profile.json:ro
       - ./infra/keycloak/sync-user-profile.sh:/sync-user-profile.sh:ro
+      - ./infra/keycloak/themes:/opt/keycloak/themes:ro
     labels:
       # Same StripPrefix pattern as 'api's 'api-stripprefix' below: the
       # browser's OIDC redirects hit Traefik at '/auth/...', Traefik

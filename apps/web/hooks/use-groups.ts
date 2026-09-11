@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { apiFetch } from '@/lib/api';
 import type { Group } from '@/lib/types';
+import { fetchGroups, peekGroups } from '@/lib/groups-client';
 
 interface UseGroupsResult {
   groups: Group[];
@@ -12,27 +12,26 @@ interface UseGroupsResult {
 }
 
 export function useGroups(): UseGroupsResult {
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [groups, setGroups] = useState<Group[]>(() => peekGroups() ?? []);
+  const [loading, setLoading] = useState(() => peekGroups() === null);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- manual fetch-in-effect (see use-proposals.ts).
-    setLoading(true);
+    if (!peekGroups()) setLoading(true);
     setError(null);
 
-    apiFetch('/groups')
-      .then((res) => {
-        if (!res.ok) throw new Error(`Unexpected status ${res.status}`);
-        return res.json();
-      })
-      .then((data: Group[]) => {
+    fetchGroups(true)
+      .then((data) => {
         if (!cancelled) setGroups(data);
       })
       .catch(() => {
-        if (!cancelled) setError('Could not load your groups');
+        if (!cancelled) {
+          setGroups([]);
+          setError('Could not load your groups');
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

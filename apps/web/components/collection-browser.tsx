@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { CollectionListAccordion } from '@/components/collection-list-accordion';
 import { GameDetailsSheet, LibraryGame } from '@/components/personal-collection';
 import type { CollectionGame, GameCardGame, PersonalGameList, PersonalListGame } from '@/lib/types';
 
@@ -34,7 +34,8 @@ export function CollectionBrowser({
   lists: PersonalGameList[];
 }) {
   const [tab, setTab] = useState<LibraryTab>('collection');
-  const [view, setView] = useState<ViewMode>('compact');
+  const [expanded, setExpanded] = useState(false);
+  const [view, setView] = useState<ViewMode>('list');
   const [sort, setSort] = useState<SortMode>('name');
   const [filter, setFilter] = useState('');
   const [playerCount, setPlayerCount] = useState('');
@@ -62,19 +63,20 @@ export function CollectionBrowser({
     setPlayerCount(next > 0 ? String(next) : '');
   }
 
+  const listEntries: Array<{ value: LibraryTab; label: string; count: number }> = [
+    { value: 'collection', label: 'Collection', count: collection.length },
+    { value: 'wishlist', label: 'Wishlist', count: wishlist.length },
+    { value: 'saved', label: 'Saved', count: saved.length },
+    ...lists.map((list) => ({ value: `list:${list.id}` as LibraryTab, label: `${list.type === 'tier' ? 'Tier: ' : ''}${list.name}`, count: list.items.length })),
+  ];
+
   return (
     <div className="flex flex-col gap-4">
-      <div className="overflow-x-auto border-b border-border">
-        <Tabs value={tab} onValueChange={(value) => setTab(value as LibraryTab)}>
-          <TabsList>
-            <TabsTrigger value="collection">Collection ({collection.length})</TabsTrigger>
-            <TabsTrigger value="wishlist">Wishlist ({wishlist.length})</TabsTrigger>
-            <TabsTrigger value="saved">Saved ({saved.length})</TabsTrigger>
-            {lists.map((list) => <TabsTrigger key={list.id} value={`list:${list.id}`}>{list.type === 'tier' ? 'Tier: ' : ''}{list.name} ({list.items.length})</TabsTrigger>)}
-          </TabsList>
-        </Tabs>
-      </div>
-
+      <div className="flex flex-col gap-2">
+      {listEntries.map((entry) => {
+        const isExpanded = expanded && tab === entry.value;
+        return <CollectionListAccordion key={entry.value} label={entry.label} count={entry.count} expanded={isExpanded} onToggle={() => { if (tab === entry.value) setExpanded((current) => !current); else { setTab(entry.value); setExpanded(true); } }}>
+        {tab === entry.value && <>
       <Card className="p-4">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Filter by title" aria-label="Filter by title" />
@@ -121,6 +123,10 @@ export function CollectionBrowser({
           {visibleGames.map((game) => <LibraryGame key={game.id} game={game} view={view} onOpen={() => openGame(game)} />)}
         </div>
       )}
+        </>}
+        </CollectionListAccordion>;
+      })}
+      </div>
 
       <GameDetailsSheet game={selected} open={Boolean(selected)} onOpenChange={(open) => { if (!open) setSelected(null); }} />
     </div>

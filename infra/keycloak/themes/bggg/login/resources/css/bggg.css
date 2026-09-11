@@ -1,0 +1,38 @@
+html.login-pf body,
+body.login-pf {
+  background-color: #06375a !important;
+  background-image: url('../img/background.jpg') !important;
+  background-position: center !important;
+  background-size: cover !important;
+  background-attachment: fixed !important;
+  background-repeat: no-repeat !important;
+}
+
+.login-pf-page {
+  min-height: 100vh;
+  background: linear-gradient(90deg, rgba(1, 22, 40, 0.22), rgba(1, 22, 40, 0.05));
+}
+
+#kc-header-wrapper {
+  width: min(343px, 72vw);
+  height: min(300px, 63vw);
+  margin: 0 auto;
+  padding: 0;
+  overflow: hidden;
+  background: url('../img/logo.png') center / contain no-repeat;
+  font-size: 0;
+  line-height: 0;
+  text-indent: -9999px;
+}
+
+@media (max-width: 767px) {
+  html.login-pf body,
+  body.login-pf {
+    background-position: 42% center;
+  }
+
+  #kc-header-wrapper {
+    width: 220px;
+    height: 192px;
+  }
+}

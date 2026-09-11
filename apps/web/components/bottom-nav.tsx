@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { parseSpacePath, spaceHref, type ViewTab } from '@/lib/space';
 
@@ -18,6 +19,12 @@ export function BottomNav() {
     if (userId) return tab !== 'calendar' && tab !== 'chat';
     return true;
   });
+
+  useEffect(() => {
+    for (const { tab } of TABS) {
+      if (!userId || (tab !== 'calendar' && tab !== 'chat')) router.prefetch?.(spaceHref(groupId, tab, userId));
+    }
+  }, [groupId, router, userId]);
 
   return (
     <nav

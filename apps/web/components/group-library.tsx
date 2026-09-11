@@ -17,7 +17,7 @@ const sortLabels: Record<SortMode, string> = {
 
 export function GroupLibrary({ groupId }: { groupId: string }) {
   const { games, loading, error, reload } = useGroupLibrary(groupId);
-  const [view, setView] = useState<ViewMode>('compact');
+  const [view, setView] = useState<ViewMode>('list');
   const [selected, setSelected] = useState<GameCardGame | null>(null);
   const [filter, setFilter] = useState('');
   const [playerCount, setPlayerCount] = useState('');
