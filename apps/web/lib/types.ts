@@ -111,6 +111,7 @@ export interface GroupMemberProfile extends GroupMemberInfo {
   wishlist: CollectionGame[];
   saved: CollectionGame[];
   lists: PersonalGameList[];
+  reviews: PersonalReview[];
 }
 
 export type ChatThreadKind = 'general' | 'proposal' | 'direct';
@@ -170,6 +171,17 @@ export interface PersonalGameList {
   tiers: string[];
   items: PersonalListGame[];
   createdAt: string;
+  updatedAt: string;
+}
+
+export interface PersonalReview {
+  id: number;
+  gameId: number;
+  rating: number | null;
+  complexityScore: number | null;
+  depthScore: number | null;
+  body: string | null;
+  source: 'manual' | 'bgg';
   updatedAt: string;
 }
 

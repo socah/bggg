@@ -18,6 +18,7 @@ describe('CollectionsController', () => {
     importCollection: jest.fn(),
     getOwnedGames: jest.fn(),
     getSavedGames: jest.fn(),
+    getReviews: jest.fn(),
     addSavedGame: jest.fn(),
     removeSavedGame: jest.fn(),
   };
@@ -97,6 +98,16 @@ describe('CollectionsController', () => {
       expect(mockCollectionsService.getSavedGames).toHaveBeenCalledWith('user-1');
       expect(mockCollectionsService.addSavedGame).toHaveBeenCalledWith('user-1', 42);
       expect(mockCollectionsService.removeSavedGame).toHaveBeenCalledWith('user-1', 7);
+    });
+  });
+
+  describe('getReviews', () => {
+    it('returns reviews for the requesting user', async () => {
+      mockCollectionsService.getReviews.mockResolvedValue([]);
+
+      await controller.getReviews(fakeRequest);
+
+      expect(mockCollectionsService.getReviews).toHaveBeenCalledWith('user-1');
     });
   });
 });

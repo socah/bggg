@@ -90,14 +90,19 @@ export class CollectionsService {
     return this.getGamesForRows(await this.saved.findBy({ userId }));
   }
 
+  getReviews(userId: string): Promise<Review[]> {
+    return this.reviews.findBy({ userId });
+  }
+
   async getLibrarySnapshot(userId: string) {
-    const [collection, wishlist, saved, lists] = await Promise.all([
+    const [collection, wishlist, saved, lists, reviews] = await Promise.all([
       this.getOwnedGames(userId),
       this.getWishlistGames(userId),
       this.getSavedGames(userId),
       this.getLists(userId),
+      this.getReviews(userId),
     ]);
-    return { collection, wishlist, saved, lists };
+    return { collection, wishlist, saved, lists, reviews };
   }
 
   async searchGames(query: string) {

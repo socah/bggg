@@ -4,8 +4,8 @@ import { useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { CollectionListAccordion } from '@/components/collection-list-accordion';
-import { GameDetailsSheet, LibraryGame } from '@/components/personal-collection';
-import type { CollectionGame, GameCardGame, PersonalGameList, PersonalListGame } from '@/lib/types';
+import { gameMembershipLabels, GameDetailsSheet, LibraryGame } from '@/components/personal-collection';
+import type { CollectionGame, GameCardGame, PersonalGameList, PersonalListGame, PersonalReview } from '@/lib/types';
 
 type LibraryTab = 'collection' | 'wishlist' | 'saved' | `list:${string}`;
 type ViewMode = 'compact' | 'list';
@@ -27,11 +27,13 @@ export function CollectionBrowser({
   wishlist,
   saved,
   lists,
+  reviews = [],
 }: {
   collection: CollectionGame[];
   wishlist: CollectionGame[];
   saved: CollectionGame[];
   lists: PersonalGameList[];
+  reviews?: PersonalReview[];
 }) {
   const [tab, setTab] = useState<LibraryTab>('collection');
   const [expanded, setExpanded] = useState(false);
@@ -53,6 +55,11 @@ export function CollectionBrowser({
     game.name.toLocaleLowerCase().includes(filter.trim().toLocaleLowerCase())
       && (!count || (game.minPlayers <= count && game.maxPlayers >= count)),
   ), sort);
+
+  function labelsForGame(gameId: number): string[] {
+    const labels = gameMembershipLabels(gameId, collection, wishlist, saved, lists);
+    return activeList ? labels.defaults : labels.custom;
+  }
 
   function openGame(game: GameCardGame) {
     setSelected(game);
@@ -77,8 +84,8 @@ export function CollectionBrowser({
         const isExpanded = expanded && tab === entry.value;
         return <CollectionListAccordion key={entry.value} label={entry.label} count={entry.count} expanded={isExpanded} onToggle={() => { if (tab === entry.value) setExpanded((current) => !current); else { setTab(entry.value); setExpanded(true); } }}>
         {tab === entry.value && <>
-      <Card className="p-4">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <Card className="p-3">
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <Input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Filter by title" aria-label="Filter by title" />
           <label className="flex flex-col gap-1 text-xs font-semibold text-text-muted">
             <span className="flex" aria-label="Player count">
@@ -112,7 +119,7 @@ export function CollectionBrowser({
             return <section key={tier} className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-2">
               <div className="rounded-sm bg-surface p-2 text-center"><h3 className="break-all font-display text-lg leading-tight">{tier}</h3></div>
               <div className={`${view === 'compact' ? 'grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' : 'flex flex-col gap-3'} min-h-20 rounded-sm border border-dashed border-border p-2`}>
-                {tierGames.map((game) => <LibraryGame key={game.id} game={game} view={view} onOpen={() => openGame(game)} />)}
+                {tierGames.map((game) => <LibraryGame key={game.id} game={game} view={view} onOpen={() => openGame(game)} listLabels={labelsForGame(game.id)} review={reviews.find((review) => review.gameId === game.id)} />)}
                 {tierGames.length === 0 && <p className="self-center text-sm text-text-muted">No games in this tier.</p>}
               </div>
             </section>;
@@ -120,7 +127,7 @@ export function CollectionBrowser({
         </div>
       ) : (
         <div className={view === 'compact' ? 'grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6' : 'flex flex-col gap-3'}>
-          {visibleGames.map((game) => <LibraryGame key={game.id} game={game} view={view} onOpen={() => openGame(game)} />)}
+          {visibleGames.map((game) => <LibraryGame key={game.id} game={game} view={view} onOpen={() => openGame(game)} listLabels={labelsForGame(game.id)} review={reviews.find((review) => review.gameId === game.id)} />)}
         </div>
       )}
         </>}
@@ -128,7 +135,7 @@ export function CollectionBrowser({
       })}
       </div>
 
-      <GameDetailsSheet game={selected} open={Boolean(selected)} onOpenChange={(open) => { if (!open) setSelected(null); }} />
+      <GameDetailsSheet game={selected} open={Boolean(selected)} onOpenChange={(open) => { if (!open) setSelected(null); }} collectionGame={collection.find((game) => game.id === selected?.id)} wishlistGame={wishlist.find((game) => game.id === selected?.id)} savedGame={saved.find((game) => game.id === selected?.id)} lists={lists} membershipLabels={selected ? [...gameMembershipLabels(selected.id, collection, wishlist, saved, lists).defaults, ...gameMembershipLabels(selected.id, collection, wishlist, saved, lists).custom] : []} />
     </div>
   );
 }

@@ -84,6 +84,11 @@ export class CollectionsController {
     return this.collectionsService.getSavedGames(req.user.sub);
   }
 
+  @Get('reviews')
+  getReviews(@Request() req: AuthenticatedRequest) {
+    return this.collectionsService.getReviews(req.user.sub);
+  }
+
   @Get('search')
   searchGames(@Query('q') query: string) {
     return this.collectionsService.searchGames(query ?? '');

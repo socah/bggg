@@ -33,6 +33,7 @@ const member: GroupMemberProfile = {
     createdAt: '2026-09-04',
     updatedAt: '2026-09-04',
   }],
+  reviews: [],
 };
 
 const apiFetch = jest.fn((path: string) => {

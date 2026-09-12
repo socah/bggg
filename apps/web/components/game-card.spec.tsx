@@ -24,7 +24,7 @@ describe('GameCard', () => {
 
     expect(document.querySelector('img')?.getAttribute('src')).toBe('https://example.test/gloomhaven-large.jpg');
     expect(screen.getByRole('heading', { name: 'Gloomhaven' })).toBeTruthy();
-    expect(screen.getByText('2017')).toBeTruthy();
+    expect(screen.queryByText('2017')).toBeNull();
     expect(screen.getByText('8.6 BGG')).toBeTruthy();
     expect(screen.getByText('1–4 players')).toBeTruthy();
     expect(screen.getByText('120 min')).toBeTruthy();

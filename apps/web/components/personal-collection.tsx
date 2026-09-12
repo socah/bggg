@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogClose, DialogContent, DialogSheetContent, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { CollectionListAccordion } from '@/components/collection-list-accordion';
 import { UserIdentityLink } from '@/components/user-identity-link';
 import { PlayLogDialog, type PlayLogDefaults } from '@/components/play-log-dialog';
@@ -19,6 +20,7 @@ import type {
   GameCardGame,
   PersonalGameList,
   PersonalListGame,
+  PersonalReview,
 } from '@/lib/types';
 
 type LibraryTab = 'collection' | 'wishlist' | 'saved' | `list:${string}`;
@@ -63,15 +65,41 @@ async function responseError(response: Response): Promise<string> {
   }
 }
 
-function GameMeta({ game }: { game: GameCardGame }) {
+export function gameMembershipLabels(
+  gameId: number,
+  collection: CollectionGame[],
+  wishlist: CollectionGame[],
+  saved: CollectionGame[],
+  lists: PersonalGameList[],
+) {
+  return {
+    defaults: [
+      collection.some((game) => game.id === gameId) ? 'Collection' : null,
+      wishlist.some((game) => game.id === gameId) ? 'Wishlist' : null,
+      saved.some((game) => game.id === gameId) ? 'Saved' : null,
+    ].filter((label): label is string => Boolean(label)),
+    custom: lists.filter((list) => list.items.some((game) => game.id === gameId)).map((list) => list.name),
+  };
+}
+
+function GameMeta({ game, listLabels = [] }: { game: GameCardGame; listLabels?: string[] }) {
   return (
-    <div className="flex flex-wrap gap-1.5">
-      {game.yearPublished > 0 && <Badge>{game.yearPublished}</Badge>}
+    <div className="flex flex-wrap gap-1">
       {game.rating > 0 && <Badge>{game.rating.toFixed(1)} BGG</Badge>}
       {game.minPlayers > 0 && <Badge>{game.minPlayers}{'\u2013'}{game.maxPlayers} players</Badge>}
       {game.playingTime > 0 && <Badge>{game.playingTime} min</Badge>}
+      {listLabels.map((label, index) => <Badge key={`${label}:${index}`} className="bg-accent-2 text-accent-2-ink">{label}</Badge>)}
     </div>
   );
+}
+
+function ReviewExcerpt({ review }: { review: PersonalReview }) {
+  const scores = [
+    review.rating && `${review.rating}/10`,
+    review.complexityScore && `Complexity ${review.complexityScore}/5`,
+    review.depthScore && `Depth ${review.depthScore}/5`,
+  ].filter(Boolean).join(' · ');
+  return <div className="text-xs text-text-muted">{scores && <strong className="block text-text">{scores}</strong>}{review.body && <p className="line-clamp-2 whitespace-pre-line">{review.body}</p>}</div>;
 }
 
 export function LibraryGame({
@@ -80,49 +108,55 @@ export function LibraryGame({
   onOpen,
   note,
   actions,
+  listLabels,
+  review,
 }: {
   game: GameCardGame;
   view: ViewMode;
   onOpen: () => void;
   note?: ReactNode;
   actions?: ReactNode;
+  listLabels?: string[];
+  review?: PersonalReview;
 }) {
   const image = game.thumbnail || game.image;
   if (view === 'list') {
     return (
-      <Card className="flex min-h-24 items-center gap-3 p-3 transition-transform hover:-translate-y-0.5">
-        <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-center gap-4 text-left">
+      <Card className="relative flex min-h-20 items-start gap-2 p-2 transition-transform hover:-translate-y-0.5">
+        <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-start gap-3 pr-1 text-left">
           {image ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={image} alt="" loading="lazy" decoding="async" className="h-20 w-20 shrink-0 rounded-sm object-cover" />
-          ) : <div className="h-20 w-20 shrink-0 rounded-sm bg-surface" />}
+            <img src={image} alt="" loading="lazy" decoding="async" className="size-16 shrink-0 rounded-sm object-cover" />
+          ) : <div className="size-16 shrink-0 rounded-sm bg-surface" />}
           <div className="min-w-0 flex-1">
             <h3 className="truncate font-display text-lg">{game.name}</h3>
-            <div className="mt-2"><GameMeta game={game} /></div>
-            {game.owners && game.owners.length > 0 && <p className="mt-2 text-xs text-text-muted">Owned by {game.owners.map((owner) => owner.displayName || owner.username).join(', ')}</p>}
-            {note && <div className="mt-2 text-xs text-text-muted">{note}</div>}
+            <div className="mt-1"><GameMeta game={game} listLabels={listLabels} /></div>
+            {game.owners && game.owners.length > 0 && <p className="mt-1 text-xs text-text-muted">Owned by {game.owners.map((owner) => owner.displayName || owner.username).join(', ')}</p>}
+            {review && <div className="mt-1"><ReviewExcerpt review={review} /></div>}
+            {note && <div className="mt-1 text-xs text-text-muted">{note}</div>}
           </div>
         </button>
-        {actions && <div className="flex shrink-0 flex-col items-end gap-2">{actions}</div>}
+        {actions && <div className="flex shrink-0 flex-col items-end gap-1">{actions}</div>}
       </Card>
     );
   }
 
   return (
-    <Card className="flex h-full flex-col overflow-hidden transition-transform hover:-translate-y-0.5">
+    <Card className="relative flex h-full flex-col overflow-hidden transition-transform hover:-translate-y-0.5">
       <button type="button" onClick={onOpen} className="flex flex-1 flex-col text-left">
         {image ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={image} alt="" loading="lazy" decoding="async" className="aspect-[4/3] w-full object-cover" />
         ) : <div className="aspect-[4/3] w-full bg-surface" />}
-        <div className="flex flex-1 flex-col gap-2 p-3">
+        <div className="flex flex-1 flex-col gap-1.5 p-2">
           <h3 className="line-clamp-2 font-display text-base leading-tight">{game.name}</h3>
-          <GameMeta game={game} />
+          <GameMeta game={game} listLabels={listLabels} />
           {game.owners && game.owners.length > 0 && <p className="text-xs text-text-muted">Owned by {game.owners.map((owner) => owner.displayName || owner.username).join(', ')}</p>}
-          {note && <div className="mt-auto pt-1 text-xs text-text-muted">{note}</div>}
+          {review && <div className="mt-auto"><ReviewExcerpt review={review} /></div>}
+          {note && <div className="text-xs text-text-muted">{note}</div>}
         </div>
       </button>
-      {actions && <div className="flex flex-wrap items-center gap-2 border-t border-border p-2">{actions}</div>}
+      {actions && <div className="absolute right-1 top-1 flex flex-wrap items-center justify-end gap-1 rounded-sm bg-surface-raised/90 p-1">{actions}</div>}
     </Card>
   );
 }
@@ -140,6 +174,8 @@ export function GameDetailsSheet({
   onMutate,
   playDefaults,
   onPlayLogged,
+  membershipLabels = [],
+  onReviewChanged,
 }: {
   game: GameCardGame | null;
   groupId?: string;
@@ -153,6 +189,8 @@ export function GameDetailsSheet({
   onMutate?: (path: string, init: RequestInit, success: string) => Promise<boolean>;
   playDefaults?: PlayLogDefaults;
   onPlayLogged?: () => void;
+  membershipLabels?: string[];
+  onReviewChanged?: () => void;
 }) {
   const [details, setDetails] = useState<CollectionGameDetails | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -230,6 +268,7 @@ export function GameDetailsSheet({
       });
       if (!response.ok) throw new Error(await responseError(response));
       await loadDetails(game);
+      onReviewChanged?.();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : 'Unable to save review');
     } finally {
@@ -245,6 +284,7 @@ export function GameDetailsSheet({
       const response = await apiFetch(`/bgg-account/games/${game.id}/review`, { method: 'DELETE' });
       if (!response.ok) throw new Error(await responseError(response));
       await loadDetails(game);
+      onReviewChanged?.();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : 'Unable to delete review');
     } finally {
@@ -289,7 +329,7 @@ export function GameDetailsSheet({
           )}
           <div className="min-w-0 flex-1">
             <DialogTitle className="font-display text-2xl">{game?.name}</DialogTitle>
-            {game && <p className="mt-1 text-sm text-text-muted">BGG rating {game.rating.toFixed(1)}</p>}
+            {game && <div className="mt-2"><GameMeta game={game} listLabels={membershipLabels} /></div>}
           </div>
           <DialogClose className="rounded-sm px-3 py-2 text-sm font-semibold text-text-muted">Close</DialogClose>
         </div>
@@ -460,6 +500,7 @@ interface CollectionSnapshot {
   wishlist: CollectionGame[];
   saved: CollectionGame[];
   lists: PersonalGameList[];
+  reviews: PersonalReview[];
 }
 
 let collectionSnapshot: CollectionSnapshot | null = null;
@@ -469,6 +510,7 @@ export function PersonalCollection() {
   const [wishlist, setWishlist] = useState<CollectionGame[]>(() => collectionSnapshot?.wishlist ?? []);
   const [saved, setSaved] = useState<CollectionGame[]>(() => collectionSnapshot?.saved ?? []);
   const [lists, setLists] = useState<PersonalGameList[]>(() => collectionSnapshot?.lists ?? []);
+  const [reviews, setReviews] = useState<PersonalReview[]>(() => collectionSnapshot?.reviews ?? []);
   const [linked, setLinked] = useState<boolean | null>(() => collectionSnapshot?.linked ?? null);
   const [tab, setTab] = useState<LibraryTab>('collection');
   const [expanded, setExpanded] = useState(false);
@@ -490,34 +532,40 @@ export function PersonalCollection() {
   const [newListType, setNewListType] = useState<'custom' | 'tier'>('custom');
   const [tierLabels, setTierLabels] = useState('S, A, B, C, D');
   const [createListOpen, setCreateListOpen] = useState(false);
+  const [renamingList, setRenamingList] = useState<PersonalGameList | null>(null);
+  const [renamedListName, setRenamedListName] = useState('');
+  const [editingListId, setEditingListId] = useState<string | null>(null);
   const [newTierLabel, setNewTierLabel] = useState('');
   const [tierInsertAfter, setTierInsertAfter] = useState('');
   const [draggedGameId, setDraggedGameId] = useState<number | null>(null);
 
   async function loadGames() {
-    const [accountResponse, gamesResponse, wishlistResponse, savedResponse, listsResponse] = await Promise.all([
+    const [accountResponse, gamesResponse, wishlistResponse, savedResponse, listsResponse, reviewsResponse] = await Promise.all([
       apiFetch('/bgg-account'),
       apiFetch('/bgg-account/games'),
       apiFetch('/bgg-account/wishlist'),
       apiFetch('/bgg-account/saved'),
       apiFetch('/bgg-account/lists'),
+      apiFetch('/bgg-account/reviews'),
     ]);
-    for (const response of [accountResponse, gamesResponse, wishlistResponse, savedResponse, listsResponse]) {
+    for (const response of [accountResponse, gamesResponse, wishlistResponse, savedResponse, listsResponse, reviewsResponse]) {
       if (!response.ok) throw new Error(await responseError(response));
     }
-    const [{ account }, nextCollection, nextWishlist, nextSaved, nextLists] = await Promise.all([
+    const [{ account }, nextCollection, nextWishlist, nextSaved, nextLists, nextReviews] = await Promise.all([
       accountResponse.json() as Promise<{ account: object | null }>,
       gamesResponse.json() as Promise<CollectionGame[]>,
       wishlistResponse.json() as Promise<CollectionGame[]>,
       savedResponse.json() as Promise<CollectionGame[]>,
       listsResponse.json() as Promise<PersonalGameList[]>,
+      reviewsResponse.json() as Promise<PersonalReview[]>,
     ]);
-    collectionSnapshot = { linked: Boolean(account), collection: nextCollection, wishlist: nextWishlist, saved: nextSaved, lists: nextLists };
+    collectionSnapshot = { linked: Boolean(account), collection: nextCollection, wishlist: nextWishlist, saved: nextSaved, lists: nextLists, reviews: nextReviews };
     setLinked(collectionSnapshot.linked);
     setCollection(nextCollection);
     setWishlist(nextWishlist);
     setSaved(nextSaved);
     setLists(nextLists);
+    setReviews(nextReviews);
   }
 
   useEffect(() => {
@@ -529,6 +577,7 @@ export function PersonalCollection() {
       setWishlist([]);
       setSaved([]);
       setLists([]);
+      setReviews([]);
       setMessage(reason instanceof Error ? reason.message : 'Unable to load your games');
       setLinked(false);
     });
@@ -599,7 +648,7 @@ export function PersonalCollection() {
       const response = await apiFetch(path, init);
       if (!response.ok) throw new Error(await responseError(response));
       await loadGames();
-      setMessage(success || null);
+      void success;
       return true;
     } catch (reason: unknown) {
       setMessage(reason instanceof Error ? reason.message : 'Unable to update your games');
@@ -631,6 +680,18 @@ export function PersonalCollection() {
     }
   }
 
+  async function renameList(event: FormEvent) {
+    event.preventDefault();
+    const name = renamedListName.trim();
+    if (!renamingList || !name || name === renamingList.name) return;
+    const renamed = await mutate(`/bgg-account/lists/${renamingList.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    }, '');
+    if (renamed) setRenamingList(null);
+  }
+
   const activeList = tab.startsWith('list:') ? lists.find((list) => `list:${list.id}` === tab) : undefined;
   const rawGames: Array<CollectionGame | PersonalListGame> = tab === 'collection' ? collection : tab === 'wishlist' ? wishlist : tab === 'saved' ? saved : activeList?.items ?? [];
   const hasMixedSources = !activeList && new Set((rawGames as CollectionGame[]).map((game) => game.source)).size > 1;
@@ -642,8 +703,17 @@ export function PersonalCollection() {
     return matchesName && matchesPlayers;
   }), activeList?.type === 'tier' ? 'position' : effectiveSort);
 
+  function labelsForGame(gameId: number): string[] {
+    const labels = gameMembershipLabels(gameId, collection, wishlist, saved, lists);
+    return activeList ? labels.defaults : labels.custom;
+  }
+
+  function reviewForGame(gameId: number): PersonalReview | undefined {
+    return reviews.find((review) => review.gameId === gameId);
+  }
+
   function listActions(game: PersonalListGame) {
-    if (!activeList) return null;
+    if (!activeList || editingListId !== activeList.id) return null;
     return (
       <>
         {activeList.type === 'tier' && (
@@ -661,6 +731,7 @@ export function PersonalCollection() {
   function changeTab(value: LibraryTab) {
     setTab(value);
     setExpanded(true);
+    setEditingListId(null);
     if (sort === 'priority' && value !== 'wishlist') setSort('name');
   }
 
@@ -763,14 +834,24 @@ export function PersonalCollection() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={Boolean(renamingList)} onOpenChange={(open) => { if (!open) setRenamingList(null); }}>
+        <DialogContent>
+          <div className="flex items-center justify-between gap-3"><DialogTitle className="font-display text-xl">Rename list</DialogTitle><DialogClose className="px-2 py-1 text-sm text-text-muted">Close</DialogClose></div>
+          <form onSubmit={renameList} className="mt-4 flex flex-col gap-3">
+            <Input required autoFocus maxLength={100} value={renamedListName} onChange={(event) => setRenamedListName(event.target.value)} aria-label="List name" />
+            <Button type="submit" disabled={busy || !renamedListName.trim() || renamedListName.trim() === renamingList?.name}>Rename</Button>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       <div className="flex flex-col gap-2">
       {listEntries.map((entry) => {
         const isExpanded = expanded && tab === entry.value;
         const entryList = entry.value.startsWith('list:') ? lists.find((list) => `list:${list.id}` === entry.value) : undefined;
-        return <CollectionListAccordion key={entry.value} label={entry.label} count={entry.count} expanded={isExpanded} onToggle={() => { if (tab === entry.value) setExpanded((current) => !current); else changeTab(entry.value); }} actions={isExpanded && entryList ? <Button type="button" variant="secondary" className="min-h-9 shrink-0 px-3" disabled={busy} onClick={() => { if (window.confirm(`Delete ${entryList.name}?`)) void mutate(`/bgg-account/lists/${entryList.id}`, { method: 'DELETE' }, `Deleted ${entryList.name}.`).then((deleted) => { if (deleted) { setTab('collection'); setExpanded(false); } }); }}>Delete list</Button> : undefined}>
+        return <CollectionListAccordion key={entry.value} label={entry.label} count={entry.count} expanded={isExpanded} onToggle={() => { if (tab === entry.value) setExpanded((current) => !current); else changeTab(entry.value); }} actions={entryList ? <DropdownMenu><DropdownMenuTrigger asChild><button type="button" className="flex min-h-10 w-10 items-center justify-center rounded-sm text-lg font-bold text-text-muted hover:bg-highlight" aria-label={`${entryList.name} settings`} disabled={busy}>...</button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onSelect={() => setEditingListId((current) => current === entryList.id ? null : entryList.id)}>{editingListId === entryList.id ? 'Exit edit mode' : 'Enter edit mode'}</DropdownMenuItem><DropdownMenuItem onSelect={() => { setRenamingList(entryList); setRenamedListName(entryList.name); }}>Rename list</DropdownMenuItem><DropdownMenuSeparator /><DropdownMenuItem className="text-accent" onSelect={() => { if (window.confirm(`Delete ${entryList.name}?`)) void mutate(`/bgg-account/lists/${entryList.id}`, { method: 'DELETE' }, '').then((deleted) => { if (deleted && tab === entry.value) { setTab('collection'); setExpanded(false); setEditingListId(null); } }); }}>Delete list</DropdownMenuItem></DropdownMenuContent></DropdownMenu> : undefined}>
         {tab === entry.value && <>
-      <Card className="p-4">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <Card className="p-3">
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <Input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Filter by title" aria-label="Filter by title" />
           <label className="flex flex-col gap-1 text-xs font-semibold text-text-muted">
             <span className="flex" aria-label="Player count">
@@ -792,8 +873,8 @@ export function PersonalCollection() {
         </div>
       </Card>
 
-      {activeList?.type === 'tier' && (
-        <Card className="p-4">
+      {activeList?.type === 'tier' && editingListId === activeList.id && (
+        <Card className="p-3">
           <form onSubmit={addTier} className="flex flex-col gap-2 sm:flex-row">
             <Input required maxLength={50} value={newTierLabel} onChange={(event) => setNewTierLabel(event.target.value)} placeholder="New tier label" />
             <select value={tierInsertAfter} onChange={(event) => setTierInsertAfter(event.target.value)} className={selectClass}><option value="">Insert at top</option>{activeList.tiers.map((tier) => <option key={tier} value={tier}>Insert after {tier}</option>)}</select>
@@ -813,7 +894,7 @@ export function PersonalCollection() {
             return <section key={tier} className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-2" onDragOver={(event) => event.preventDefault()} onDrop={(event) => dropGame(event, tierValue, allTierGames.length)}>
               <div className="flex flex-col items-center justify-start gap-1 rounded-sm bg-surface p-2 text-center">
                 <h3 className="break-all font-display text-lg leading-tight">{tier}</h3>
-                {tierValue !== null && <>
+                {tierValue !== null && editingListId === activeList.id && <>
                   <div className="flex">
                     <button type="button" disabled={busy || tierIndex === 0} onClick={() => { const tiers = [...activeList.tiers]; [tiers[tierIndex - 1], tiers[tierIndex]] = [tiers[tierIndex], tiers[tierIndex - 1]]; void updateTiers(tiers, `Moved tier ${tier}.`); }} className="size-7 text-lg text-text-muted disabled:opacity-30" aria-label={`Move ${tier} tier up`} title="Move up">&uarr;</button>
                     <button type="button" disabled={busy || tierIndex === activeList.tiers.length - 1} onClick={() => { const tiers = [...activeList.tiers]; [tiers[tierIndex], tiers[tierIndex + 1]] = [tiers[tierIndex + 1], tiers[tierIndex]]; void updateTiers(tiers, `Moved tier ${tier}.`); }} className="size-7 text-lg text-text-muted disabled:opacity-30" aria-label={`Move ${tier} tier down`} title="Move down">&darr;</button>
@@ -824,7 +905,8 @@ export function PersonalCollection() {
               <div className={`${view === 'compact' ? 'grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' : 'flex flex-col gap-3'} min-h-20 rounded-sm border border-dashed border-border p-2`}>
                 {tierGames.map((game) => {
                   const position = allTierGames.findIndex((candidate) => candidate.id === game.id);
-                  return <div key={game.id} draggable onDragStart={() => setDraggedGameId(game.id)} onDragEnd={() => setDraggedGameId(null)} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.stopPropagation(); dropGame(event, tierValue, position); }} className={draggedGameId === game.id ? 'opacity-50' : 'cursor-grab'}><LibraryGame game={game} view={view} onOpen={() => setSelected(game)} actions={listActions(game as PersonalListGame)} /></div>;
+                  const editing = editingListId === activeList.id;
+                  return <div key={game.id} draggable={editing} onDragStart={() => { if (editing) setDraggedGameId(game.id); }} onDragEnd={() => setDraggedGameId(null)} onDragOver={(event) => { if (editing) event.preventDefault(); }} onDrop={(event) => { if (!editing) return; event.stopPropagation(); dropGame(event, tierValue, position); }} className={editing ? (draggedGameId === game.id ? 'cursor-grab opacity-50' : 'cursor-grab') : ''}><LibraryGame game={game} view={view} onOpen={() => setSelected(game)} actions={listActions(game as PersonalListGame)} listLabels={labelsForGame(game.id)} review={reviewForGame(game.id)} /></div>;
                 })}
                 {tierGames.length === 0 && <p className="self-center text-sm text-text-muted">Drop games here</p>}
               </div>
@@ -834,7 +916,7 @@ export function PersonalCollection() {
       ) : (
         <div className={view === 'compact' ? 'grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6' : 'flex flex-col gap-3'}>
           {visibleGames.map((game) => {
-            return <LibraryGame key={game.id} game={game} view={view} onOpen={() => setSelected(game)} actions={activeList ? listActions(game as PersonalListGame) : undefined} />;
+            return <LibraryGame key={game.id} game={game} view={view} onOpen={() => setSelected(game)} actions={activeList ? listActions(game as PersonalListGame) : undefined} listLabels={labelsForGame(game.id)} review={reviewForGame(game.id)} />;
           })}
         </div>
       )}
@@ -843,7 +925,7 @@ export function PersonalCollection() {
       })}
       </div>
 
-      <GameDetailsSheet game={selected} open={Boolean(selected)} onOpenChange={(open) => { if (!open) setSelected(null); }} collectionGame={collection.find((game) => game.id === selected?.id)} wishlistGame={wishlist.find((game) => game.id === selected?.id)} savedGame={saved.find((game) => game.id === selected?.id)} lists={lists} busy={busy} onMutate={mutate} />
+      <GameDetailsSheet game={selected} open={Boolean(selected)} onOpenChange={(open) => { if (!open) setSelected(null); }} collectionGame={collection.find((game) => game.id === selected?.id)} wishlistGame={wishlist.find((game) => game.id === selected?.id)} savedGame={saved.find((game) => game.id === selected?.id)} lists={lists} busy={busy} onMutate={mutate} membershipLabels={selected ? [...gameMembershipLabels(selected.id, collection, wishlist, saved, lists).defaults, ...gameMembershipLabels(selected.id, collection, wishlist, saved, lists).custom] : []} onReviewChanged={() => { void loadGames(); }} />
     </div>
   );
 }
