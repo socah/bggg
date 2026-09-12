@@ -120,6 +120,48 @@ describe('PlayLogDialog', () => {
     expect(screen.getByLabelText('Bob (guest) score')).toBeTruthy();
   });
 
+  it('ignores an earlier player response after the editor is reopened', async () => {
+    const playResolvers: Array<(response: Response) => void> = [];
+    apiFetch.mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('/play-players')) return { ok: true, json: async () => roster } as Response;
+      if (url.endsWith('/plays/play-1')) {
+        return new Promise<Response>((resolve) => { playResolvers.push(resolve); });
+      }
+      if (url.endsWith('/uploads/plays/play-1')) return { ok: true, json: async () => [] } as Response;
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const props = {
+      inline: true,
+      game: { id: 42, name: 'Azul' } as never,
+      editPlayId: 'play-1',
+      defaults: { groupId: 'group-1', playedDate: '2026-09-10', userIds: [] },
+      onOpenChange: jest.fn(),
+    };
+    const { rerender } = render(<PlayLogDialog {...props} open />);
+    await waitFor(() => expect(playResolvers.length).toBeGreaterThan(0));
+    const initialRequestCount = playResolvers.length;
+
+    rerender(<PlayLogDialog {...props} open={false} />);
+    rerender(<PlayLogDialog {...props} open />);
+    await waitFor(() => expect(playResolvers.length).toBeGreaterThan(initialRequestCount));
+    for (const resolve of playResolvers.slice(initialRequestCount)) {
+      resolve({ ok: true, json: async () => ({ status: 'finished', durationMinutes: null, notes: null, players: [
+        { userId: 'user-1', guestPlayerId: null, isWinner: false, score: null },
+        { userId: null, guestPlayerId: 'guest-1', isWinner: false, score: null },
+      ] }) } as Response);
+    }
+    expect(await screen.findByLabelText('Bob (guest) score')).toBeTruthy();
+
+    for (const resolve of playResolvers.slice(0, initialRequestCount)) {
+      resolve({ ok: true, json: async () => ({ status: 'finished', durationMinutes: null, notes: null, players: [
+        { userId: 'user-1', guestPlayerId: null, isWinner: false, score: null },
+      ] }) } as Response);
+    }
+    await waitFor(() => expect(screen.getByLabelText('Bob (guest) score')).toBeTruthy());
+    expect(screen.getByLabelText('Bob (guest) score')).toBeTruthy();
+  });
+
   it('allows a failed immediate creation to be retried', async () => {
     let attempts = 0;
     apiFetch.mockImplementation(async (input, init) => {

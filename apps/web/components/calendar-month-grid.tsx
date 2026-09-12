@@ -49,12 +49,20 @@ function compactBadgeLabel(item: CalendarItem): string {
 function participantHue(id: string): number {
   let hash = 0;
   for (const character of id) hash = (hash * 31 + character.charCodeAt(0)) | 0;
-  return Math.abs(hash) % 360;
+  return (hash >>> 0) % 360;
 }
 
 function ParticipantIcons({ participants, leftAligned = false }: { participants: CalendarParticipant[]; leftAligned?: boolean }) {
+  const hues = new Map<string, number>();
+  const usedHues = new Set<number>();
+  for (const participant of [...participants].sort((left, right) => left.id.localeCompare(right.id))) {
+    let hue = participantHue(participant.id);
+    while (usedHues.has(hue)) hue = (hue + 137.508) % 360;
+    usedHues.add(hue);
+    hues.set(participant.id, hue);
+  }
   return <span className={`${leftAligned ? '' : 'ml-auto'} flex shrink-0 -space-x-1`} aria-label={participants.map((participant) => participant.name).join(', ')}>
-    {participants.map((participant) => <Avatar key={participant.id} title={participant.name} className="size-5 border border-surface-raised text-[0.55rem] text-white" style={{ backgroundColor: `hsl(${participantHue(participant.id)} 58% 42%)` }}><AvatarFallback>{participant.name.charAt(0).toUpperCase()}</AvatarFallback></Avatar>)}
+    {participants.map((participant) => <Avatar key={participant.id} title={participant.name} className="relative size-5 border border-surface-raised text-[0.55rem] text-white" style={{ backgroundColor: `hsl(${hues.get(participant.id)} 58% 42%)` }}><AvatarFallback>{participant.name.charAt(0).toUpperCase()}</AvatarFallback>{participant.isWinner && <svg aria-label="Winner" viewBox="0 0 16 16" className="absolute right-0 top-0 size-2.5 fill-amber-300 stroke-amber-950 stroke-[0.8]"><path d="M2 5.5 5 8l3-5 3 5 3-2.5-1 7H3l-1-7Z" /></svg>}</Avatar>)}
   </span>;
 }
 
@@ -173,7 +181,7 @@ function WeekRowExpander({
                   <img src={artwork} alt="" className="size-8 rounded-sm object-cover" />
                 ) : <span className="flex size-8 items-center justify-center rounded-sm bg-accent-2 font-display text-accent-2-ink">{play.game.name.charAt(0)}</span>}
                 <strong className="min-w-0 truncate">{expanded ? `${play.game.name} play details` : play.game.name}</strong>
-                <ParticipantIcons participants={play.sessionParticipants} leftAligned />
+                <ParticipantIcons participants={play.playParticipants} leftAligned />
                 {play.durationMinutes && <span className="shrink-0 text-xs text-text-muted">{play.durationMinutes} min</span>}
                 {play.status === 'abandoned' && <span className="shrink-0 text-xs font-semibold text-accent">Abandoned</span>}
                 <span className="flex-1" />

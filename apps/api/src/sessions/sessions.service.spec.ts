@@ -127,3 +127,112 @@ describe('SessionsService play creation', () => {
     expect(result.sessionId).toBe('session-1');
   });
 });
+
+describe('SessionsService play summaries', () => {
+  it('keeps play participants separate when games share a session', async () => {
+    const session = { id: 'session-1', groupId: 'group-1', proposalId: null, placeId: null, playedAt: new Date('2026-09-10T00:00:00Z') };
+    const plays = [
+      { id: 'play-1', sessionId: session.id, gameId: 1, status: 'finished', durationMinutes: null, notes: null, loggedBy: 'user-1' },
+      { id: 'play-2', sessionId: session.id, gameId: 2, status: 'finished', durationMinutes: null, notes: null, loggedBy: 'user-1' },
+    ];
+    const players = [
+      { id: 'player-1', sessionId: session.id, userId: 'user-1', guestPlayerId: null },
+      { id: 'player-2', sessionId: session.id, userId: null, guestPlayerId: 'guest-1' },
+      { id: 'player-3', sessionId: session.id, userId: null, guestPlayerId: 'guest-2' },
+    ];
+    const repositories = new Map<unknown, { findBy: jest.Mock }>([
+      [PlaySessionGame, { findBy: jest.fn().mockResolvedValue(plays) }],
+      [PlaySessionPlayer, { findBy: jest.fn().mockResolvedValue(players) }],
+      [PlayResult, { findBy: jest.fn().mockResolvedValue([
+        { playId: 'play-1', sessionPlayerId: 'player-1', isWinner: true },
+        { playId: 'play-1', sessionPlayerId: 'player-2', isWinner: false },
+        { playId: 'play-2', sessionPlayerId: 'player-1', isWinner: false },
+        { playId: 'play-2', sessionPlayerId: 'player-3', isWinner: true },
+      ]) }],
+    ]);
+    const service = new SessionsService(
+      { findBy: jest.fn().mockResolvedValue([{ id: 1, name: 'Azul' }, { id: 2, name: 'Cascadia' }]) } as never,
+      { findOneBy: jest.fn().mockResolvedValue({ role: 'member' }) } as never,
+      { findBy: jest.fn().mockResolvedValue([{ id: 'guest-1', name: 'Bob' }, { id: 'guest-2', name: 'Carol' }]) } as never,
+      { find: jest.fn().mockResolvedValue([session]) } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { findBy: jest.fn() } as never,
+      {} as never,
+      { findOne: jest.fn().mockResolvedValue({ id: 'group-1', name: 'Thursday Games' }), getMembers: jest.fn().mockResolvedValue([{ id: 'user-1', username: 'alice', displayName: 'Alice' }]) } as never,
+      { getRepository: jest.fn((entity) => repositories.get(entity)) } as never,
+      {} as never,
+    );
+
+    const result = await service.listPlays('group-1', 'user-1');
+
+    expect(result[0].sessionParticipants.map((player) => player.name)).toEqual(['Alice', 'Bob', 'Carol']);
+    expect(result[0].playParticipants.map((player) => player.name)).toEqual(['Alice', 'Bob']);
+    expect(result[0].playParticipants.map((player) => player.isWinner)).toEqual([true, false]);
+    expect(result[1].playParticipants.map((player) => player.name)).toEqual(['Alice', 'Carol']);
+  });
+});
+
+describe('SessionsService play participant cleanup', () => {
+  it('removes only players no longer referenced by any play in the session', async () => {
+    const session = { id: 'session-1', groupId: 'group-1' };
+    const play = { id: 'play-1', sessionId: session.id, loggedBy: 'user-1', status: 'finished', durationMinutes: null, notes: null };
+    const alice = { id: 'player-1', sessionId: session.id, userId: 'user-1', guestPlayerId: null };
+    const bob = { id: 'player-2', sessionId: session.id, userId: null, guestPlayerId: 'guest-1' };
+    const carol = { id: 'player-3', sessionId: session.id, userId: null, guestPlayerId: 'guest-2' };
+    const participantRepo = {
+      findOneBy: jest.fn().mockResolvedValue(alice),
+      findBy: jest.fn().mockResolvedValue([alice, bob, carol]),
+      create: jest.fn((value) => value),
+      save: jest.fn(async (value) => value),
+      remove: jest.fn(async (value) => value),
+    };
+    const resultRepo = {
+      create: jest.fn((value) => value),
+      delete: jest.fn().mockResolvedValue({ affected: 2 }),
+      save: jest.fn(async (value) => value),
+      findBy: jest.fn().mockResolvedValue([
+        { playId: 'play-1', sessionPlayerId: alice.id },
+        { playId: 'play-2', sessionPlayerId: carol.id },
+      ]),
+    };
+    const playRepo = {
+      findOneBy: jest.fn().mockResolvedValue(play),
+      save: jest.fn(async (value) => value),
+    };
+    const manager = {
+      getRepository: jest.fn((entity) => {
+        if (entity === PlaySessionPlayer) return participantRepo;
+        if (entity === PlayResult) return resultRepo;
+        if (entity === PlaySessionGame) return playRepo;
+        throw new Error('Unexpected repository');
+      }),
+    };
+    const dataSource = {
+      getRepository: jest.fn((entity) => entity === PlaySessionGame ? playRepo : null),
+      transaction: jest.fn(async (callback) => callback(manager)),
+    };
+    const service = new SessionsService(
+      {} as never,
+      { findOneBy: jest.fn().mockResolvedValue({ role: 'member' }), findBy: jest.fn().mockResolvedValue([{ groupId: 'group-1', userId: 'user-1' }]) } as never,
+      { findBy: jest.fn().mockResolvedValue([]) } as never,
+      { findOneBy: jest.fn().mockResolvedValue(session) } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { findOne: jest.fn().mockResolvedValue({ id: 'group-1' }) } as never,
+      dataSource as never,
+      {} as never,
+    );
+
+    await service.updatePlay('group-1', play.id, {
+      status: 'finished',
+      players: [{ userId: 'user-1' }],
+    }, 'user-1');
+
+    expect(participantRepo.remove).toHaveBeenCalledWith([bob]);
+  });
+});

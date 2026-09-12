@@ -99,6 +99,7 @@ export function PlayLogDialog({
   const [creationFailed, setCreationFailed] = useState(false);
   const [creationAttempt, setCreationAttempt] = useState(0);
   const rosterRequest = useRef(0);
+  const playRequest = useRef(0);
   const createStarted = useRef(false);
   const defaultUsersKey = defaults?.userIds.join(',') ?? '';
   const defaultProposalId = defaults?.proposalId;
@@ -138,23 +139,30 @@ export function PlayLogDialog({
 
   useEffect(() => {
     if (!open || !editPlayId || !defaults?.groupId) return;
+    const requestId = ++playRequest.current;
     apiFetch(`/groups/${defaults.groupId}/plays/${editPlayId}`, { cache: 'no-store' })
       .then(async (response) => {
         if (!response.ok) throw new Error('Unable to load this play');
         return response.json() as Promise<{ status: 'finished' | 'abandoned'; durationMinutes: number | null; notes: string | null; players: Array<{ userId: string | null; guestPlayerId: string | null; isWinner: boolean; score: string | null }> }>;
       })
       .then((play) => {
+        if (requestId !== playRequest.current) return;
         setStatus(play.status);
         setDuration(play.durationMinutes ? String(play.durationMinutes) : '');
         setNotes(play.notes ?? '');
         setPlayers(Object.fromEntries(play.players.map((player) => [player.userId ? `user:${player.userId}` : `guest:${player.guestPlayerId}`, { selected: true, isWinner: player.isWinner, score: player.score ?? '' }])));
       })
-      .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Unable to load this play'))
-      .finally(() => setLoadingPlay(false));
+      .catch((reason: unknown) => {
+        if (requestId === playRequest.current) setError(reason instanceof Error ? reason.message : 'Unable to load this play');
+      })
+      .finally(() => {
+        if (requestId === playRequest.current) setLoadingPlay(false);
+      });
     apiFetch(`/uploads/plays/${editPlayId}`)
       .then((response) => response.ok ? response.json() as Promise<Array<{ id: string; url: string }>> : [])
       .then(setExistingPhotos)
       .catch(() => setExistingPhotos([]));
+    return () => { playRequest.current += 1; };
   }, [open, editPlayId, defaults?.groupId]);
 
   const loadRoster = useCallback(async (currentGroupId: string) => {

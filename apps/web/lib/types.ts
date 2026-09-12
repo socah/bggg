@@ -17,6 +17,7 @@ export type ProposalStatus = 'collecting' | 'confirming' | 'confirmed' | 'cancel
 export interface CalendarParticipant {
   id: string;
   name: string;
+  isWinner?: boolean;
 }
 
 export interface Proposal {
@@ -212,6 +213,7 @@ export interface CalendarPlaySummary {
   notes: string | null;
   canEdit: boolean;
   sessionParticipants: CalendarParticipant[];
+  playParticipants: CalendarParticipant[];
   sessionPlace: { id: string; name: string } | null;
 }
 

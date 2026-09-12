@@ -193,6 +193,7 @@ describe('CalendarMonthGrid', () => {
         notes: null,
         canEdit: true,
         sessionParticipants: [{ id: 'user:user-1', name: 'Alice' }, { id: 'guest:guest-1', name: 'Bob' }],
+        playParticipants: [{ id: 'user:user-1', name: 'Alice', isWinner: true }, { id: 'guest:guest-1', name: 'Bob', isWinner: false }],
         sessionPlace: null,
       }],
     } as Response);
@@ -207,6 +208,76 @@ describe('CalendarMonthGrid', () => {
     expect(apiFetch).toHaveBeenCalledWith('/groups/group-1/plays', { cache: 'no-store' });
 
     fireEvent.click(screen.getByRole('button', { name: 'Played Azul - Thursday Games' }));
+    const playRow = screen.getByText('Azul play details').closest('button')!;
+    expect(within(within(playRow).getByTitle('Alice')).getByLabelText('Winner')).toBeTruthy();
+    expect(within(within(playRow).getByTitle('Bob')).queryByLabelText('Winner')).toBeNull();
     expect(screen.getByText('Inline logged play play-1')).toBeTruthy();
+  });
+
+  it('shows only each play participants when plays share a session', async () => {
+    const basePlay = {
+      sessionId: 'session-1',
+      proposalId: null,
+      groupId: 'group-1',
+      groupName: 'Thursday Games',
+      playedDate: '2026-05-01',
+      status: 'finished' as const,
+      durationMinutes: null,
+      notes: null,
+      canEdit: true,
+      sessionParticipants: [
+        { id: 'user:user-1', name: 'Alice' },
+        { id: 'guest:guest-1', name: 'Bob' },
+        { id: 'guest:guest-2', name: 'Carol' },
+      ],
+      sessionPlace: null,
+    };
+    apiFetch.mockResolvedValue({
+      ok: true,
+      json: async () => [
+        { ...basePlay, id: 'play-1', game: { id: 1, name: 'Azul', image: null, thumbnail: null }, playParticipants: basePlay.sessionParticipants.slice(0, 2) },
+        { ...basePlay, id: 'play-2', game: { id: 2, name: 'Cascadia', image: null, thumbnail: null }, playParticipants: [basePlay.sessionParticipants[0], basePlay.sessionParticipants[2]] },
+      ],
+    } as Response);
+
+    render(<CalendarMonthGrid proposals={[]} groups={[{ id: 'group-1', name: 'Thursday Games', ownerId: 'user-1', isSolo: false, createdAt: '' }]} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'May 1, 2026, 0 proposals, 2 logged plays' }));
+
+    const azulRow = screen.getByText('Azul').closest('button')!;
+    const cascadiaRow = screen.getByText('Cascadia').closest('button')!;
+    expect(within(azulRow).getByLabelText('Alice, Bob')).toBeTruthy();
+    expect(within(azulRow).queryByTitle('Carol')).toBeNull();
+    expect(within(cascadiaRow).getByLabelText('Alice, Carol')).toBeTruthy();
+    expect(within(cascadiaRow).queryByTitle('Bob')).toBeNull();
+  });
+
+  it('resolves avatar colour collisions within a participant list', async () => {
+    apiFetch.mockResolvedValue({
+      ok: true,
+      json: async () => [{
+        id: 'play-collision',
+        sessionId: 'session-collision',
+        proposalId: null,
+        groupId: 'group-1',
+        groupName: 'Thursday Games',
+        game: { id: 1, name: 'Azul', image: null, thumbnail: null },
+        playedDate: '2026-05-01',
+        status: 'finished',
+        durationMinutes: null,
+        notes: null,
+        canEdit: true,
+        sessionParticipants: [],
+        playParticipants: [{ id: 'user:Aa', name: 'Alex' }, { id: 'user:BB', name: 'Amy' }],
+        sessionPlace: null,
+      }],
+    } as Response);
+
+    render(<CalendarMonthGrid proposals={[]} groups={[{ id: 'group-1', name: 'Thursday Games', ownerId: 'user-1', isSolo: false, createdAt: '' }]} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'May 1, 2026, 0 proposals, 1 logged play' }));
+
+    const row = screen.getByText('Azul').closest('button')!;
+    expect(within(row).getByTitle('Alex').textContent).toBe('A');
+    expect(within(row).getByTitle('Amy').textContent).toBe('A');
+    expect(within(row).getByTitle('Alex').getAttribute('style')).not.toBe(within(row).getByTitle('Amy').getAttribute('style'));
   });
 });

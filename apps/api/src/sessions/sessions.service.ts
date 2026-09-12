@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, DataSource, In, IsNull, Repository } from 'typeorm';
+import { Between, DataSource, EntityManager, In, IsNull, Repository } from 'typeorm';
 import { Game } from '../games/game.entity';
 import { GroupMember } from '../groups/group-member.entity';
 import { GroupsService } from '../groups/groups.service';
@@ -160,6 +160,9 @@ export class SessionsService {
     const plays = await this.dataSource.getRepository(PlaySessionGame).findBy({ sessionId: In(sessions.map((session) => session.id)) });
     const games = plays.length ? await this.games.findBy({ id: In([...new Set(plays.map((play) => play.gameId))]) }) : [];
     const sessionPlayers = await this.dataSource.getRepository(PlaySessionPlayer).findBy({ sessionId: In(sessions.map((session) => session.id)) });
+    const results = plays.length
+      ? await this.dataSource.getRepository(PlayResult).findBy({ playId: In(plays.map((play) => play.id)) })
+      : [];
     const guestIds = sessionPlayers.flatMap((player) => player.guestPlayerId ? [player.guestPlayerId] : []);
     const [groupMembers, guestPlayers] = await Promise.all([
       this.groupsService.getMembers(groupId, userId),
@@ -172,7 +175,16 @@ export class SessionsService {
     const placeById = new Map(places.map((place) => [place.id, place]));
     const memberById = new Map(groupMembers.map((member) => [member.id, member]));
     const guestById = new Map(guestPlayers.map((guest) => [guest.id, guest]));
+    const participantById = new Map(sessionPlayers.map((player) => [player.id, player]));
     const membership = await this.members.findOneBy({ groupId, userId });
+    const participantSummary = (player: PlaySessionPlayer) => {
+      if (player.userId) {
+        const member = memberById.get(player.userId);
+        return { id: `user:${player.userId}`, name: member?.displayName || member?.username || 'Unknown member' };
+      }
+      const guest = guestById.get(player.guestPlayerId!);
+      return { id: `guest:${player.guestPlayerId}`, name: guest?.name || 'Guest player' };
+    };
     return plays.map((play) => ({
       id: play.id,
       sessionId: play.sessionId,
@@ -188,14 +200,13 @@ export class SessionsService {
       sessionPlace: sessionById.get(play.sessionId)!.placeId
         ? { id: sessionById.get(play.sessionId)!.placeId!, name: placeById.get(sessionById.get(play.sessionId)!.placeId!)?.name ?? 'Unknown place' }
         : null,
-      sessionParticipants: sessionPlayers.filter((player) => player.sessionId === play.sessionId).map((player) => {
-        if (player.userId) {
-          const member = memberById.get(player.userId);
-          return { id: `user:${player.userId}`, name: member?.displayName || member?.username || 'Unknown member' };
-        }
-        const guest = guestById.get(player.guestPlayerId!);
-        return { id: `guest:${player.guestPlayerId}`, name: guest?.name || 'Guest player' };
-      }),
+      sessionParticipants: sessionPlayers.filter((player) => player.sessionId === play.sessionId).map(participantSummary),
+      playParticipants: results
+        .filter((result) => result.playId === play.id)
+        .flatMap((result) => {
+          const participant = participantById.get(result.sessionPlayerId);
+          return participant ? [{ ...participantSummary(participant), isWinner: result.isWinner }] : [];
+        }),
     })).sort((a, b) => b.playedDate.localeCompare(a.playedDate));
   }
 
@@ -434,6 +445,7 @@ export class SessionsService {
       }
       await resultRepo.delete({ playId });
       await resultRepo.save(results);
+      await this.removeOrphanedSessionPlayers(entityManager, session.id);
       play.status = dto.status ?? play.status;
       if (dto.durationMinutes !== undefined) play.durationMinutes = dto.durationMinutes;
       if (dto.notes !== undefined) play.notes = dto.notes?.trim() || null;
@@ -460,7 +472,21 @@ export class SessionsService {
       const remaining = await entityManager.getRepository(PlaySessionGame).countBy({ sessionId: session.id });
       if (remaining === 0 && !session.proposalId) {
         await entityManager.getRepository(PlaySession).remove(session);
+      } else {
+        await this.removeOrphanedSessionPlayers(entityManager, session.id);
       }
     });
+  }
+
+  private async removeOrphanedSessionPlayers(entityManager: EntityManager, sessionId: string): Promise<void> {
+    const participantRepo = entityManager.getRepository(PlaySessionPlayer);
+    const participants = await participantRepo.findBy({ sessionId });
+    if (participants.length === 0) return;
+    const results = await entityManager.getRepository(PlayResult).findBy({
+      sessionPlayerId: In(participants.map((participant) => participant.id)),
+    });
+    const referencedIds = new Set(results.map((result) => result.sessionPlayerId));
+    const orphaned = participants.filter((participant) => !referencedIds.has(participant.id));
+    if (orphaned.length > 0) await participantRepo.remove(orphaned);
   }
 }
