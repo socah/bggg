@@ -70,5 +70,10 @@ describe('MemberCollection', () => {
     expect(screen.queryByText('Sync BGG')).toBeNull();
     expect(screen.queryByLabelText('Create a game list')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Delete list' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Wishlist (1)' }));
+    const sort = screen.getByLabelText('Sort by') as HTMLSelectElement;
+    expect(sort.value).toBe('display:priority');
+    expect(Array.from(sort.options, (option) => option.textContent)).toEqual(expect.arrayContaining(['User rating', 'Complexity', 'Depth']));
   });
 });

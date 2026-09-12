@@ -9,10 +9,10 @@ import { useGroupLibrary } from '@/hooks/use-group-library';
 import type { GameCardGame } from '@/lib/types';
 
 type ViewMode = 'compact' | 'list';
-type SortMode = 'name' | 'rating' | 'players' | 'time' | 'year';
+type SortMode = 'name' | 'rating' | 'userRating' | 'complexity' | 'depth' | 'players' | 'time' | 'year';
 
 const sortLabels: Record<SortMode, string> = {
-  name: 'Name', rating: 'BGG rating', players: 'Minimum players', time: 'Playing time', year: 'Year published',
+  name: 'Name', rating: 'BGG rating', userRating: 'Average user rating', complexity: 'Average complexity', depth: 'Average depth', players: 'Minimum players', time: 'Playing time', year: 'Year published',
 };
 
 export function GroupLibrary({ groupId }: { groupId: string }) {
@@ -28,6 +28,9 @@ export function GroupLibrary({ groupId }: { groupId: string }) {
       && (!count || (game.minPlayers <= count && game.maxPlayers >= count)))
     .sort((a, b) => {
       if (sort === 'rating') return b.rating - a.rating || a.name.localeCompare(b.name);
+      if (sort === 'userRating') return (b.averageUserRating ?? -1) - (a.averageUserRating ?? -1) || a.name.localeCompare(b.name);
+      if (sort === 'complexity') return (b.averageComplexity ?? -1) - (a.averageComplexity ?? -1) || a.name.localeCompare(b.name);
+      if (sort === 'depth') return (b.averageDepth ?? -1) - (a.averageDepth ?? -1) || a.name.localeCompare(b.name);
       if (sort === 'players') return a.minPlayers - b.minPlayers || a.maxPlayers - b.maxPlayers || a.name.localeCompare(b.name);
       if (sort === 'time') return a.playingTime - b.playingTime || a.name.localeCompare(b.name);
       if (sort === 'year') return b.yearPublished - a.yearPublished || a.name.localeCompare(b.name);
@@ -72,7 +75,7 @@ export function GroupLibrary({ groupId }: { groupId: string }) {
           </span>
           <select aria-label="Sort by" value={`display:${sort}`} onChange={(event) => setSort(event.target.value as SortMode)} className="min-h-10 rounded-sm border-[length:var(--border-w)] border-border bg-surface-raised px-2 text-sm text-text">
             <option value={`display:${sort}`} hidden>Sort by: {sortLabels[sort]}</option>
-            <option value="name">Name</option><option value="rating">BGG rating</option><option value="players">Minimum players</option><option value="time">Playing time</option><option value="year">Year published</option>
+            <option value="name">Name</option><option value="rating">BGG rating</option><option value="userRating">Average user rating</option><option value="complexity">Average complexity</option><option value="depth">Average depth</option><option value="players">Minimum players</option><option value="time">Playing time</option><option value="year">Year published</option>
           </select>
           <div className="flex min-h-10 overflow-hidden rounded-sm border-[length:var(--border-w)] border-border" aria-label="View style">
             <button type="button" aria-pressed={view === 'compact'} onClick={() => setView('compact')} className={`flex-1 px-3 text-sm font-semibold ${view === 'compact' ? 'bg-accent-2 text-accent-2-ink' : 'text-text-muted'}`}>Grid</button>
@@ -85,7 +88,7 @@ export function GroupLibrary({ groupId }: { groupId: string }) {
       </div>
       {visibleGames.length === 0 && <Card className="p-8 text-center text-sm text-text-muted">No games match this view.</Card>}
       <div className={view === 'compact' ? 'grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6' : 'flex flex-col gap-3'}>
-        {visibleGames.map((game) => <LibraryGame key={game.id} game={game} view={view} onOpen={() => setSelected(game)} />)}
+        {visibleGames.map((game) => <LibraryGame key={game.id} game={game} view={view} onOpen={() => setSelected(game)} averageReview={{ rating: game.averageUserRating, complexity: game.averageComplexity, depth: game.averageDepth }} />)}
       </div>
       <GameDetailsSheet game={selected} groupId={groupId} open={Boolean(selected)} onOpenChange={(open) => { if (!open) setSelected(null); }} />
     </div>

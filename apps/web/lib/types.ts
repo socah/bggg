@@ -255,4 +255,7 @@ export interface RsvpInput {
 export interface GroupLibraryGame extends GameCardGame {
   bggId: number;
   owners?: PublicUserIdentity[];
+  averageUserRating: number | null;
+  averageComplexity: number | null;
+  averageDepth: number | null;
 }

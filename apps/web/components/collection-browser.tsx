@@ -9,12 +9,22 @@ import type { CollectionGame, GameCardGame, PersonalGameList, PersonalListGame, 
 
 type LibraryTab = 'collection' | 'wishlist' | 'saved' | `list:${string}`;
 type ViewMode = 'compact' | 'list';
-type SortMode = 'name' | 'rating' | 'players' | 'time' | 'year';
-const sortLabels: Record<SortMode, string> = { name: 'Name', rating: 'BGG rating', players: 'Minimum players', time: 'Playing time', year: 'Year published' };
+type SortMode = 'priority' | 'name' | 'rating' | 'userRating' | 'complexity' | 'depth' | 'players' | 'time' | 'year';
+const sortLabels: Record<SortMode, string> = { priority: 'Wishlist priority', name: 'Name', rating: 'BGG rating', userRating: 'User rating', complexity: 'Complexity', depth: 'Depth', players: 'Minimum players', time: 'Playing time', year: 'Year published' };
 
-function sortGames(games: Array<CollectionGame | PersonalListGame>, sort: SortMode) {
+function sortGames(games: Array<CollectionGame | PersonalListGame>, sort: SortMode, reviews: PersonalReview[]) {
+  const reviewByGameId = new Map(reviews.map((review) => [review.gameId, review]));
   return [...games].sort((a, b) => {
+    if (sort === 'priority') {
+      const aPriority = 'wishlistPriority' in a && typeof a.wishlistPriority === 'number' ? a.wishlistPriority : 99;
+      const bPriority = 'wishlistPriority' in b && typeof b.wishlistPriority === 'number' ? b.wishlistPriority : 99;
+      return aPriority - bPriority || a.name.localeCompare(b.name);
+    }
     if (sort === 'rating') return b.rating - a.rating || a.name.localeCompare(b.name);
+    if (sort === 'userRating' || sort === 'complexity' || sort === 'depth') {
+      const field = sort === 'userRating' ? 'rating' : sort === 'complexity' ? 'complexityScore' : 'depthScore';
+      return (reviewByGameId.get(b.id)?.[field] ?? -1) - (reviewByGameId.get(a.id)?.[field] ?? -1) || a.name.localeCompare(b.name);
+    }
     if (sort === 'players') return a.minPlayers - b.minPlayers || a.maxPlayers - b.maxPlayers || a.name.localeCompare(b.name);
     if (sort === 'time') return a.playingTime - b.playingTime || a.name.localeCompare(b.name);
     if (sort === 'year') return b.yearPublished - a.yearPublished || a.name.localeCompare(b.name);
@@ -54,7 +64,7 @@ export function CollectionBrowser({
   const visibleGames = sortGames(games.filter((game) =>
     game.name.toLocaleLowerCase().includes(filter.trim().toLocaleLowerCase())
       && (!count || (game.minPlayers <= count && game.maxPlayers >= count)),
-  ), sort);
+  ), sort, reviews);
 
   function labelsForGame(gameId: number): string[] {
     const labels = gameMembershipLabels(gameId, collection, wishlist, saved, lists);
@@ -70,6 +80,17 @@ export function CollectionBrowser({
     setPlayerCount(next > 0 ? String(next) : '');
   }
 
+  function toggleList(value: LibraryTab) {
+    if (tab === value) {
+      setExpanded((current) => !current);
+      return;
+    }
+    setTab(value);
+    setExpanded(true);
+    if (value === 'wishlist') setSort('priority');
+    else if (sort === 'priority') setSort('name');
+  }
+
   const listEntries: Array<{ value: LibraryTab; label: string; count: number }> = [
     { value: 'collection', label: 'Collection', count: collection.length },
     { value: 'wishlist', label: 'Wishlist', count: wishlist.length },
@@ -82,7 +103,7 @@ export function CollectionBrowser({
       <div className="flex flex-col gap-2">
       {listEntries.map((entry) => {
         const isExpanded = expanded && tab === entry.value;
-        return <CollectionListAccordion key={entry.value} label={entry.label} count={entry.count} expanded={isExpanded} onToggle={() => { if (tab === entry.value) setExpanded((current) => !current); else { setTab(entry.value); setExpanded(true); } }}>
+        return <CollectionListAccordion key={entry.value} label={entry.label} count={entry.count} expanded={isExpanded} onToggle={() => toggleList(entry.value)}>
         {tab === entry.value && <>
       <Card className="p-3">
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -97,7 +118,7 @@ export function CollectionBrowser({
           <label className="flex flex-col gap-1 text-xs font-semibold text-text-muted">
             <select aria-label="Sort by" value={`display:${sort}`} onChange={(event) => setSort(event.target.value as SortMode)} className="min-h-10 rounded-sm border-[length:var(--border-w)] border-border bg-surface-raised px-2 text-sm text-text">
               <option value={`display:${sort}`} hidden>Sort by: {sortLabels[sort]}</option>
-              <option value="name">Name</option><option value="rating">BGG rating</option><option value="players">Minimum players</option><option value="time">Playing time</option><option value="year">Year published</option>
+              {tab === 'wishlist' && <option value="priority">Wishlist priority</option>}<option value="name">Name</option><option value="rating">BGG rating</option><option value="userRating">User rating</option><option value="complexity">Complexity</option><option value="depth">Depth</option><option value="players">Minimum players</option><option value="time">Playing time</option><option value="year">Year published</option>
             </select>
           </label>
           <div className="flex min-h-10 self-end overflow-hidden rounded-sm border-[length:var(--border-w)] border-border" aria-label="View style">

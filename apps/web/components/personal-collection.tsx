@@ -8,6 +8,7 @@ import { Dialog, DialogClose, DialogContent, DialogSheetContent, DialogTitle } f
 import { Input } from '@/components/ui/input';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { CollectionListAccordion } from '@/components/collection-list-accordion';
+import { GameArtwork } from '@/components/game-artwork';
 import { UserIdentityLink } from '@/components/user-identity-link';
 import { PlayLogDialog, type PlayLogDefaults } from '@/components/play-log-dialog';
 import { DisclosureChevron } from '@/components/ui/disclosure-chevron';
@@ -25,7 +26,7 @@ import type {
 
 type LibraryTab = 'collection' | 'wishlist' | 'saved' | `list:${string}`;
 type ViewMode = 'compact' | 'list';
-type SortMode = 'priority' | 'source' | 'position' | 'name' | 'rating' | 'players' | 'time' | 'year' | 'added';
+type SortMode = 'priority' | 'source' | 'position' | 'name' | 'rating' | 'userRating' | 'complexity' | 'depth' | 'players' | 'time' | 'year' | 'added';
 
 const WISHLIST_PRIORITIES: Record<number, string> = {
   1: 'Must have',
@@ -50,7 +51,7 @@ const RATING_SCALE: Record<number, string> = {
 
 const WEIGHT_SCALE = ['Light', 'Medium Light', 'Medium', 'Medium Heavy', 'Heavy'];
 const selectClass = 'min-h-10 rounded-sm border-[length:var(--border-w)] border-border bg-surface-raised px-2 text-sm text-text';
-const SORT_LABELS: Record<SortMode, string> = { priority: 'Wishlist priority', source: 'Source', position: 'Position', name: 'Name', rating: 'BGG rating', players: 'Minimum players', time: 'Playing time', year: 'Year published', added: 'Recently added' };
+const SORT_LABELS: Record<SortMode, string> = { priority: 'Wishlist priority', source: 'Source', position: 'Position', name: 'Name', rating: 'BGG rating', userRating: 'User rating', complexity: 'Complexity', depth: 'Depth', players: 'Minimum players', time: 'Playing time', year: 'Year published', added: 'Recently added' };
 
 function AnimatedDisclosure({ expanded, children }: { expanded: boolean; children: ReactNode }) {
   return <div className={`grid transition-[grid-template-rows,opacity] duration-300 ease-in-out ${expanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`} aria-hidden={!expanded} inert={!expanded}><div className="overflow-hidden">{children}</div></div>;
@@ -83,11 +84,11 @@ export function gameMembershipLabels(
 }
 
 function GameMeta({ game, listLabels = [] }: { game: GameCardGame; listLabels?: string[] }) {
+  const playerRange = game.minPlayers === game.maxPlayers ? String(game.minPlayers) : `${game.minPlayers}–${game.maxPlayers}`;
   return (
     <div className="flex flex-wrap gap-1">
-      {game.rating > 0 && <Badge>{game.rating.toFixed(1)} BGG</Badge>}
-      {game.minPlayers > 0 && <Badge>{game.minPlayers}{'\u2013'}{game.maxPlayers} players</Badge>}
-      {game.playingTime > 0 && <Badge>{game.playingTime} min</Badge>}
+      {game.minPlayers > 0 && <Badge aria-label={`${playerRange} players`}>👥 {playerRange}</Badge>}
+      {game.playingTime > 0 && <Badge aria-label={`${game.playingTime} minutes`}>🕒 {game.playingTime}′</Badge>}
       {listLabels.map((label, index) => <Badge key={`${label}:${index}`} className="bg-accent-2 text-accent-2-ink">{label}</Badge>)}
     </div>
   );
@@ -102,6 +103,11 @@ function ReviewExcerpt({ review }: { review: PersonalReview }) {
   return <div className="text-xs text-text-muted">{scores && <strong className="block text-text">{scores}</strong>}{review.body && <p className="line-clamp-2 whitespace-pre-line">{review.body}</p>}</div>;
 }
 
+function AverageReviewMetrics({ rating, complexity, depth }: { rating: number | null; complexity: number | null; depth: number | null }) {
+  if (rating === null && complexity === null && depth === null) return null;
+  return <p className="text-xs text-text-muted"><strong className="text-text">Group avg</strong>{rating !== null && ` · ${rating}/10`}{complexity !== null && ` · Complexity ${complexity}/5`}{depth !== null && ` · Depth ${depth}/5`}</p>;
+}
+
 export function LibraryGame({
   game,
   view,
@@ -110,6 +116,7 @@ export function LibraryGame({
   actions,
   listLabels,
   review,
+  averageReview,
 }: {
   game: GameCardGame;
   view: ViewMode;
@@ -118,21 +125,19 @@ export function LibraryGame({
   actions?: ReactNode;
   listLabels?: string[];
   review?: PersonalReview;
+  averageReview?: { rating: number | null; complexity: number | null; depth: number | null };
 }) {
-  const image = game.thumbnail || game.image;
   if (view === 'list') {
     return (
       <Card className="relative flex min-h-20 items-start gap-2 p-2 transition-transform hover:-translate-y-0.5">
         <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-start gap-3 pr-1 text-left">
-          {image ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={image} alt="" loading="lazy" decoding="async" className="size-16 shrink-0 rounded-sm object-cover" />
-          ) : <div className="size-16 shrink-0 rounded-sm bg-surface" />}
+          <GameArtwork game={game} className="size-20" />
           <div className="min-w-0 flex-1">
             <h3 className="truncate font-display text-lg">{game.name}</h3>
             <div className="mt-1"><GameMeta game={game} listLabels={listLabels} /></div>
             {game.owners && game.owners.length > 0 && <p className="mt-1 text-xs text-text-muted">Owned by {game.owners.map((owner) => owner.displayName || owner.username).join(', ')}</p>}
             {review && <div className="mt-1"><ReviewExcerpt review={review} /></div>}
+            {averageReview && <div className="mt-1"><AverageReviewMetrics {...averageReview} /></div>}
             {note && <div className="mt-1 text-xs text-text-muted">{note}</div>}
           </div>
         </button>
@@ -144,15 +149,13 @@ export function LibraryGame({
   return (
     <Card className="relative flex h-full flex-col overflow-hidden transition-transform hover:-translate-y-0.5">
       <button type="button" onClick={onOpen} className="flex flex-1 flex-col text-left">
-        {image ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={image} alt="" loading="lazy" decoding="async" className="aspect-[4/3] w-full object-cover" />
-        ) : <div className="aspect-[4/3] w-full bg-surface" />}
+        <GameArtwork game={game} />
         <div className="flex flex-1 flex-col gap-1.5 p-2">
           <h3 className="line-clamp-2 font-display text-base leading-tight">{game.name}</h3>
           <GameMeta game={game} listLabels={listLabels} />
           {game.owners && game.owners.length > 0 && <p className="text-xs text-text-muted">Owned by {game.owners.map((owner) => owner.displayName || owner.username).join(', ')}</p>}
           {review && <div className="mt-auto"><ReviewExcerpt review={review} /></div>}
+          {averageReview && <div className="mt-auto"><AverageReviewMetrics {...averageReview} /></div>}
           {note && <div className="text-xs text-text-muted">{note}</div>}
         </div>
       </button>
@@ -316,17 +319,12 @@ export function GameDetailsSheet({
   const containingLists = game ? lists.filter((list) => list.items.some((item) => item.id === game.id)) : [];
   const availableLists = game ? lists.filter((list) => !list.items.some((item) => item.id === game.id)) : [];
   const hasAvailableList = !collectionGame || !wishlistGame || !savedGame || availableLists.length > 0;
-  const detailsArtwork = game?.thumbnail || game?.image;
 
   return (
     <Dialog open={open} onOpenChange={changeOpen}>
       <DialogSheetContent className="w-full sm:w-[36rem] sm:max-w-[90vw]">
         <div className="flex items-start justify-between gap-3">
-          {detailsArtwork && (
-            // BGG image hosts are external and vary at runtime.
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={detailsArtwork} alt={game ? `${game.name} cover` : ''} decoding="async" className="h-24 w-20 shrink-0 rounded-sm object-cover" />
-          )}
+          {game && <GameArtwork game={game} className="h-28 w-24" alt={`${game.name} cover`} />}
           <div className="min-w-0 flex-1">
             <DialogTitle className="font-display text-2xl">{game?.name}</DialogTitle>
             {game && <div className="mt-2"><GameMeta game={game} listLabels={membershipLabels} /></div>}
@@ -480,12 +478,17 @@ export function GameDetailsSheet({
   );
 }
 
-function sortGames(games: Array<CollectionGame | PersonalListGame>, sort: SortMode) {
+function sortGames(games: Array<CollectionGame | PersonalListGame>, sort: SortMode, reviews: PersonalReview[] = []) {
+  const reviewByGameId = new Map(reviews.map((review) => [review.gameId, review]));
   return [...games].sort((a, b) => {
     if (sort === 'priority') return ((a as CollectionGame).wishlistPriority ?? 99) - ((b as CollectionGame).wishlistPriority ?? 99) || a.name.localeCompare(b.name);
     if (sort === 'source') return (a as CollectionGame).source.localeCompare((b as CollectionGame).source) || a.name.localeCompare(b.name);
     if (sort === 'position') return (a as PersonalListGame).position - (b as PersonalListGame).position;
     if (sort === 'rating') return b.rating - a.rating || a.name.localeCompare(b.name);
+    if (sort === 'userRating' || sort === 'complexity' || sort === 'depth') {
+      const field = sort === 'userRating' ? 'rating' : sort === 'complexity' ? 'complexityScore' : 'depthScore';
+      return (reviewByGameId.get(b.id)?.[field] ?? -1) - (reviewByGameId.get(a.id)?.[field] ?? -1) || a.name.localeCompare(b.name);
+    }
     if (sort === 'players') return a.minPlayers - b.minPlayers || a.maxPlayers - b.maxPlayers || a.name.localeCompare(b.name);
     if (sort === 'time') return a.playingTime - b.playingTime || a.name.localeCompare(b.name);
     if (sort === 'year') return b.yearPublished - a.yearPublished || a.name.localeCompare(b.name);
@@ -701,7 +704,7 @@ export function PersonalCollection() {
     const count = Number(playerCount);
     const matchesPlayers = !count || (game.minPlayers <= count && game.maxPlayers >= count);
     return matchesName && matchesPlayers;
-  }), activeList?.type === 'tier' ? 'position' : effectiveSort);
+  }), activeList?.type === 'tier' ? 'position' : effectiveSort, reviews);
 
   function labelsForGame(gameId: number): string[] {
     const labels = gameMembershipLabels(gameId, collection, wishlist, saved, lists);
@@ -732,7 +735,8 @@ export function PersonalCollection() {
     setTab(value);
     setExpanded(true);
     setEditingListId(null);
-    if (sort === 'priority' && value !== 'wishlist') setSort('name');
+    if (value === 'wishlist') setSort('priority');
+    else if (sort === 'priority') setSort('name');
   }
 
   function changePlayerCount(delta: number) {
@@ -863,7 +867,7 @@ export function PersonalCollection() {
           <label className="flex flex-col gap-1 text-xs font-semibold text-text-muted">
             <select aria-label="Sort by" value={`display:${effectiveSort}`} onChange={(event) => setSort(event.target.value as SortMode)} className={selectClass}>
               <option value={`display:${effectiveSort}`} hidden>Sort by: {SORT_LABELS[effectiveSort]}</option>
-              {tab === 'wishlist' && <option value="priority">Wishlist priority</option>}{hasMixedSources && <option value="source">Source</option>}<option value="name">Name</option><option value="rating">BGG rating</option><option value="players">Minimum players</option><option value="time">Playing time</option><option value="year">Year published</option><option value="added">Recently added</option>
+              {tab === 'wishlist' && <option value="priority">Wishlist priority</option>}{hasMixedSources && <option value="source">Source</option>}<option value="name">Name</option><option value="rating">BGG rating</option><option value="userRating">User rating</option><option value="complexity">Complexity</option><option value="depth">Depth</option><option value="players">Minimum players</option><option value="time">Playing time</option><option value="year">Year published</option><option value="added">Recently added</option>
             </select>
           </label>
           <div className="flex min-h-10 self-end overflow-hidden rounded-sm border-[length:var(--border-w)] border-border" aria-label="View style">

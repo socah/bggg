@@ -130,6 +130,15 @@ describe('PersonalCollection lists', () => {
     await waitFor(() => expect(apiFetch.mock.calls.some(([path, init]) => path === '/bgg-account/lists' && init?.method === 'POST')).toBe(true));
     expect(screen.queryByText('Created custom list.')).toBeNull();
   });
+
+  it('defaults wishlists to priority sorting and offers review sorts', async () => {
+    render(<PersonalCollection />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Wishlist (0)' }));
+
+    const sort = screen.getByLabelText('Sort by') as HTMLSelectElement;
+    expect(sort.value).toBe('display:priority');
+    expect(Array.from(sort.options, (option) => option.textContent)).toEqual(expect.arrayContaining(['User rating', 'Complexity', 'Depth']));
+  });
 });
 
 describe('LibraryGame metadata', () => {
@@ -161,8 +170,9 @@ describe('LibraryGame metadata', () => {
 
     expect(await screen.findByText('Collection')).toBeTruthy();
     expect(screen.getByText('Favorites')).toBeTruthy();
-    expect(screen.getByText('2–4 players')).toBeTruthy();
-    expect(screen.getByText('45 min')).toBeTruthy();
+    expect(screen.getByLabelText('BGG rating 7.8').textContent).toBe('7.8');
+    expect(screen.getByLabelText('2–4 players').textContent).toBe('👥 2–4');
+    expect(screen.getByLabelText('45 minutes').textContent).toBe('🕒 45′');
     expect(screen.queryByText('2017')).toBeNull();
   });
 });

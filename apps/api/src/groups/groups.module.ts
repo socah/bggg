@@ -4,6 +4,7 @@ import { Group } from './group.entity';
 import { GroupMember } from './group-member.entity';
 import { GameOwnership } from '../collections/game-ownership.entity';
 import { Game } from '../games/game.entity';
+import { Review } from '../collections/review.entity';
 import { GroupsController } from './groups.controller';
 import { GroupsService } from './groups.service';
 import { AuditModule } from '../audit/audit.module';
@@ -11,8 +12,8 @@ import { KeycloakModule } from '../keycloak/keycloak.module';
 import { CollectionsModule } from '../collections/collections.module';
 
 @Module({
-  // TypeOrmModule.forFeature([Group, GroupMember, GameOwnership, Game])
-  // registers repositories for Group, GroupMember, GameOwnership, and Game
+  // TypeOrmModule.forFeature([Group, GroupMember, GameOwnership, Game, Review])
+  // registers repositories for the group library and its review averages
   // for injection within this module (GameOwnership/Game following the same
   // shared-entity registration pattern as GroupMember elsewhere). Without
   // this, @InjectRepository(...) for any of them in GroupsService would throw
@@ -23,7 +24,7 @@ import { CollectionsModule } from '../collections/collections.module';
   // KeycloakModule never imports GroupsModule — same reasoning already
   // documented in invites.module.ts.
   imports: [
-    TypeOrmModule.forFeature([Group, GroupMember, GameOwnership, Game]),
+    TypeOrmModule.forFeature([Group, GroupMember, GameOwnership, Game, Review]),
     AuditModule,
     KeycloakModule,
     CollectionsModule,

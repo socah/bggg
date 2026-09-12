@@ -5,6 +5,7 @@ import { Group } from './group.entity';
 import { GroupMember, GroupRole } from './group-member.entity';
 import { GameOwnership } from '../collections/game-ownership.entity';
 import { Game } from '../games/game.entity';
+import { Review } from '../collections/review.entity';
 import { CreateGroupDto } from './dto/create-group.dto';
 import { UpdateGroupDto } from './dto/update-group.dto';
 import { AuditService } from '../audit/audit.service';
@@ -25,6 +26,8 @@ export class GroupsService {
     private readonly ownership: Repository<GameOwnership>,
     @InjectRepository(Game)
     private readonly gamesRepo: Repository<Game>,
+    @InjectRepository(Review)
+    private readonly reviews: Repository<Review>,
     // AuditService is injectable here because GroupsModule imports AuditModule,
     // which exports AuditService. No circular dependency — AuditModule never
     // imports GroupsModule.
@@ -154,7 +157,7 @@ export class GroupsService {
   async getLibrary(
     id: string,
     requestingUserId: string,
-  ): Promise<Array<Pick<Game, 'id' | 'bggId' | 'name' | 'image' | 'thumbnail' | 'minPlayers' | 'maxPlayers' | 'playingTime' | 'yearPublished' | 'rating'> & { owners: Array<Pick<KeycloakUserInfo, 'id' | 'username' | 'displayName'>> }>> {
+  ): Promise<Array<Pick<Game, 'id' | 'bggId' | 'name' | 'image' | 'thumbnail' | 'minPlayers' | 'maxPlayers' | 'playingTime' | 'yearPublished' | 'rating'> & { owners: Array<Pick<KeycloakUserInfo, 'id' | 'username' | 'displayName'>>; averageUserRating: number | null; averageComplexity: number | null; averageDepth: number | null }>> {
     await this.findOne(id, requestingUserId);
 
     const memberships = await this.members.findBy({ groupId: id });
@@ -174,6 +177,10 @@ export class GroupsService {
       where: { id: In(gameIds) },
       order: { name: 'ASC' },
     });
+    const reviewRows = await this.reviews.findBy({
+      userId: In(memberships.map((membership) => membership.userId)),
+      gameId: In(gameIds),
+    });
 
     const people = await Promise.all(memberships.map(async (membership) => {
       const person = await this.keycloakAdmin.getUser(membership.userId).catch(() => ({
@@ -185,22 +192,33 @@ export class GroupsService {
     }));
     const personById = new Map(people.map((person) => [person.id, person]));
 
-    return games.map((g) => ({
-      id: g.id,
-      bggId: g.bggId,
-      name: g.name,
-      image: g.image,
-      thumbnail: g.thumbnail,
-      minPlayers: g.minPlayers,
-      maxPlayers: g.maxPlayers,
-      playingTime: g.playingTime,
-      yearPublished: g.yearPublished,
-      rating: g.rating,
-      owners: ownerships
-        .filter((row) => row.gameId === g.id)
-        .map((row) => personById.get(row.userId))
-        .filter((owner): owner is Pick<KeycloakUserInfo, 'id' | 'username' | 'displayName'> => Boolean(owner)),
-    }));
+    const average = (values: Array<number | null>) => {
+      const present = values.filter((value): value is number => value !== null);
+      return present.length > 0 ? Math.round((present.reduce((sum, value) => sum + value, 0) / present.length) * 10) / 10 : null;
+    };
+
+    return games.map((g) => {
+      const gameReviews = reviewRows.filter((review) => review.gameId === g.id);
+      return {
+        id: g.id,
+        bggId: g.bggId,
+        name: g.name,
+        image: g.image,
+        thumbnail: g.thumbnail,
+        minPlayers: g.minPlayers,
+        maxPlayers: g.maxPlayers,
+        playingTime: g.playingTime,
+        yearPublished: g.yearPublished,
+        rating: g.rating,
+        averageUserRating: average(gameReviews.map((review) => review.rating)),
+        averageComplexity: average(gameReviews.map((review) => review.complexityScore)),
+        averageDepth: average(gameReviews.map((review) => review.depthScore)),
+        owners: ownerships
+          .filter((row) => row.gameId === g.id)
+          .map((row) => personById.get(row.userId))
+          .filter((owner): owner is Pick<KeycloakUserInfo, 'id' | 'username' | 'displayName'> => Boolean(owner)),
+      };
+    });
   }
 
   async create(dto: CreateGroupDto, requestingUserId: string): Promise<Group> {

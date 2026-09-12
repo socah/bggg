@@ -7,6 +7,7 @@ import { Group } from './group.entity';
 import { GroupMember } from './group-member.entity';
 import { GameOwnership } from '../collections/game-ownership.entity';
 import { Game } from '../games/game.entity';
+import { Review } from '../collections/review.entity';
 import { AuditService } from '../audit/audit.service';
 import { KeycloakAdminClient } from '../keycloak/keycloak-admin.client';
 import { CollectionsService } from '../collections/collections.service';
@@ -47,6 +48,10 @@ describe('GroupsService', () => {
 
   const mockGamesRepository = {
     find: jest.fn(),
+  };
+
+  const mockReviewsRepository = {
+    findBy: jest.fn(),
   };
 
   // AuditService is a real dependency of GroupsService (2_audit_logging) —
@@ -91,6 +96,10 @@ describe('GroupsService', () => {
           useValue: mockGamesRepository,
         },
         {
+          provide: getRepositoryToken(Review),
+          useValue: mockReviewsRepository,
+        },
+        {
           provide: AuditService,
           useValue: mockAuditService,
         },
@@ -113,7 +122,9 @@ describe('GroupsService', () => {
       wishlist: [],
       saved: [],
       lists: [],
+      reviews: [],
     });
+    mockReviewsRepository.findBy.mockResolvedValue([]);
   });
 
   // Reset call counts and configured return values so tests don't bleed into
@@ -551,6 +562,10 @@ describe('GroupsService', () => {
         { id: 3, userId: 'user-b', gameId: 42, addedAt: new Date() },
       ]);
       mockGamesRepository.find.mockResolvedValue([gameFixture(7, 'Azul'), gameFixture(42, 'Gloomhaven')]);
+      mockReviewsRepository.findBy.mockResolvedValue([
+        { userId: 'user-a', gameId: 42, rating: 8, complexityScore: 4, depthScore: 5 },
+        { userId: 'user-b', gameId: 42, rating: 6, complexityScore: 2, depthScore: null },
+      ]);
 
       const result = await service.getLibrary('group-1', 'user-b');
 
@@ -558,11 +573,13 @@ describe('GroupsService', () => {
         {
           id: 7, bggId: 1007, name: 'Azul', thumbnail: 't-7.jpg', image: '',
           minPlayers: 2, maxPlayers: 4, playingTime: 90, yearPublished: 2015, rating: 7.5,
+          averageUserRating: null, averageComplexity: null, averageDepth: null,
           owners: [{ id: 'user-a', username: 'bob', displayName: 'Bob' }],
         },
         {
           id: 42, bggId: 1042, name: 'Gloomhaven', thumbnail: 't-42.jpg', image: '',
           minPlayers: 2, maxPlayers: 4, playingTime: 90, yearPublished: 2015, rating: 7.5,
+          averageUserRating: 7, averageComplexity: 3, averageDepth: 5,
           owners: [
             { id: 'user-a', username: 'bob', displayName: 'Bob' },
             { id: 'user-b', username: 'bob', displayName: 'Bob' },
