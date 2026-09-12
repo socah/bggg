@@ -191,8 +191,17 @@ sync_secrets() {
     ENV_FILE="$ENV_FILE" WEB_HOST_PORT="$(read_var WEB_HOST_PORT)" sh "$SCRIPT_DIR/sync-dev-secrets.sh"
 }
 
+stop_dev_servers() {
+  DEV_STATE_DIR="$WORKTREE_DIR/.dev/worktree-$(read_var WORKTREE_SLOT)" sh "$SCRIPT_DIR/dev-servers.sh" stop
+}
+
 setup() {
   init_env; require_docker
+  LEGACY_DEV_STATE_DIR=${LEGACY_DEV_STATE_DIR:-$WORKTREE_DIR/logs}
+  if [ "$LEGACY_DEV_STATE_DIR" != "$WORKTREE_DIR/.dev/worktree-$(read_var WORKTREE_SLOT)" ] && [ -d "$LEGACY_DEV_STATE_DIR" ]; then
+    DEV_STATE_DIR="$LEGACY_DEV_STATE_DIR" sh "$SCRIPT_DIR/dev-servers.sh" stop >/dev/null 2>&1 || true
+  fi
+  stop_dev_servers >/dev/null 2>&1 || true
   if [ -z "$(read_var BGG_API_TOKEN || true)" ] && [ -f "$REPO_ROOT/.env" ]; then
     root_bgg_token=$(awk -F= '$1 == "BGG_API_TOKEN" { value=substr($0, index($0, "=") + 1) } END { print value }' "$REPO_ROOT/.env")
     [ -z "$root_bgg_token" ] || set_value BGG_API_TOKEN "$root_bgg_token"
@@ -217,15 +226,6 @@ setup() {
     BOOTSTRAP_ADMIN_EMAIL="$BOOTSTRAP_ADMIN_EMAIL" BOOTSTRAP_ADMIN_PASSWORD="$BOOTSTRAP_ADMIN_PASSWORD" \
     npm run seed:admin --workspace=apps/api
   DB_HOST=localhost DB_PORT="$host_db_port" npm run migration:run --workspace=apps/api
-  LEGACY_DEV_STATE_DIR=${LEGACY_DEV_STATE_DIR:-$WORKTREE_DIR/logs}
-  if [ "$LEGACY_DEV_STATE_DIR" != "$WORKTREE_DIR/.dev/worktree-$(read_var WORKTREE_SLOT)" ] && [ -d "$LEGACY_DEV_STATE_DIR" ]; then
-    DEV_STATE_DIR="$LEGACY_DEV_STATE_DIR" sh "$SCRIPT_DIR/dev-servers.sh" stop >/dev/null 2>&1 || true
-  fi
-  DEV_STATE_DIR="$WORKTREE_DIR/.dev/worktree-$(read_var WORKTREE_SLOT)" \
-    API_CMD="DB_HOST=localhost DB_PORT=$host_db_port KEYCLOAK_URL=http://localhost:$(read_var KEYCLOAK_HOST_PORT) PORT=$api_port npm run start:dev --workspace=apps/api" \
-    WEB_CMD="NEXT_PUBLIC_API_URL=http://localhost:$api_port PORT=$web_port npm run dev --workspace=apps/web -- --port $web_port" \
-    KEYCLOAK_HOST_URL="http://localhost:$(read_var KEYCLOAK_HOST_PORT)" \
-    sh "$SCRIPT_DIR/dev-servers.sh" stop >/dev/null 2>&1 || true
   DEV_STATE_DIR="$WORKTREE_DIR/.dev/worktree-$(read_var WORKTREE_SLOT)" \
     API_CMD="DB_HOST=localhost DB_PORT=$host_db_port KEYCLOAK_URL=http://localhost:$(read_var KEYCLOAK_HOST_PORT) PORT=$api_port npm run start:dev --workspace=apps/api" \
     WEB_CMD="NEXT_PUBLIC_API_URL=http://localhost:$api_port PORT=$web_port npm run dev --workspace=apps/web -- --port $web_port" \
@@ -245,7 +245,7 @@ status() {
   printf 'logs: %s/.dev/worktree-%s\n' "$WORKTREE_DIR" "$(read_var WORKTREE_SLOT)"
 }
 
-stop() { DEV_STATE_DIR="$WORKTREE_DIR/.dev/worktree-$(read_var WORKTREE_SLOT)" sh "$SCRIPT_DIR/dev-servers.sh" stop; }
+stop() { stop_dev_servers; }
 down() { stop; require_docker; compose down; }
 clean() { [ "${1:-}" = --confirm ] || die "clean requires --confirm"; stop; require_docker; compose down -v; }
 

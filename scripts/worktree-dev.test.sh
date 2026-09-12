@@ -51,6 +51,7 @@ check "host commands use published database port" "$( [ "$(grep -c 'DB_PORT="\$h
 
 check "dev setup uses canonical bootstrap credentials" "$( grep -q 'BOOTSTRAP_ADMIN_EMAIL="\$BOOTSTRAP_ADMIN_EMAIL"' "$SCRIPT" && grep -q 'BOOTSTRAP_ADMIN_PASSWORD="\$BOOTSTRAP_ADMIN_PASSWORD"' "$SCRIPT" && ! grep -q 'DEV_SEED_USER_' "$SCRIPT" && echo expected || echo wrong )"
 check "setup cleans legacy server state" "$( grep -q 'LEGACY_DEV_STATE_DIR' "$SCRIPT" && echo expected || echo missing )"
+check "setup stops managed servers before checking ports" "$( [ "$(grep -n 'stop_dev_servers >/dev/null' "$SCRIPT" | cut -d: -f1)" -lt "$(grep -n '^  up$' "$SCRIPT" | cut -d: -f1)" ] && echo expected || echo wrong-order )"
 check "web dev command targets allocated API" "$( grep -q 'NEXT_PUBLIC_API_URL=http://localhost:\$api_port' "$SCRIPT" && echo expected || echo missing )"
 check "auth cookies are isolated per worktree" "$( grep -q 'cookieSuffix' "$ROOT/apps/web/auth.ts" && echo expected || echo missing )"
 
