@@ -24,5 +24,5 @@ export function MemberCollection({ groupId, userId }: { groupId: string; userId:
   if (error) return <p role="alert" className="text-sm text-accent">{error}</p>;
   if (!member) return <p role="status" className="text-sm text-text-muted">Loading member collection...</p>;
 
-  return <CollectionBrowser collection={member.collection} wishlist={member.wishlist} saved={member.saved} lists={member.lists} reviews={member.reviews} />;
+  return <CollectionBrowser groupId={groupId} collection={member.collection} wishlist={member.wishlist} saved={member.saved} lists={member.lists} reviews={member.reviews} />;
 }

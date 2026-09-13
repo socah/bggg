@@ -8,6 +8,7 @@ import { UserIdentityLink } from '@/components/user-identity-link';
 import { apiFetch } from '@/lib/api';
 import { useGroups } from '@/hooks/use-groups';
 import type { GameCardGame, GroupMemberInfo } from '@/lib/types';
+import { groupDisplayName, groupUsername } from '@/lib/user-identity';
 
 interface GuestPlayer {
   id: string;
@@ -131,11 +132,6 @@ export function PlayLogDialog({
     setLinkTargets({});
     setPlayers(Object.fromEntries((defaultUsersKey ? defaultUsersKey.split(',') : []).map((id) => [`user:${id}`, { selected: true, isWinner: false, score: '' }])));
   }, [open, game?.id, editPlayId, defaults?.groupId, defaults?.playedDate, defaultUsersKey]);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- groups load after the dialog opens.
-    if (open && !groupId && groups[0]) setGroupId(groups[0].id);
-  }, [open, groupId, groups]);
 
   useEffect(() => {
     if (!open || !editPlayId || !defaults?.groupId) return;
@@ -383,7 +379,7 @@ export function PlayLogDialog({
 
   const availableGuests = roster?.guests.filter((guest) => !guest.linkedUserId) ?? [];
   const rosterPlayers = [
-    ...(roster?.members ?? []).map((member) => ({ key: `user:${member.id}`, name: member.username, member, guest: null })),
+    ...(roster?.members ?? []).map((member) => ({ key: `user:${member.id}`, name: groupUsername(member), member, guest: null })),
     ...availableGuests.map((guest) => ({ key: `guest:${guest.id}`, name: `${guest.name} (guest)`, member: null, guest })),
   ];
   const selectedPlayers = rosterPlayers.filter((player) => players[player.key]?.selected);
@@ -398,7 +394,8 @@ export function PlayLogDialog({
         <form onSubmit={(event) => event.preventDefault()} className={`${embedded ? '' : 'mt-5'} flex flex-col gap-5`}>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="flex min-w-0 flex-col gap-2 text-xs font-semibold text-text-muted"><span>Group</span>
-              <select required value={groupId} disabled={saving || Boolean(defaults)} onChange={(event) => { setGroupId(event.target.value); setRoster(null); setSessionId(null); setPlayers({}); }} className="h-10 min-h-10 w-full rounded-sm border border-border bg-surface px-2 text-sm text-text">
+              <select required value={groupId} disabled={saving || Boolean(defaults?.groupId)} onChange={(event) => { setGroupId(event.target.value); setRoster(null); setSessionId(null); setPlayers({}); }} className="h-10 min-h-10 w-full rounded-sm border border-border bg-surface px-2 text-sm text-text">
+                {!defaults?.groupId && <option value="" disabled>Choose a group</option>}
                 {groups.map((group) => <option key={group.id} value={group.id}>{group.isSolo ? `${group.name} (solo)` : group.name}</option>)}
               </select>
             </label>
@@ -448,7 +445,7 @@ export function PlayLogDialog({
               <div className="overflow-hidden">{guestWithSettings && roster?.canManageGuests && <div className="rounded-sm border border-border p-3">
               <div className="flex items-center justify-between gap-2"><h4 className="font-display text-base">{guestWithSettings.name} settings</h4><button type="button" className="text-xs text-text-muted" onClick={() => setGuestSettingsOpen(false)}>Close</button></div>
               <p className="mt-1 text-xs text-text-muted">Linking merges this guest&apos;s previous plays into a member account.</p>
-              <div className="mt-2 flex flex-col gap-2 sm:flex-row"><select aria-label={`Account for ${guestWithSettings.name}`} value={linkTargets[guestWithSettings.id] ?? ''} onChange={(event) => setLinkTargets((current) => ({ ...current, [guestWithSettings.id]: event.target.value }))} className="min-h-10 min-w-0 flex-1 rounded-sm border border-border bg-surface px-2 text-sm"><option value="">Choose member</option>{roster.members.map((member) => <option key={member.id} value={member.id}>{member.displayName || member.username}</option>)}</select><Button type="button" variant="secondary" disabled={saving || !linkTargets[guestWithSettings.id]} onClick={() => void linkGuest(guestWithSettings)}>Link and merge</Button></div>
+              <div className="mt-2 flex flex-col gap-2 sm:flex-row"><select aria-label={`Account for ${guestWithSettings.name}`} value={linkTargets[guestWithSettings.id] ?? ''} onChange={(event) => setLinkTargets((current) => ({ ...current, [guestWithSettings.id]: event.target.value }))} className="min-h-10 min-w-0 flex-1 rounded-sm border border-border bg-surface px-2 text-sm"><option value="">Choose member</option>{roster.members.map((member) => <option key={member.id} value={member.id}>{groupDisplayName(member)}</option>)}</select><Button type="button" variant="secondary" disabled={saving || !linkTargets[guestWithSettings.id]} onClick={() => void linkGuest(guestWithSettings)}>Link and merge</Button></div>
               <Button type="button" variant="ghost" className="mt-2 min-h-9 px-0 text-xs text-accent" disabled={saving} onClick={() => void removeGuest(guestWithSettings)}>Remove from player list</Button>
             </div>}</div></div>
           </section>

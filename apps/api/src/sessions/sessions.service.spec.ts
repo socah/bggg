@@ -167,6 +167,7 @@ describe('SessionsService play summaries', () => {
 
     const result = await service.listPlays('group-1', 'user-1');
 
+    expect(result.every((play) => play.canEdit)).toBe(true);
     expect(result[0].sessionParticipants.map((player) => player.name)).toEqual(['Alice', 'Bob', 'Carol']);
     expect(result[0].playParticipants.map((player) => player.name)).toEqual(['Alice', 'Bob']);
     expect(result[0].playParticipants.map((player) => player.isWinner)).toEqual([true, false]);

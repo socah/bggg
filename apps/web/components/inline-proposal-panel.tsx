@@ -15,12 +15,14 @@ import { UserIdentityLink } from '@/components/user-identity-link';
 import { ProposalChat } from '@/components/proposal-chat';
 import { GameDetailsSheet } from '@/components/personal-collection';
 import { PlayLogDialog } from '@/components/play-log-dialog';
+import { GamePickerDialog } from '@/components/game-picker-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogSheetContent, DialogClose, DialogTitle } from '@/components/ui/dialog';
 import { TimePickerDialog } from '@/components/ui/time-picker-dialog';
 import { apiMutate } from '@/lib/api';
 import { formatWindowRange } from '@/lib/datetime';
+import { groupUsername } from '@/lib/user-identity';
 import type { AvailablePlace, GameCardGame, Group, GroupLibraryGame, GroupMemberInfo, Proposal } from '@/lib/types';
 
 type DraftPlace = Pick<AvailablePlace, 'place' | 'ownedByMe'> & {
@@ -81,20 +83,24 @@ export function InlineProposalPanel({
   const isDraft = proposalId === null;
   const { data: session } = useSession();
   const myId = session?.user?.id ?? null;
-  const myName = session?.user?.username ?? session?.user?.name ?? 'You';
+  const sessionName = session?.user?.username ?? session?.user?.name ?? 'You';
+
+  // --- Draft proposal state ---
+  const [selectedGroupId, setSelectedGroupId] = useState(defaultGroupId ?? '');
 
   // --- Existing proposal data ---
   const { detail, loading: loadingDetail, notFound, error: detailError, retry: retryDetail } =
     useProposalDetail(proposalId);
   const existingGroupId = detail?.proposal.groupId ?? null;
-  const { members, loading: loadingMembers } = useGroupMembers(existingGroupId);
+  const memberGroupId = (existingGroupId ?? defaultGroupId ?? selectedGroupId) || null;
+  const { members, loading: loadingMembers } = useGroupMembers(memberGroupId);
+  const myMember = members.find((member) => member.id === myId);
+  const myName = myMember ? groupUsername(myMember) : sessionName;
   const actions = useProposalActions(() => {
     retryDetail();
     onProposalsChanged?.();
   });
 
-  // --- Draft proposal state ---
-  const [selectedGroupId, setSelectedGroupId] = useState(defaultGroupId ?? '');
   const [draftStatus, setDraftStatus] = useState<'yes' | 'maybe' | 'no'>('yes');
   const [draftStart, setDraftStart] = useState('');
   const [draftEnd, setDraftEnd] = useState('');
@@ -103,7 +109,6 @@ export function InlineProposalPanel({
   const [draftGames, setDraftGames] = useState<GroupLibraryGame[]>([]);
   const [draftPlaces, setDraftPlaces] = useState<DraftPlace[]>([]);
   const [draftGamePickerOpen, setDraftGamePickerOpen] = useState(false);
-  const [draftGameFilter, setDraftGameFilter] = useState('');
   const [placePickerOpen, setPlacePickerOpen] = useState(false);
   const [placeFilter, setPlaceFilter] = useState('');
   const [saving, setSaving] = useState(false);
@@ -158,13 +163,6 @@ export function InlineProposalPanel({
     }
     previousGamePositions.current = nextPositions;
   }, [existingGames.rows]);
-
-  // Filtered games for draft game picker
-  const filteredLibraryGames = useMemo(() => {
-    const q = draftGameFilter.trim().toLowerCase();
-    if (!q) return library.games;
-    return library.games.filter((g) => g.name.toLowerCase().includes(q));
-  }, [library.games, draftGameFilter]);
 
   const filteredPlaces = useMemo(() => {
     const suggestedIds = new Set(
@@ -612,54 +610,22 @@ export function InlineProposalPanel({
         }}
       />
 
-      {/* Add Game Picker Dialog (Shared for both Draft and Existing) */}
-      <Dialog open={draftGamePickerOpen} onOpenChange={setDraftGamePickerOpen}>
-        <DialogSheetContent aria-describedby={undefined}>
-          <DialogTitle>Pick a game</DialogTitle>
-          <DialogClose className="mb-2 mt-1 block text-sm text-text-muted">Close ✕</DialogClose>
-
-          <input
-            type="search"
-            placeholder="Filter by name…"
-            value={draftGameFilter}
-            onChange={(e) => setDraftGameFilter(e.target.value)}
-            className="mb-2 w-full rounded-sm border border-border bg-surface px-2 py-1 text-sm"
-          />
-
-          {library.loading && <p className="text-sm text-text-muted">Loading library…</p>}
-          {library.error && <p className="text-sm text-accent">{library.error}</p>}
-          {!library.loading && !library.error && filteredLibraryGames.length === 0 && (
-            <p className="text-sm text-text-muted">Nothing matches — the library comes from members&apos; imported BGG collections.</p>
-          )}
-
-          <ul className="flex flex-col gap-1">
-            {filteredLibraryGames.map((g) => (
-              <li key={g.id}>
-                <button
-                  type="button"
-                  className="block w-full rounded-sm bg-surface px-2 py-1 text-left text-sm hover:bg-surface-raised"
-                  onClick={() => {
-                    if (isDraft) {
-                      if (!draftGames.some((existing) => existing.id === g.id)) {
-                        setDraftGames((prev) => [...prev, g]);
-                      }
-                    } else if (proposalId) {
-                      void existingGames.proposeGame(g.id);
-                    }
-                    setDraftGamePickerOpen(false);
-                    setDraftGameFilter('');
-                  }}
-                >
-                  {g.name}
-                  <span className="ml-2 text-xs text-text-muted">
-                    {g.minPlayers}–{g.maxPlayers} players
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </DialogSheetContent>
-      </Dialog>
+      <GamePickerDialog
+        open={draftGamePickerOpen}
+        title="Add suggested games"
+        games={library.games}
+        addedIds={new Set(isDraft ? draftGames.map((game) => game.id) : existingGames.rows.map((row) => row.game.id))}
+        loading={library.loading}
+        error={library.error}
+        onOpenChange={setDraftGamePickerOpen}
+        onAdd={async (game) => {
+          if (isDraft) {
+            setDraftGames((current) => current.some((candidate) => candidate.id === game.id) ? current : [...current, game]);
+            return true;
+          }
+          return proposalId ? existingGames.proposeGame(game.id) : false;
+        }}
+      />
 
       <Dialog open={placePickerOpen} onOpenChange={setPlacePickerOpen}>
         <DialogSheetContent aria-describedby={undefined}>

@@ -83,6 +83,7 @@ CREATE TABLE IF NOT EXISTS group_members (
   group_id    UUID         NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
   role        TEXT         NOT NULL DEFAULT 'member'
                            CHECK (role IN ('owner', 'admin', 'member')),
+  nickname    TEXT,
   joined_at   DATE         NOT NULL DEFAULT CURRENT_DATE,
 
   -- Prevents the same user from being added to the same group twice.

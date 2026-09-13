@@ -575,12 +575,12 @@ describe('CollectionsService', () => {
   });
 
   describe('searchGames', () => {
-    it('preserves search order and enriches results with cached thumbnails', async () => {
+    it('preserves search order and hydrates thumbnails for uncached results', async () => {
       mockBggService.searchGames.mockResolvedValue([
         { bggId: 2, name: 'Second', yearPublished: 2020 },
         { bggId: 1, name: 'First', yearPublished: 2019 },
       ]);
-      mockGamesService.findCachedByBggIds.mockResolvedValue([
+      mockGamesService.findOrFetchMany.mockResolvedValue([
         makeGame({ bggId: 1, thumbnail: 'first.jpg' }),
         makeGame({ id: 2, bggId: 2, thumbnail: 'second.jpg' }),
       ]);
@@ -590,13 +590,14 @@ describe('CollectionsService', () => {
         expect.objectContaining({ bggId: 1, thumbnail: 'first.jpg' }),
       ]);
       expect(mockBggService.searchGames).toHaveBeenCalledWith('game');
-      expect(mockGamesService.findCachedByBggIds).toHaveBeenCalledWith([2, 1]);
+      expect(mockGamesService.findOrFetchMany).toHaveBeenCalledWith([2, 1]);
     });
 
     it('returns basic results when optional thumbnail hydration fails', async () => {
       mockBggService.searchGames.mockResolvedValue([
         { bggId: 2, name: 'Second', yearPublished: 2020 },
       ]);
+      mockGamesService.findOrFetchMany.mockRejectedValue(new Error('BGG hydration failed'));
       mockGamesService.findCachedByBggIds.mockRejectedValue(new Error('cache read failed'));
 
       await expect(service.searchGames('game')).resolves.toEqual([

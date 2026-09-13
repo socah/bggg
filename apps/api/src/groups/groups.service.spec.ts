@@ -363,14 +363,14 @@ describe('GroupsService', () => {
         id: 1, userId: OWNER_ID, groupId: 'group-1', role: 'owner', joinedAt: new Date(),
       });
       mockMembersRepository.findBy.mockResolvedValue([
-        { id: 2, userId: 'canonical-user-id', groupId: 'group-1', role: 'member', joinedAt: new Date() },
+        { id: 2, userId: 'canonical-user-id', groupId: 'group-1', role: 'member', nickname: 'The Architect', joinedAt: new Date() },
       ]);
       mockKeycloakAdmin.getUser.mockResolvedValue({ id: 'provider-user-id', username: 'alice', displayName: 'Alice' });
 
       const result = await service.getMembers('group-1', OWNER_ID);
 
       expect(result).toEqual([
-         { id: 'canonical-user-id', username: 'alice', displayName: 'Alice', role: 'member', isCurrentUser: false },
+         { id: 'canonical-user-id', username: 'alice', displayName: 'Alice', nickname: 'The Architect', role: 'member', isCurrentUser: false },
       ]);
     });
 
@@ -436,6 +436,21 @@ describe('GroupsService', () => {
 
       await expect(service.getMembers('group-1', 'someone-else')).rejects.toThrow(ForbiddenException);
       expect(mockKeycloakAdmin.getUser).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('updateMemberNickname', () => {
+    it('allows an ordinary member to nickname any member in the group', async () => {
+      const group: Group = { id: 'group-1', name: 'Chess Club', ownerId: OWNER_ID, isSolo: false, createdAt: new Date() };
+      const requester = { id: 2, userId: 'member-1', groupId: 'group-1', role: 'member', joinedAt: new Date() } as GroupMember;
+      const target = { id: 1, userId: OWNER_ID, groupId: 'group-1', role: 'owner', nickname: null, joinedAt: new Date() } as GroupMember;
+      mockRepository.findOneBy.mockResolvedValue(group);
+      mockMembersRepository.findOneBy.mockResolvedValueOnce(requester).mockResolvedValueOnce(target);
+      mockMembersRepository.save.mockImplementation(async (member) => member);
+
+      await expect(service.updateMemberNickname('group-1', OWNER_ID, '  Captain  ', 'member-1')).resolves.toEqual(expect.objectContaining({ nickname: 'Captain' }));
+      expect(mockMembersRepository.save).toHaveBeenCalledWith(expect.objectContaining({ nickname: 'Captain' }));
+      expect(mockAuditService.log).toHaveBeenCalledWith(expect.objectContaining({ actorId: 'member-1', action: 'group.member_nickname_changed' }));
     });
   });
 

@@ -14,7 +14,7 @@ jest.unstable_mockModule('@/components/calendar-play-launcher', () => ({
 }));
 
 jest.unstable_mockModule('@/components/play-log-dialog', () => ({
-  PlayLogDialog: ({ editPlayId, inline }: { editPlayId?: string; inline?: boolean }) => <div>{inline ? 'Inline' : 'Modal'} logged play {editPlayId}</div>,
+  PlayLogDialog: ({ editPlayId, inline, defaults }: { editPlayId?: string; inline?: boolean; defaults?: { groupId: string } }) => <div data-group-id={defaults?.groupId}>{inline ? 'Inline' : 'Modal'} logged play {editPlayId}</div>,
 }));
 
 jest.unstable_mockModule('@/components/session-place-control', () => ({
@@ -167,7 +167,9 @@ describe('CalendarMonthGrid', () => {
     fireEvent.click(screen.getByRole('button', { name: 'May 1, 2026' }));
     fireEvent.click(screen.getByRole('button', { name: 'May 8, 2026' }));
     fireEvent.click(screen.getByRole('button', { name: 'Log play 2026-05-08' }));
-    expect(screen.getAllByText('Inline logged play').length).toBe(1);
+    const editor = screen.getAllByText('Inline logged play');
+    expect(editor.length).toBe(1);
+    expect(editor[0].getAttribute('data-group-id')).toBe('');
   });
 
   it('offers only proposal creation after today', () => {
@@ -212,6 +214,23 @@ describe('CalendarMonthGrid', () => {
     expect(within(within(playRow).getByTitle('Alice')).getByLabelText('Winner')).toBeTruthy();
     expect(within(within(playRow).getByTitle('Bob')).queryByLabelText('Winner')).toBeNull();
     expect(screen.getByText('Inline logged play play-1')).toBeTruthy();
+  });
+
+  it('allows a member to expand a play logged by somebody else', async () => {
+    apiFetch.mockResolvedValue({
+      ok: true,
+      json: async () => [{
+        id: 'play-member', sessionId: 'session-member', proposalId: null, groupId: 'group-member', groupName: 'Thursday Games',
+        game: { id: 1, bggId: 230802, name: 'Azul', image: null, thumbnail: null, minPlayers: 2, maxPlayers: 4, playingTime: 45, yearPublished: 2017, rating: 7.7 },
+        playedDate: '2026-05-01', status: 'finished', durationMinutes: null, notes: null, canEdit: false,
+        sessionParticipants: [], playParticipants: [], sessionPlace: null,
+      }],
+    } as Response);
+    render(<CalendarMonthGrid proposals={[]} groups={[{ id: 'group-member', name: 'Thursday Games', ownerId: 'owner-1', isSolo: false, createdAt: '' }]} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Played Azul - Thursday Games' }));
+
+    expect(screen.getByText('Inline logged play play-member')).toBeTruthy();
   });
 
   it('shows only each play participants when plays share a session', async () => {

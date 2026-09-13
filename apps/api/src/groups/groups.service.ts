@@ -81,7 +81,7 @@ export class GroupsService {
   async getMembers(
     id: string,
     requestingUserId: string,
-  ): Promise<Array<Pick<KeycloakUserInfo, 'id' | 'username' | 'displayName'> & { role: string; isCurrentUser: boolean; firstName?: string; bggUsername?: string }>> {
+  ): Promise<Array<Pick<KeycloakUserInfo, 'id' | 'username' | 'displayName'> & { nickname?: string; role: string; isCurrentUser: boolean; firstName?: string; bggUsername?: string }>> {
     await this.findOne(id, requestingUserId);
 
     const memberships = await this.members.findBy({ groupId: id });
@@ -99,6 +99,7 @@ export class GroupsService {
           id: m.userId,
           username: person.username,
           displayName: person.displayName,
+          ...(m.nickname && { nickname: m.nickname }),
           ...(person.firstName && { firstName: person.firstName }),
           ...(account?.bggUsername && { bggUsername: account.bggUsername }),
           role: m.role,
@@ -142,6 +143,7 @@ export class GroupsService {
       id: userId,
       username: person.username,
       displayName: person.displayName,
+      ...(membership.nickname && { nickname: membership.nickname }),
       ...(person.firstName && { firstName: person.firstName }),
       ...(account?.bggUsername && { bggUsername: account.bggUsername }),
       role: membership.role,
@@ -157,7 +159,7 @@ export class GroupsService {
   async getLibrary(
     id: string,
     requestingUserId: string,
-  ): Promise<Array<Pick<Game, 'id' | 'bggId' | 'name' | 'image' | 'thumbnail' | 'minPlayers' | 'maxPlayers' | 'playingTime' | 'yearPublished' | 'rating'> & { owners: Array<Pick<KeycloakUserInfo, 'id' | 'username' | 'displayName'>>; averageUserRating: number | null; averageComplexity: number | null; averageDepth: number | null }>> {
+  ): Promise<Array<Pick<Game, 'id' | 'bggId' | 'name' | 'image' | 'thumbnail' | 'minPlayers' | 'maxPlayers' | 'playingTime' | 'yearPublished' | 'rating'> & { owners: Array<Pick<KeycloakUserInfo, 'id' | 'username' | 'displayName'> & { nickname?: string }>; averageUserRating: number | null; averageComplexity: number | null; averageDepth: number | null }>> {
     await this.findOne(id, requestingUserId);
 
     const memberships = await this.members.findBy({ groupId: id });
@@ -188,7 +190,7 @@ export class GroupsService {
         username: 'unknown-member',
         displayName: 'Unknown member',
       }));
-      return { id: membership.userId, username: person.username, displayName: person.displayName };
+      return { id: membership.userId, username: person.username, displayName: person.displayName, ...(membership.nickname && { nickname: membership.nickname }) };
     }));
     const personById = new Map(people.map((person) => [person.id, person]));
 
@@ -216,7 +218,7 @@ export class GroupsService {
         owners: ownerships
           .filter((row) => row.gameId === g.id)
           .map((row) => personById.get(row.userId))
-          .filter((owner): owner is Pick<KeycloakUserInfo, 'id' | 'username' | 'displayName'> => Boolean(owner)),
+          .filter((owner): owner is Pick<KeycloakUserInfo, 'id' | 'username' | 'displayName'> & { nickname?: string } => Boolean(owner)),
       };
     });
   }
@@ -266,6 +268,22 @@ export class GroupsService {
       targetType: 'group_member',
       targetId: String(target.id),
       metadata: { groupId, userId: targetUserId, newRole: role },
+    });
+    return saved;
+  }
+
+  async updateMemberNickname(groupId: string, targetUserId: string, nickname: string | null, requestingUserId: string): Promise<GroupMember> {
+    await this.findOne(groupId, requestingUserId);
+    const target = await this.members.findOneBy({ groupId, userId: targetUserId });
+    if (!target) throw new NotFoundException('Group member not found');
+    target.nickname = nickname?.trim() || null;
+    const saved = await this.members.save(target);
+    await this.auditService.log({
+      actorId: requestingUserId,
+      action: 'group.member_nickname_changed',
+      targetType: 'group_member',
+      targetId: String(target.id),
+      metadata: { groupId, userId: targetUserId, cleared: target.nickname === null },
     });
     return saved;
   }

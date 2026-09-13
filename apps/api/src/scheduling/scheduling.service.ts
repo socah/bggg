@@ -756,7 +756,7 @@ export class SchedulingService {
         .filter((rsvp) => rsvp.proposalId === proposal.id && (rsvp.status === 'yes' || rsvp.confirmed))
         .map((rsvp) => {
           const member = memberById.get(rsvp.userId);
-          return { id: `user:${rsvp.userId}`, name: member?.displayName || member?.username || 'Unknown member' };
+          return { id: `user:${rsvp.userId}`, name: member?.nickname || member?.displayName || member?.username || 'Unknown member' };
         }),
       session: (() => {
         const session = sessionByProposal.get(proposal.id);

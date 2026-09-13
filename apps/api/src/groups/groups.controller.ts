@@ -16,6 +16,7 @@ import { CreateGroupDto } from './dto/create-group.dto';
 import { UpdateGroupDto } from './dto/update-group.dto';
 import { AuthGuard } from '../auth/auth.guard';
 import { UpdateMemberRoleDto } from './dto/update-member-role.dto';
+import { UpdateMemberNicknameDto } from './dto/update-member-nickname.dto';
 
 // AuthGuard attaches the decoded JWT payload to req.user (see auth.guard.ts).
 // Declared here, not imported from 'express', because these handlers only
@@ -76,6 +77,16 @@ export class GroupsController {
     @Request() req: AuthenticatedRequest,
   ) {
     return this.groupsService.updateMemberRole(groupId, userId, dto.role, req.user.sub);
+  }
+
+  @Patch(':groupId/members/:userId/nickname')
+  updateMemberNickname(
+    @Param('groupId', ParseUUIDPipe) groupId: string,
+    @Param('userId') userId: string,
+    @Body() dto: UpdateMemberNicknameDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.groupsService.updateMemberNickname(groupId, userId, dto.nickname, req.user.sub);
   }
 
   @Delete(':groupId/members/:userId')

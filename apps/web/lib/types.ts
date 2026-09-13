@@ -95,6 +95,7 @@ export interface PublicUserIdentity {
   id: string;
   username: string;
   displayName: string;
+  nickname?: string | null;
 }
 
 // Mirrors apps/api getMembers: Keycloak display info + the member's
@@ -189,6 +190,7 @@ export interface GameReview {
   id: number;
   userId: string;
   displayName: string;
+  nickname?: string | null;
   username: string;
   profileGroupId: string | null;
   isMine: boolean;

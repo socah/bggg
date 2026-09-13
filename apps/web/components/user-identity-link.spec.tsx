@@ -27,4 +27,10 @@ describe('UserIdentityLink', () => {
     expect(screen.getByText('Unknown member')).toBeTruthy();
     expect(screen.queryByRole('link')).toBeNull();
   });
+
+  it('replaces the visible username with the group nickname', () => {
+    render(<UserIdentityLink user={{ id: 'user-1', username: 'alice', displayName: 'Alice Example', nickname: 'Captain' }} groupId="group-1" />);
+    expect(screen.getByRole('link', { name: 'Captain' })).toBeTruthy();
+    expect(screen.queryByText('alice')).toBeNull();
+  });
 });

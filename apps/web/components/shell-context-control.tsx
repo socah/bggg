@@ -5,6 +5,7 @@ import { GroupSwitcher } from '@/components/group-switcher';
 import { Button } from '@/components/ui/button';
 import { useGroupMembers } from '@/hooks/use-group-members';
 import { parseSpacePath } from '@/lib/space';
+import { groupUsername } from '@/lib/user-identity';
 
 export function ShellContextControl() {
   const pathname = usePathname();
@@ -20,7 +21,7 @@ export function ShellContextControl() {
       <div className="flex min-h-11 min-w-0 items-center rounded-sm border-[length:var(--border-w)] border-border bg-surface px-3 font-semibold">
         {loading ? 'Loading member...' : member ? (
           <span className="flex min-w-0 flex-wrap items-center gap-x-2">
-            <span className="max-w-full truncate">{member.username}</span>
+            <span className="max-w-full truncate">{groupUsername(member)}</span>
             {member.firstName && <span className="max-w-full truncate font-normal text-text-muted">a.k.a. {member.firstName}</span>}
             {member.bggUsername && <a className="max-w-full truncate font-normal text-accent-2 underline" href={`https://boardgamegeek.com/user/${encodeURIComponent(member.bggUsername)}`} target="_blank" rel="noreferrer">BGG: {member.bggUsername}</a>}
           </span>

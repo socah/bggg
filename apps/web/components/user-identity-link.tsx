@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { PublicUserIdentity } from '@/lib/types';
+import { groupUsername } from '@/lib/user-identity';
 
 export function UserIdentityLink({
   user,
@@ -10,7 +11,7 @@ export function UserIdentityLink({
   groupId: string | null | undefined;
   className?: string;
 }) {
-  const label = user.username === 'unknown-member' ? user.displayName : user.username;
+  const label = groupUsername(user);
   if (!groupId || user.username === 'unknown-member') {
     return <span className={className} title={user.displayName}>{label}</span>;
   }

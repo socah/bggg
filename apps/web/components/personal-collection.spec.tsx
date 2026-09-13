@@ -14,6 +14,9 @@ const apiFetch = jest.fn(async (path: string, init?: RequestInit) => {
 });
 
 jest.unstable_mockModule('@/lib/api', () => ({ apiFetch }));
+jest.unstable_mockModule('@/components/play-log-dialog', () => ({
+  PlayLogDialog: ({ open, defaults }: { open: boolean; defaults?: { groupId: string } }) => open ? <div data-testid="play-log-group">{defaults?.groupId ?? 'fallback'}</div> : null,
+}));
 jest.unstable_mockModule('@/components/ui/dropdown-menu', () => ({
   DropdownMenu: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   DropdownMenuTrigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -75,6 +78,34 @@ describe('GameDetailsSheet history', () => {
     view.unmount();
 
     expect(back).not.toHaveBeenCalled();
+  });
+});
+
+describe('GameDetailsSheet interactions', () => {
+  it('logs a play in the group that opened the game details', async () => {
+    render(<GameDetailsSheet game={game} groupId="group-created" open onOpenChange={jest.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Log a play' }));
+    expect(screen.getByTestId('play-log-group').textContent).toBe('group-created');
+  });
+
+  it('autosaves a review after a field changes', async () => {
+    render(<GameDetailsSheet game={game} open onOpenChange={jest.fn()} />);
+    const rating = await screen.findByRole('spinbutton', { name: 'Rating' });
+
+    fireEvent.change(rating, { target: { value: '8.5' } });
+
+    await waitFor(() => expect(apiFetch.mock.calls.some(([path, init]) => path === '/bgg-account/games/1/review' && init?.method === 'PUT')).toBe(true), { timeout: 2000 });
+    expect(await screen.findByText('Review saved')).toBeTruthy();
+  });
+
+  it('adds to a list as soon as the list is selected', async () => {
+    const onMutate = jest.fn<(path: string, init: RequestInit, success: string) => Promise<boolean>>(async () => true);
+    render(<GameDetailsSheet game={game} open onOpenChange={jest.fn()} lists={[{ id: 'list-2', name: 'Weekend', type: 'custom', tiers: [], items: [], createdAt: '', updatedAt: '' }]} onMutate={onMutate} />);
+    const selector = await screen.findByDisplayValue('Choose a list');
+
+    fireEvent.change(selector, { target: { value: 'list-2' } });
+
+    await waitFor(() => expect(onMutate).toHaveBeenCalledWith('/bgg-account/lists/list-2/games', expect.objectContaining({ method: 'POST' }), 'Added Azul to Weekend.'));
   });
 });
 
@@ -169,6 +200,9 @@ describe('LibraryGame metadata', () => {
     render(<GameDetailsSheet game={game} open onOpenChange={jest.fn()} membershipLabels={['Collection', 'Favorites']} />);
 
     expect(await screen.findByText('Collection')).toBeTruthy();
+    const title = screen.getByRole('link', { name: 'Azul' });
+    expect(title.getAttribute('href')).toBe('https://boardgamegeek.com/boardgame/101');
+    expect(title.getAttribute('target')).toBe('_blank');
     expect(screen.getByText('Favorites')).toBeTruthy();
     expect(screen.getByLabelText('BGG rating 7.8').textContent).toBe('7.8');
     expect(screen.getByLabelText('2–4 players').textContent).toBe('👥 2–4');

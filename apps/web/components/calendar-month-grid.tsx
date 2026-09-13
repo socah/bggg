@@ -174,7 +174,7 @@ function WeekRowExpander({
             const expanded = expandedPlayId === play.id;
             const artwork = play.game.thumbnail || play.game.image;
             return <div key={play.id} className="overflow-hidden rounded-sm border border-border bg-surface-raised">
-              <button type="button" disabled={!play.canEdit} aria-expanded={expanded} onClick={() => onExpandedPlayChange(expanded ? null : play.id)} className="flex min-h-12 w-full items-center gap-3 px-3 py-2 text-left disabled:cursor-default">
+              <button type="button" aria-expanded={expanded} onClick={() => onExpandedPlayChange(expanded ? null : play.id)} className="flex min-h-12 w-full items-center gap-3 px-3 py-2 text-left">
                 {artwork ? (
                   // BGG image hosts are external and vary at runtime.
                   // eslint-disable-next-line @next/next/no-img-element
@@ -185,7 +185,7 @@ function WeekRowExpander({
                 {play.durationMinutes && <span className="shrink-0 text-xs text-text-muted">{play.durationMinutes} min</span>}
                 {play.status === 'abandoned' && <span className="shrink-0 text-xs font-semibold text-accent">Abandoned</span>}
                 <span className="flex-1" />
-                {play.canEdit && <DisclosureChevron expanded={expanded} />}
+                <DisclosureChevron expanded={expanded} />
               </button>
               <Disclosure expanded={expanded}><div className="border-t border-border"><PlayLogDialog inline embedded game={play.game} open={expanded} editPlayId={play.id} defaults={{ groupId: play.groupId, playedDate: play.playedDate, userIds: [] }} onOpenChange={(open) => { if (!open) onExpandedPlayChange(null); }} onLogged={onPlayLogged} /></div></Disclosure>
             </div>;
@@ -408,12 +408,10 @@ export function CalendarMonthGrid({
                               <img src={artwork} alt="" className="size-8 rounded-sm object-cover" />
                             )
                             : <span className="flex size-8 items-center justify-center rounded-sm bg-accent-2 font-display text-sm text-accent-2-ink">{item.play.game.name.charAt(0).toUpperCase()}</span>;
-                          return item.play.canEdit
-                            ? <button key={item.id} type="button" aria-label={item.label} title={item.label} className="pointer-events-auto shrink-0 rounded-sm hover:ring-2 hover:ring-accent-2" onClick={() => { setActiveDate(key); setExpandedPlayId(item.play.id); }}>{thumbnail}</button>
-                            : <span key={item.id} aria-label={item.label} title={item.label} className="shrink-0">{thumbnail}</span>;
+                           return <button key={item.id} type="button" aria-label={item.label} title={item.label} className="pointer-events-auto shrink-0 rounded-sm hover:ring-2 hover:ring-accent-2" onClick={() => { setActiveDate(key); setExpandedPlayId(item.play.id); }}>{thumbnail}</button>;
                         })}
                        </span>}
-                       {key <= toDateKey(new Date()) && <div className={`pointer-events-auto mt-auto overflow-hidden transition-[max-height,opacity,padding] duration-200 ease-out ${isSelected ? 'max-h-12 pt-1 opacity-100' : 'pointer-events-none max-h-0 pt-0 opacity-0'}`} aria-hidden={!isSelected} inert={!isSelected}><CalendarPlayLauncher compact date={key} groups={groups} defaultGroupId={defaultGroupId} onLogged={() => setPlayRefresh((current) => current + 1)} onSelectGame={(game, groupId) => setNewPlay({ game, groupId })} /></div>}
+                       {key <= toDateKey(new Date()) && <div className={`pointer-events-auto mt-auto overflow-hidden transition-[max-height,opacity,padding] duration-200 ease-out ${isSelected ? 'max-h-12 pt-1 opacity-100' : 'pointer-events-none max-h-0 pt-0 opacity-0'}`} aria-hidden={!isSelected} inert={!isSelected}><CalendarPlayLauncher compact date={key} groups={groups} defaultGroupId={defaultGroupId} onLogged={() => setPlayRefresh((current) => current + 1)} onSelectGame={(game, groupId) => setNewPlay({ game, groupId: defaultGroupId ? groupId : '' })} /></div>}
                        </div>
                     </div>
                   );

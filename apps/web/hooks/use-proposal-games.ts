@@ -10,11 +10,11 @@ interface UseProposalGamesResult {
   error: string | null;
   pendingAction: string | null;
   actionError: string | null;
-  proposeGame: (gameId: number) => Promise<void>;
-  vote: (proposalGameId: string) => Promise<void>;
-  unvote: (proposalGameId: string) => Promise<void>;
-  downvote: (proposalGameId: string) => Promise<void>;
-  removeSuggestion: (proposalGameId: string) => Promise<void>;
+  proposeGame: (gameId: number) => Promise<boolean>;
+  vote: (proposalGameId: string) => Promise<boolean>;
+  unvote: (proposalGameId: string) => Promise<boolean>;
+  downvote: (proposalGameId: string) => Promise<boolean>;
+  removeSuggestion: (proposalGameId: string) => Promise<boolean>;
   reload: () => void;
 }
 
@@ -65,8 +65,10 @@ export function useProposalGames(proposalId: string | null, onChanged?: () => vo
         await action();
         setRefreshKey((k) => k + 1);
         onChanged?.();
+        return true;
       } catch (err) {
         setActionError(err instanceof ApiError ? err.message : 'Something went wrong — try again');
+        return false;
       } finally {
         setPendingAction(null);
       }

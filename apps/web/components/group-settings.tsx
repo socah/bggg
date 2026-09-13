@@ -10,6 +10,26 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { GroupInviteSettings } from '@/components/group-invite-settings';
 import { UserIdentityLink } from '@/components/user-identity-link';
+import { Input } from '@/components/ui/input';
+import { groupUsername } from '@/lib/user-identity';
+
+function NicknameControl({ member, groupId, busy, onBusyChange, onSaved, onError }: { member: GroupMemberInfo; groupId: string; busy: boolean; onBusyChange: (busy: boolean) => void; onSaved: () => void; onError: (message: string) => void }) {
+  const [nickname, setNickname] = useState(member.nickname ?? '');
+  const unchanged = nickname.trim() === (member.nickname ?? '');
+
+  return <div className="flex min-w-56 flex-1 items-center gap-2 sm:max-w-sm">
+    <Input aria-label={`Nickname for ${groupUsername(member)}`} maxLength={100} value={nickname} disabled={busy} placeholder="Group nickname" onChange={(event) => setNickname(event.target.value)} />
+    <Button type="button" variant="secondary" className="min-h-10 px-3" disabled={busy || unchanged} onClick={async () => {
+      onBusyChange(true);
+      try {
+        await apiMutate(`/groups/${groupId}/members/${member.id}/nickname`, 'PATCH', { nickname: nickname.trim() || null });
+        onSaved();
+      } catch (error: unknown) {
+        onError(error instanceof ApiError ? error.message : 'Unable to save nickname');
+      } finally { onBusyChange(false); }
+    }}>Save</Button>
+  </div>;
+}
 
 export function GroupSettings({ groupId, currentUserId }: { groupId: string; currentUserId: string }) {
   const router = useRouter();
@@ -35,7 +55,7 @@ export function GroupSettings({ groupId, currentUserId }: { groupId: string; cur
   }
 
   async function removeMember(member: GroupMemberInfo) {
-    if (!window.confirm(`Remove ${member.username} from this group?`)) return;
+    if (!window.confirm(`Remove ${groupUsername(member)} from this group?`)) return;
     setBusyUserId(member.id);
     setMessage(null);
     try {
@@ -82,9 +102,10 @@ export function GroupSettings({ groupId, currentUserId }: { groupId: string; cur
                   <p className="font-semibold"><UserIdentityLink user={member} groupId={groupId} /></p>
                   <p className="text-sm text-text-muted">{member.role}</p>
                 </div>
+                <NicknameControl key={`${member.id}:${member.nickname ?? ''}`} member={member} groupId={groupId} busy={busyUserId === member.id} onBusyChange={(busy) => setBusyUserId(busy ? member.id : null)} onSaved={reload} onError={setMessage} />
                 {canManage && (
                   <div className="flex items-center gap-2">
-                    <label className="sr-only" htmlFor={`role-${member.id}`}>Role for {member.username}</label>
+                    <label className="sr-only" htmlFor={`role-${member.id}`}>Role for {groupUsername(member)}</label>
                     <select
                       id={`role-${member.id}`}
                       value={member.role}
@@ -96,7 +117,7 @@ export function GroupSettings({ groupId, currentUserId }: { groupId: string; cur
                       {isOwner && <option value="admin">admin</option>}
                     </select>
                     <Button type="button" variant="ghost" disabled={busyUserId === member.id} onClick={() => void removeMember(member)}>
-                      {busyUserId === member.id ? 'Working…' : `Remove ${member.username}`}
+                      {busyUserId === member.id ? 'Working…' : `Remove ${groupUsername(member)}`}
                     </Button>
                   </div>
                 )}

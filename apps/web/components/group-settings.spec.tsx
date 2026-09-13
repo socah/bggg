@@ -9,14 +9,14 @@ const reload = jest.fn();
 jest.unstable_mockModule('@/hooks/use-group-members', () => ({
   useGroupMembers: () => ({
     members: [
-      { id: 'owner-1', username: 'alice', displayName: 'Alice', role: 'owner' },
+      { id: 'owner-1', username: 'alice', displayName: 'Alice', nickname: 'Captain', role: 'owner' },
       { id: 'member-1', username: 'bob', displayName: 'Bob', role: 'member' },
     ],
     loading: false,
     reload,
   }),
 }));
-const apiMutate = jest.fn(() => Promise.resolve({}));
+const apiMutate = jest.fn<(path: string, method: string, body?: unknown) => Promise<object>>(() => Promise.resolve({}));
 jest.unstable_mockModule('@/lib/api', () => ({
   ApiError: class ApiError extends Error {},
   apiMutate,
@@ -28,10 +28,20 @@ describe('GroupSettings', () => {
   it('shows member privileges and allows the owner to change and remove a member', () => {
     render(<GroupSettings groupId="group-1" currentUserId="owner-1" />);
 
-    expect(screen.getByRole('link', { name: 'alice' }).getAttribute('href')).toBe('/groups/group-1/collection/owner-1');
+    expect(screen.getByRole('link', { name: 'Captain' }).getAttribute('href')).toBe('/groups/group-1/collection/owner-1');
     expect(screen.getByText('owner')).toBeTruthy();
     expect(screen.getByLabelText('Role for bob')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Remove bob' })).toBeTruthy();
+  });
+
+  it('lets a member set a nickname for any group member', async () => {
+    render(<GroupSettings groupId="group-1" currentUserId="member-1" />);
+    const nickname = screen.getByRole('textbox', { name: 'Nickname for Captain' });
+    fireEvent.change(nickname, { target: { value: '  Chief  ' } });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Save' })[0]);
+
+    await waitFor(() => expect(apiMutate).toHaveBeenCalledWith('/groups/group-1/members/owner-1/nickname', 'PATCH', { nickname: 'Chief' }));
+    expect(reload).toHaveBeenCalled();
   });
 
   it('provides a group deletion control only to the owner', () => {

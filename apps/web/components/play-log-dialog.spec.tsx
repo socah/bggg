@@ -5,7 +5,10 @@ const apiFetch = jest.fn<typeof fetch>();
 
 jest.unstable_mockModule('@/lib/api', () => ({ apiFetch }));
 jest.unstable_mockModule('@/hooks/use-groups', () => ({
-  useGroups: () => ({ groups: [{ id: 'group-1', name: 'Thursday Games', isSolo: false }] }),
+  useGroups: () => ({ groups: [
+    { id: 'solo-group', name: 'Just me', isSolo: true },
+    { id: 'group-1', name: 'Thursday Games', isSolo: false },
+  ] }),
 }));
 jest.unstable_mockModule('@/components/user-identity-link', () => ({
   UserIdentityLink: ({ user }: { user: { username: string } }) => <span>{user.username}</span>,
@@ -36,6 +39,19 @@ describe('PlayLogDialog', () => {
 
   afterEach(cleanup);
 
+  it('requires an explicit group choice when opened from Personal mode', async () => {
+    render(<PlayLogDialog inline game={{ id: 42, name: 'Azul' } as never} open onOpenChange={jest.fn()} />);
+
+    const group = screen.getByRole('combobox', { name: 'Group' }) as HTMLSelectElement;
+    expect(group.value).toBe('');
+    expect(screen.getByRole('option', { name: 'Choose a group' })).toBeTruthy();
+    expect(apiFetch).not.toHaveBeenCalled();
+
+    fireEvent.change(group, { target: { value: 'group-1' } });
+
+    await waitFor(() => expect(apiFetch.mock.calls.some(([path, init]) => path === '/groups/group-1/plays' && init?.method === 'POST')).toBe(true));
+  });
+
   it('immediately creates a play with every existing session participant', async () => {
     render(<PlayLogDialog
       inline
@@ -53,6 +69,7 @@ describe('PlayLogDialog', () => {
     const [, init] = apiFetch.mock.calls[1];
     const payload = JSON.parse(String(init?.body));
     expect(payload.sessionId).toBe('session-1');
+    expect(apiFetch.mock.calls[1][0]).toBe('/groups/group-1/plays');
     expect(payload.players).toEqual(expect.arrayContaining([
       expect.objectContaining({ userId: 'user-1' }),
       expect.objectContaining({ guestPlayerId: 'guest-1' }),

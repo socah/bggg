@@ -40,6 +40,9 @@ export class GroupMember {
   @Column({ type: 'text', default: 'member' })
   role!: GroupRole;
 
+  @Column({ type: 'text', nullable: true })
+  nickname?: string | null;
+
   // DATE, not TIMESTAMPTZ — matches db/schema.sql's joined_at column. We
   // only ever care which day someone joined, never the time of day.
   @Column({ name: 'joined_at', type: 'date', default: () => 'CURRENT_DATE' })

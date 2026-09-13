@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { apiFetch, apiMutate } from '@/lib/api';
 import { formatDateDmy } from '@/lib/datetime';
+import { groupDisplayName } from '@/lib/user-identity';
 import type {
   ChatThread,
   ChatThreadSummary,
@@ -165,7 +166,7 @@ export function GroupChatView({ groupId }: { groupId: string | null }) {
   const selectedTitle = selected?.thread.kind === 'direct'
     ? selectedDirectId === currentUserId
       ? 'Notes to self'
-      : (selectedMember?.displayName || selectedMember?.username || 'Direct message')
+      : (selectedMember ? (groupId ? groupDisplayName(selectedMember) : selectedMember.displayName || selectedMember.username) : 'Direct message')
     : selected?.thread.kind === 'proposal'
       ? `Proposal: ${selectedProposal ? formatDateDmy(selectedProposal.proposedDate) : 'discussion'}`
       : 'General';
@@ -248,7 +249,7 @@ export function GroupChatView({ groupId }: { groupId: string | null }) {
                       : void openDirect(member.id)}
                     className={`w-full rounded-sm px-2 py-2 text-left text-sm ${selected?.thread.id === existing?.id ? 'bg-highlight font-semibold' : 'hover:bg-surface'}`}
                   >
-                    {member.isCurrentUser ? 'Notes to self' : (member.displayName || member.username)}
+                    {member.isCurrentUser ? 'Notes to self' : (groupId ? groupDisplayName(member) : member.displayName || member.username)}
                   </button>
                 );
               })}

@@ -111,9 +111,12 @@ export class CollectionsService {
     const results = await this.bgg.searchGames(normalized);
     let games: Game[] = [];
     try {
-      games = await this.games.findCachedByBggIds(results.map((result) => result.bggId));
+      // BGG's search endpoint does not include artwork. Hydrate the compact
+      // results through the batched thing endpoint so new searches have covers too.
+      games = await this.games.findOrFetchMany(results.map((result) => result.bggId));
     } catch (error) {
       this.logger.warn({ msg: 'bgg_search_thumbnail_enrichment_failed', error });
+      games = await this.games.findCachedByBggIds(results.map((result) => result.bggId)).catch(() => []);
     }
     const gameByBggId = new Map(games.map((game) => [game.bggId, game]));
     return results.map((result) => ({
@@ -366,8 +369,10 @@ export class CollectionsService {
       const profileGroupId = groupIds.find((groupId) => visibleMemberships.some(
         (membership) => membership.groupId === groupId && membership.userId === review.userId,
       )) ?? null;
+      const nickname = visibleMemberships.find((membership) => membership.groupId === profileGroupId && membership.userId === review.userId)?.nickname ?? null;
       return {
         ...review,
+        nickname,
         isMine: review.userId === userId,
         username: person.username,
         displayName: person.displayName,
@@ -389,8 +394,6 @@ export class CollectionsService {
       : [];
     const groupNameById = new Map(groupRows.map((group) => [group.id, group.name]));
     const sessionById = new Map(sessions.map((session) => [session.id, session]));
-    const myRoleByGroup = new Map(myMemberships.map((membership) => [membership.groupId, membership.role]));
-
     return {
       game,
       reviews: reviewViews,
@@ -405,7 +408,7 @@ export class CollectionsService {
         notes: play.notes ?? session.notes,
         status: play.status,
         durationMinutes: play.durationMinutes,
-        canEdit: play.loggedBy === userId || ['owner', 'admin'].includes(myRoleByGroup.get(session.groupId) ?? ''),
+        canEdit: true,
         groupName: groupNameById.get(session.groupId) ?? 'Group',
       }; }).filter((play): play is NonNullable<typeof play> => play !== null)
         .sort((a, b) => new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime()),

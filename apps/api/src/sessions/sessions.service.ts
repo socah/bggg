@@ -176,11 +176,10 @@ export class SessionsService {
     const memberById = new Map(groupMembers.map((member) => [member.id, member]));
     const guestById = new Map(guestPlayers.map((guest) => [guest.id, guest]));
     const participantById = new Map(sessionPlayers.map((player) => [player.id, player]));
-    const membership = await this.members.findOneBy({ groupId, userId });
     const participantSummary = (player: PlaySessionPlayer) => {
       if (player.userId) {
         const member = memberById.get(player.userId);
-        return { id: `user:${player.userId}`, name: member?.displayName || member?.username || 'Unknown member' };
+        return { id: `user:${player.userId}`, name: member?.nickname || member?.displayName || member?.username || 'Unknown member' };
       }
       const guest = guestById.get(player.guestPlayerId!);
       return { id: `guest:${player.guestPlayerId}`, name: guest?.name || 'Guest player' };
@@ -196,7 +195,7 @@ export class SessionsService {
       status: play.status,
       durationMinutes: play.durationMinutes,
       notes: play.notes,
-      canEdit: play.loggedBy === userId || membership?.role === 'owner' || membership?.role === 'admin',
+      canEdit: true,
       sessionPlace: sessionById.get(play.sessionId)!.placeId
         ? { id: sessionById.get(play.sessionId)!.placeId!, name: placeById.get(sessionById.get(play.sessionId)!.placeId!)?.name ?? 'Unknown place' }
         : null,
@@ -403,11 +402,6 @@ export class SessionsService {
     if (!play) throw new NotFoundException('Play not found');
     const session = await this.sessions.findOneBy({ id: play.sessionId, groupId });
     if (!session) throw new NotFoundException('Play not found');
-    const membership = await this.members.findOneBy({ groupId, userId });
-    if (play.loggedBy !== userId && membership?.role !== 'owner' && membership?.role !== 'admin') {
-      throw new ForbiddenException('Only the logger or a group manager can edit this play');
-    }
-
     const identities = dto.players.map((player) => {
       if (!!player.userId === !!player.guestPlayerId) throw new BadRequestException('Each player must identify exactly one member or guest');
       return player.userId ? `user:${player.userId}` : `guest:${player.guestPlayerId}`;
@@ -461,11 +455,6 @@ export class SessionsService {
     if (!play) throw new NotFoundException('Play not found');
     const session = await this.sessions.findOneBy({ id: play.sessionId, groupId });
     if (!session) throw new NotFoundException('Play not found');
-    const membership = await this.members.findOneBy({ groupId, userId });
-    if (play.loggedBy !== userId && membership?.role !== 'owner' && membership?.role !== 'admin') {
-      throw new ForbiddenException('Only the logger or a group manager can delete this play');
-    }
-
     await this.uploadsService.deleteObjectsForPlay(playId);
     await this.dataSource.transaction(async (entityManager) => {
       await entityManager.getRepository(PlaySessionGame).remove(play);

@@ -5,11 +5,12 @@ import { useSession } from 'next-auth/react';
 import { useChat } from '@/hooks/use-chat';
 import type { GroupMemberInfo } from '@/lib/types';
 import { Button } from '@/components/ui/button';
+import { groupDisplayName } from '@/lib/user-identity';
 
 function messageAuthor(senderId: string, members: GroupMemberInfo[], currentUserId?: string) {
   if (senderId === currentUserId) return 'You';
   const member = members.find((candidate) => candidate.id === senderId);
-  return member?.displayName || member?.username || 'Former member';
+  return member ? groupDisplayName(member) : 'Former member';
 }
 
 export function ChatPanel({

@@ -26,6 +26,7 @@ describe('GroupsController', () => {
     update: jest.fn(),
     remove: jest.fn(),
     getMembers: jest.fn(),
+    updateMemberNickname: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -134,5 +135,10 @@ describe('GroupsController', () => {
       expect(mockGroupsService.getMembers).toHaveBeenCalledWith('group-1', 'user-1');
       expect(result).toEqual(members);
     });
+  });
+
+  it('updates a nickname using the authenticated member as actor', () => {
+    controller.updateMemberNickname('group-1', 'user-2', { nickname: 'Captain' }, fakeRequest);
+    expect(mockGroupsService.updateMemberNickname).toHaveBeenCalledWith('group-1', 'user-2', 'Captain', 'user-1');
   });
 });

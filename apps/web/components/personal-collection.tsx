@@ -9,11 +9,13 @@ import { Input } from '@/components/ui/input';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { CollectionListAccordion } from '@/components/collection-list-accordion';
 import { GameArtwork } from '@/components/game-artwork';
+import { GamePickerDialog } from '@/components/game-picker-dialog';
 import { UserIdentityLink } from '@/components/user-identity-link';
 import { PlayLogDialog, type PlayLogDefaults } from '@/components/play-log-dialog';
 import { DisclosureChevron } from '@/components/ui/disclosure-chevron';
 import { apiFetch } from '@/lib/api';
 import { formatDateDmy } from '@/lib/datetime';
+import { groupDisplayName } from '@/lib/user-identity';
 import type {
   BggSearchResult,
   CollectionGame,
@@ -52,6 +54,11 @@ const RATING_SCALE: Record<number, string> = {
 const WEIGHT_SCALE = ['Light', 'Medium Light', 'Medium', 'Medium Heavy', 'Heavy'];
 const selectClass = 'min-h-10 rounded-sm border-[length:var(--border-w)] border-border bg-surface-raised px-2 text-sm text-text';
 const SORT_LABELS: Record<SortMode, string> = { priority: 'Wishlist priority', source: 'Source', position: 'Position', name: 'Name', rating: 'BGG rating', userRating: 'User rating', complexity: 'Complexity', depth: 'Depth', players: 'Minimum players', time: 'Playing time', year: 'Year published', added: 'Recently added' };
+
+function todayKey(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
 
 function AnimatedDisclosure({ expanded, children }: { expanded: boolean; children: ReactNode }) {
   return <div className={`grid transition-[grid-template-rows,opacity] duration-300 ease-in-out ${expanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`} aria-hidden={!expanded} inert={!expanded}><div className="overflow-hidden">{children}</div></div>;
@@ -135,7 +142,7 @@ export function LibraryGame({
           <div className="min-w-0 flex-1">
             <h3 className="truncate font-display text-lg">{game.name}</h3>
             <div className="mt-1"><GameMeta game={game} listLabels={listLabels} /></div>
-            {game.owners && game.owners.length > 0 && <p className="mt-1 text-xs text-text-muted">Owned by {game.owners.map((owner) => owner.displayName || owner.username).join(', ')}</p>}
+            {game.owners && game.owners.length > 0 && <p className="mt-1 text-xs text-text-muted">Owned by {game.owners.map(groupDisplayName).join(', ')}</p>}
             {review && <div className="mt-1"><ReviewExcerpt review={review} /></div>}
             {averageReview && <div className="mt-1"><AverageReviewMetrics {...averageReview} /></div>}
             {note && <div className="mt-1 text-xs text-text-muted">{note}</div>}
@@ -153,7 +160,7 @@ export function LibraryGame({
         <div className="flex flex-1 flex-col gap-1.5 p-2">
           <h3 className="line-clamp-2 font-display text-base leading-tight">{game.name}</h3>
           <GameMeta game={game} listLabels={listLabels} />
-          {game.owners && game.owners.length > 0 && <p className="text-xs text-text-muted">Owned by {game.owners.map((owner) => owner.displayName || owner.username).join(', ')}</p>}
+          {game.owners && game.owners.length > 0 && <p className="text-xs text-text-muted">Owned by {game.owners.map(groupDisplayName).join(', ')}</p>}
           {review && <div className="mt-auto"><ReviewExcerpt review={review} /></div>}
           {averageReview && <div className="mt-auto"><AverageReviewMetrics {...averageReview} /></div>}
           {note && <div className="text-xs text-text-muted">{note}</div>}
@@ -198,6 +205,7 @@ export function GameDetailsSheet({
   const [details, setDetails] = useState<CollectionGameDetails | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [reviewSaved, setReviewSaved] = useState(false);
   const [rating, setRating] = useState('');
   const [complexity, setComplexity] = useState('');
   const [depth, setDepth] = useState('');
@@ -206,6 +214,7 @@ export function GameDetailsSheet({
   const [logOpen, setLogOpen] = useState(false);
   const [editingPlayId, setEditingPlayId] = useState<string | null>(null);
   const historyEntry = useRef(false);
+  const savedReviewPayload = useRef('');
   const closeFromHistory = useEffectEvent(() => onOpenChange(false));
 
   useEffect(() => {
@@ -238,10 +247,15 @@ export function GameDetailsSheet({
     const next = (await response.json()) as CollectionGameDetails;
     setDetails(next);
     const mine = next.reviews.find((review) => review.isMine);
-    setRating(mine?.rating ? String(mine.rating) : '');
-    setComplexity(mine?.complexityScore ? String(mine.complexityScore) : '');
-    setDepth(mine?.depthScore ? String(mine.depthScore) : '');
-    setBody(mine?.body ?? '');
+    const nextRating = mine?.rating ? String(mine.rating) : '';
+    const nextComplexity = mine?.complexityScore ? String(mine.complexityScore) : '';
+    const nextDepth = mine?.depthScore ? String(mine.depthScore) : '';
+    const nextBody = mine?.body ?? '';
+    savedReviewPayload.current = JSON.stringify({ rating: nextRating, complexity: nextComplexity, depth: nextDepth, body: nextBody });
+    setRating(nextRating);
+    setComplexity(nextComplexity);
+    setDepth(nextDepth);
+    setBody(nextBody);
   }
 
   useEffect(() => {
@@ -250,13 +264,17 @@ export function GameDetailsSheet({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setDetails(null);
     setError(null);
+    setReviewSaved(false);
+    setTargetListId('');
     void loadDetails(game).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Unable to load game details'));
   }, [game, open]);
 
-  async function saveReview(event: FormEvent) {
-    event.preventDefault();
+  async function saveReview() {
     if (!game || (!rating && !complexity && !depth && !body.trim())) return;
+    const statePayload = JSON.stringify({ rating, complexity, depth, body });
+    if (statePayload === savedReviewPayload.current) return;
     setSaving(true);
+    setReviewSaved(false);
     setError(null);
     try {
       const response = await apiFetch(`/bgg-account/games/${game.id}/review`, {
@@ -270,7 +288,8 @@ export function GameDetailsSheet({
         }),
       });
       if (!response.ok) throw new Error(await responseError(response));
-      await loadDetails(game);
+      savedReviewPayload.current = statePayload;
+      setReviewSaved(true);
       onReviewChanged?.();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : 'Unable to save review');
@@ -278,6 +297,14 @@ export function GameDetailsSheet({
       setSaving(false);
     }
   }
+
+  useEffect(() => {
+    if (!open || !details || !game) return;
+    const timer = window.setTimeout(() => { void saveReview(); }, 700);
+    return () => window.clearTimeout(timer);
+    // saveReview intentionally reads the latest form fields after the debounce.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, details, game, rating, complexity, depth, body]);
 
   async function deleteReview() {
     if (!game || !window.confirm('Delete your review?')) return;
@@ -295,15 +322,16 @@ export function GameDetailsSheet({
     }
   }
 
-  async function addToSelectedList() {
-    if (!game || !onMutate || !targetListId) return;
-    const builtIn = targetListId.startsWith('built-in:') ? targetListId.slice('built-in:'.length) : null;
-    const list = lists.find((candidate) => candidate.id === targetListId);
+  async function addToSelectedList(selectedListId: string) {
+    if (!game || !onMutate || !selectedListId) return;
+    setTargetListId(selectedListId);
+    const builtIn = selectedListId.startsWith('built-in:') ? selectedListId.slice('built-in:'.length) : null;
+    const list = lists.find((candidate) => candidate.id === selectedListId);
     const path = builtIn === 'collection'
       ? '/bgg-account/games'
       : builtIn
         ? `/bgg-account/${builtIn}`
-        : `/bgg-account/lists/${targetListId}/games`;
+        : `/bgg-account/lists/${selectedListId}/games`;
     const label = builtIn === 'collection' ? 'Collection' : builtIn === 'wishlist' ? 'Wishlist' : builtIn === 'saved' ? 'Saved' : list?.name;
     if (!label) return;
     const added = await onMutate(path, {
@@ -319,6 +347,7 @@ export function GameDetailsSheet({
   const containingLists = game ? lists.filter((list) => list.items.some((item) => item.id === game.id)) : [];
   const availableLists = game ? lists.filter((list) => !list.items.some((item) => item.id === game.id)) : [];
   const hasAvailableList = !collectionGame || !wishlistGame || !savedGame || availableLists.length > 0;
+  const effectivePlayDefaults = playDefaults ?? (groupId ? { groupId, playedDate: todayKey(), userIds: [] } : undefined);
 
   return (
     <Dialog open={open} onOpenChange={changeOpen}>
@@ -326,7 +355,7 @@ export function GameDetailsSheet({
         <div className="flex items-start justify-between gap-3">
           {game && <GameArtwork game={game} className="h-28 w-24" alt={`${game.name} cover`} />}
           <div className="min-w-0 flex-1">
-            <DialogTitle className="font-display text-2xl">{game?.name}</DialogTitle>
+            <DialogTitle className="font-display text-2xl">{game ? <a href={`https://boardgamegeek.com/boardgame/${game.bggId}`} target="_blank" rel="noreferrer" className="underline decoration-transparent underline-offset-4 hover:decoration-current">{game.name}</a> : null}</DialogTitle>
             {game && <div className="mt-2"><GameMeta game={game} listLabels={membershipLabels} /></div>}
           </div>
           <DialogClose className="rounded-sm px-3 py-2 text-sm font-semibold text-text-muted">Close</DialogClose>
@@ -344,7 +373,7 @@ export function GameDetailsSheet({
             )}
             <section>
               <h3 className="font-display text-lg">Your review</h3>
-              <form onSubmit={saveReview} className="mt-3 flex flex-col gap-3">
+              <form onSubmit={(event) => event.preventDefault()} className="mt-3 flex flex-col gap-3">
                   {mine && <p className="text-xs text-text-muted">Editing your existing review.{imported && ' The rating is updated from BGG when you sync; your other edits stay here.'}</p>}
                   <div className="grid gap-2 sm:grid-cols-3">
                     <label className="text-xs font-semibold text-text-muted">Rating
@@ -365,9 +394,9 @@ export function GameDetailsSheet({
                   <label className="text-xs font-semibold text-text-muted">Comment
                     <textarea value={body} onChange={(event) => setBody(event.target.value)} rows={4} maxLength={5000} className="mt-1 w-full resize-y rounded-sm border-[length:var(--border-w)] border-border bg-surface-raised p-2 font-body text-sm text-text" placeholder="What did you think?" />
                   </label>
-                  <div className="flex flex-wrap gap-2">
-                    <Button type="submit" disabled={saving || (!rating && !complexity && !depth && !body.trim())}>{saving ? 'Saving...' : mine ? 'Update review' : 'Save review'}</Button>
+                  <div className="flex flex-wrap items-center gap-2">
                     {mine && !imported && <Button type="button" variant="secondary" disabled={saving} onClick={() => void deleteReview()}>Delete review</Button>}
+                    <span className="text-xs text-text-muted" role="status">{saving ? 'Saving review...' : reviewSaved ? 'Review saved' : 'Changes save automatically'}</span>
                   </div>
               </form>
             </section>
@@ -420,14 +449,13 @@ export function GameDetailsSheet({
                     <div>
                       <p className="text-xs font-semibold text-text-muted">Add to a list</p>
                       <div className="mt-1 flex gap-2">
-                        <select value={targetListId} onChange={(event) => setTargetListId(event.target.value)} className={`min-w-0 flex-1 ${selectClass}`}>
+                         <select value={targetListId} disabled={busy} onChange={(event) => void addToSelectedList(event.target.value)} className={`min-w-0 flex-1 ${selectClass}`}>
                           <option value="">Choose a list</option>
                           {!collectionGame && <option value="built-in:collection">Collection</option>}
                           {!wishlistGame && <option value="built-in:wishlist">Wishlist</option>}
                           {!savedGame && <option value="built-in:saved">Saved</option>}
                           {availableLists.map((list) => <option key={list.id} value={list.id}>{list.name}</option>)}
                         </select>
-                        <Button type="button" disabled={busy || !targetListId} onClick={() => void addToSelectedList()}>Add</Button>
                       </div>
                     </div>
                   )}
@@ -441,7 +469,7 @@ export function GameDetailsSheet({
                 {details.reviews.length === 0 && <p className="text-sm text-text-muted">No reviews yet.</p>}
                 {details.reviews.map((review) => (
                   <Card key={review.id} className="p-3">
-                    <div className="flex items-center justify-between gap-2"><strong><UserIdentityLink user={{ id: review.userId, username: review.username, displayName: review.displayName }} groupId={review.profileGroupId} /></strong>{review.rating && <Badge>{review.rating}/10</Badge>}</div>
+                    <div className="flex items-center justify-between gap-2"><strong><UserIdentityLink user={{ id: review.userId, username: review.username, displayName: review.displayName, nickname: review.nickname }} groupId={review.profileGroupId} /></strong>{review.rating && <Badge>{review.rating}/10</Badge>}</div>
                     <p className="mt-1 text-xs text-text-muted">{review.source === 'bgg' ? 'Rating synced from BGG' : `Complexity ${review.complexityScore ?? '-'} / 5 · Depth ${review.depthScore ?? '-'} / 5`}</p>
                     {review.body && <p className="mt-2 whitespace-pre-wrap text-sm">{review.body}</p>}
                   </Card>
@@ -456,14 +484,14 @@ export function GameDetailsSheet({
                 {details.plays.map((play) => {
                   const expanded = editingPlayId === play.id;
                   return <div key={play.id} className="overflow-hidden rounded-sm border border-border bg-surface-raised">
-                    <button type="button" disabled={!play.canEdit} aria-expanded={expanded} className="flex min-h-11 w-full items-center gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-highlight disabled:cursor-default" onClick={() => setEditingPlayId(expanded ? null : play.id)}>
+                    <button type="button" aria-expanded={expanded} className="flex min-h-11 w-full items-center gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-highlight" onClick={() => setEditingPlayId(expanded ? null : play.id)}>
                       <strong className="shrink-0">{formatDateDmy(play.playedAt)}</strong>
                       <span className="shrink-0 font-semibold">{expanded ? 'Play details' : play.groupName}</span>
                       {!expanded && play.notes && <span className="min-w-0 max-w-48 truncate text-xs text-text-muted">{play.notes}</span>}
                       {play.durationMinutes && <span className="shrink-0 text-xs text-text-muted">{play.durationMinutes} min</span>}
                       {play.status === 'abandoned' && <span className="shrink-0 text-xs font-semibold text-accent">Abandoned</span>}
                       <span className="flex-1" />
-                      {play.canEdit && <DisclosureChevron expanded={expanded} />}
+                      <DisclosureChevron expanded={expanded} />
                     </button>
                     {game && <AnimatedDisclosure expanded={expanded}><div className="border-t border-border"><PlayLogDialog inline embedded game={game} open={expanded} editPlayId={play.id} defaults={{ groupId: play.groupId, playedDate: play.playedAt.slice(0, 10), userIds: [] }} onOpenChange={(open) => { if (!open) setEditingPlayId(null); }} onLogged={() => { void loadDetails(game); onPlayLogged?.(); }} /></div></AnimatedDisclosure>}
                   </div>;
@@ -473,7 +501,7 @@ export function GameDetailsSheet({
           </div>
         )}
       </DialogSheetContent>
-       {logOpen && <PlayLogDialog game={game} open={logOpen} defaults={playDefaults} onOpenChange={setLogOpen} onLogged={() => { if (game) void loadDetails(game); onPlayLogged?.(); }} />}
+       {logOpen && <PlayLogDialog game={game} open={logOpen} defaults={effectivePlayDefaults} onOpenChange={setLogOpen} onLogged={() => { if (game) void loadDetails(game); onPlayLogged?.(); }} />}
     </Dialog>
   );
 }
@@ -541,6 +569,7 @@ export function PersonalCollection() {
   const [newTierLabel, setNewTierLabel] = useState('');
   const [tierInsertAfter, setTierInsertAfter] = useState('');
   const [draggedGameId, setDraggedGameId] = useState<number | null>(null);
+  const [listGamePickerOpen, setListGamePickerOpen] = useState(false);
 
   async function loadGames() {
     const [accountResponse, gamesResponse, wishlistResponse, savedResponse, listsResponse, reviewsResponse] = await Promise.all([
@@ -696,6 +725,7 @@ export function PersonalCollection() {
   }
 
   const activeList = tab.startsWith('list:') ? lists.find((list) => `list:${list.id}` === tab) : undefined;
+  const pickerGames = [...new Map([...collection, ...wishlist, ...saved, ...lists.flatMap((list) => list.items)].map((game) => [game.id, game])).values()];
   const rawGames: Array<CollectionGame | PersonalListGame> = tab === 'collection' ? collection : tab === 'wishlist' ? wishlist : tab === 'saved' ? saved : activeList?.items ?? [];
   const hasMixedSources = !activeList && new Set((rawGames as CollectionGame[]).map((game) => game.source)).size > 1;
   const effectiveSort = (sort === 'priority' && tab !== 'wishlist') || (sort === 'source' && !hasMixedSources) ? 'name' : sort;
@@ -808,10 +838,12 @@ export function PersonalCollection() {
                   <div className="min-w-0"><strong className="block truncate">{result.name}</strong>{result.yearPublished > 0 && <span className="text-sm text-text-muted">{result.yearPublished}</span>}</div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Button type="button" className="min-h-9 px-3" disabled={busy} onClick={() => addGame(result.bggId, 'collection')}>Own</Button>
-                  <Button type="button" variant="secondary" className="min-h-9 px-3" disabled={busy} onClick={() => addGame(result.bggId, 'wishlist')}>Wishlist</Button>
-                  <Button type="button" variant="secondary" className="min-h-9 px-3" disabled={busy} onClick={() => addGame(result.bggId, 'saved')}>Save</Button>
-                  {activeList && <Button type="button" variant="secondary" className="min-h-9 px-3" disabled={busy} onClick={() => void mutate(`/bgg-account/lists/${activeList.id}/games`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bggId: result.bggId }) }, `Added to ${activeList.name}.`)}>Add to {activeList.name}</Button>}
+                  {(['collection', 'wishlist', 'saved'] as const).map((target) => {
+                    const source = target === 'collection' ? collection : target === 'wishlist' ? wishlist : saved;
+                    const active = source.some((game) => game.bggId === result.bggId);
+                    return <Button key={target} type="button" variant={active ? 'primary' : 'secondary'} aria-pressed={active} className="min-h-9 px-3" disabled={busy} onClick={() => { if (!active) addGame(result.bggId, target); }}>{target === 'collection' ? 'Own' : target === 'wishlist' ? 'Wishlist' : 'Saved'}</Button>;
+                  })}
+                  {activeList && (() => { const active = activeList.items.some((game) => game.bggId === result.bggId); return <Button type="button" variant={active ? 'primary' : 'secondary'} aria-pressed={active} className="min-h-9 px-3" disabled={busy} onClick={() => { if (!active) void mutate(`/bgg-account/lists/${activeList.id}/games`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bggId: result.bggId }) }, `Added to ${activeList.name}.`); }}>{active ? `In ${activeList.name}` : `Add to ${activeList.name}`}</Button>; })()}
                 </div>
               </div>
             ))}
@@ -848,11 +880,13 @@ export function PersonalCollection() {
         </DialogContent>
       </Dialog>
 
+      {activeList && <GamePickerDialog open={listGamePickerOpen} title={`Add games to ${activeList.name}`} games={pickerGames} addedIds={new Set(activeList.items.map((game) => game.id))} onOpenChange={setListGamePickerOpen} onAdd={(game) => mutate(`/bgg-account/lists/${activeList.id}/games`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bggId: game.bggId }) }, '')} />}
+
       <div className="flex flex-col gap-2">
       {listEntries.map((entry) => {
         const isExpanded = expanded && tab === entry.value;
         const entryList = entry.value.startsWith('list:') ? lists.find((list) => `list:${list.id}` === entry.value) : undefined;
-        return <CollectionListAccordion key={entry.value} label={entry.label} count={entry.count} expanded={isExpanded} onToggle={() => { if (tab === entry.value) setExpanded((current) => !current); else changeTab(entry.value); }} actions={entryList ? <DropdownMenu><DropdownMenuTrigger asChild><button type="button" className="flex min-h-10 w-10 items-center justify-center rounded-sm text-lg font-bold text-text-muted hover:bg-highlight" aria-label={`${entryList.name} settings`} disabled={busy}>...</button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onSelect={() => setEditingListId((current) => current === entryList.id ? null : entryList.id)}>{editingListId === entryList.id ? 'Exit edit mode' : 'Enter edit mode'}</DropdownMenuItem><DropdownMenuItem onSelect={() => { setRenamingList(entryList); setRenamedListName(entryList.name); }}>Rename list</DropdownMenuItem><DropdownMenuSeparator /><DropdownMenuItem className="text-accent" onSelect={() => { if (window.confirm(`Delete ${entryList.name}?`)) void mutate(`/bgg-account/lists/${entryList.id}`, { method: 'DELETE' }, '').then((deleted) => { if (deleted && tab === entry.value) { setTab('collection'); setExpanded(false); setEditingListId(null); } }); }}>Delete list</DropdownMenuItem></DropdownMenuContent></DropdownMenu> : undefined}>
+        return <CollectionListAccordion key={entry.value} label={entry.label} count={entry.count} expanded={isExpanded} onToggle={() => { if (tab === entry.value) setExpanded((current) => !current); else changeTab(entry.value); }} actions={entryList ? <DropdownMenu><DropdownMenuTrigger asChild><button type="button" className="flex min-h-10 w-10 items-center justify-center rounded-sm text-lg font-bold text-text-muted hover:bg-highlight" aria-label={`${entryList.name} settings`} disabled={busy}>...</button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onSelect={() => { const entering = editingListId !== entryList.id; setEditingListId(entering ? entryList.id : null); if (entering) { setTab(entry.value); setExpanded(true); } }}>{editingListId === entryList.id ? 'Exit edit mode' : 'Enter edit mode'}</DropdownMenuItem><DropdownMenuItem onSelect={() => { setRenamingList(entryList); setRenamedListName(entryList.name); }}>Rename list</DropdownMenuItem><DropdownMenuSeparator /><DropdownMenuItem className="text-accent" onSelect={() => { if (window.confirm(`Delete ${entryList.name}?`)) void mutate(`/bgg-account/lists/${entryList.id}`, { method: 'DELETE' }, '').then((deleted) => { if (deleted && tab === entry.value) { setTab('collection'); setExpanded(false); setEditingListId(null); } }); }}>Delete list</DropdownMenuItem></DropdownMenuContent></DropdownMenu> : undefined}>
         {tab === entry.value && <>
       <Card className="p-3">
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -886,6 +920,8 @@ export function PersonalCollection() {
           </form>
         </Card>
       )}
+
+      {activeList && editingListId === activeList.id && <div className="flex justify-end"><Button type="button" variant="secondary" disabled={busy} onClick={() => setListGamePickerOpen(true)}>+ Add games</Button></div>}
 
       {visibleGames.length === 0 && activeList?.type !== 'tier' ? (
         <Card className="p-8 text-center text-sm text-text-muted">No games match this view.</Card>
