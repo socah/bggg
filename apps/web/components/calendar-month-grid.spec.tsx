@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
 const apiFetch = jest.fn<typeof fetch>();
 
@@ -14,7 +14,7 @@ jest.unstable_mockModule('@/components/calendar-play-launcher', () => ({
 }));
 
 jest.unstable_mockModule('@/components/play-log-dialog', () => ({
-  PlayLogDialog: ({ editPlayId, inline, defaults }: { editPlayId?: string; inline?: boolean; defaults?: { groupId: string } }) => <div data-group-id={defaults?.groupId}>{inline ? 'Inline' : 'Modal'} logged play {editPlayId}</div>,
+  PlayLogDialog: ({ editPlayId, inline, defaults, onCreated }: { editPlayId?: string; inline?: boolean; defaults?: { groupId: string }; onCreated?: (playId: string) => void }) => <div data-group-id={defaults?.groupId}><span>{inline ? 'Inline' : 'Modal'} logged play {editPlayId}</span>{onCreated && <button type="button" onClick={() => onCreated('play-new')}>Complete play creation</button>}</div>,
 }));
 
 jest.unstable_mockModule('@/components/session-place-control', () => ({
@@ -169,7 +169,7 @@ describe('CalendarMonthGrid', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Log play 2026-05-08' }));
     const editor = screen.getAllByText('Inline logged play');
     expect(editor.length).toBe(1);
-    expect(editor[0].getAttribute('data-group-id')).toBe('');
+    expect(editor[0].closest('[data-group-id]')?.getAttribute('data-group-id')).toBe('');
   });
 
   it('offers only proposal creation after today', () => {
@@ -210,7 +210,7 @@ describe('CalendarMonthGrid', () => {
     expect(apiFetch).toHaveBeenCalledWith('/groups/group-1/plays', { cache: 'no-store' });
 
     fireEvent.click(screen.getByRole('button', { name: 'Played Azul - Thursday Games' }));
-    const playRow = screen.getByText('Azul play details').closest('button')!;
+    const playRow = screen.getByText('Azul details').closest('button')!;
     expect(within(within(playRow).getByTitle('Alice')).getByLabelText('Winner')).toBeTruthy();
     expect(within(within(playRow).getByTitle('Bob')).queryByLabelText('Winner')).toBeNull();
     expect(screen.getByText('Inline logged play play-1')).toBeTruthy();
@@ -298,5 +298,29 @@ describe('CalendarMonthGrid', () => {
     expect(within(row).getByTitle('Alex').textContent).toBe('A');
     expect(within(row).getByTitle('Amy').textContent).toBe('A');
     expect(within(row).getByTitle('Alex').getAttribute('style')).not.toBe(within(row).getByTitle('Amy').getAttribute('style'));
+  });
+
+  it.each([
+    ['a selected group', 'group-panel-selected', 'group-panel-selected'],
+    ['Personal mode', undefined, 'group-panel-personal'],
+  ])('replaces the temporary editor with one expanded details panel in %s', async (_label, defaultGroupId, groupId) => {
+    const play = {
+      id: 'play-new', sessionId: 'session-1', proposalId: null, groupId, groupName: 'Thursday Games',
+      game: { id: 42, name: 'Azul', image: null, thumbnail: null }, playedDate: '2026-05-01', status: 'finished' as const,
+      durationMinutes: null, notes: null, canEdit: true, sessionParticipants: [], playParticipants: [], sessionPlace: null,
+    };
+    let requestCount = 0;
+    apiFetch.mockImplementation(async () => ({ ok: true, json: async () => requestCount++ === 0 ? [] : [play] }) as Response);
+    render(<CalendarMonthGrid proposals={[]} groups={[{ id: groupId, name: 'Thursday Games', ownerId: 'user-1', isSolo: false, createdAt: '' }]} defaultGroupId={defaultGroupId} />);
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole('button', { name: 'May 1, 2026' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Log play 2026-05-01' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Complete play creation' }));
+
+    expect(await screen.findByText('Azul details')).toBeTruthy();
+    expect(screen.getByText('Inline logged play play-new')).toBeTruthy();
+    expect(screen.queryByText('Inline logged play')).toBeNull();
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(2));
   });
 });

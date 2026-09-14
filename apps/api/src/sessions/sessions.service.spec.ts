@@ -3,6 +3,7 @@ import { PlaySessionPlayer } from './play-session-player.entity';
 import { PlaySession } from '../scheduling/play-session.entity';
 import { PlaySessionGame } from '../scheduling/play-session-game.entity';
 import { PlayResult } from './play-result.entity';
+import { PlayUserNote } from './play-user-note.entity';
 
 describe('SessionsService play roster context', () => {
   const members = { findOneBy: jest.fn() };
@@ -149,6 +150,7 @@ describe('SessionsService play summaries', () => {
         { playId: 'play-2', sessionPlayerId: 'player-1', isWinner: false },
         { playId: 'play-2', sessionPlayerId: 'player-3', isWinner: true },
       ]) }],
+      [PlayUserNote, { findBy: jest.fn().mockResolvedValue([]) }],
     ]);
     const service = new SessionsService(
       { findBy: jest.fn().mockResolvedValue([{ id: 1, name: 'Azul' }, { id: 2, name: 'Cascadia' }]) } as never,
@@ -172,6 +174,77 @@ describe('SessionsService play summaries', () => {
     expect(result[0].playParticipants.map((player) => player.name)).toEqual(['Alice', 'Bob']);
     expect(result[0].playParticipants.map((player) => player.isWinner)).toEqual([true, false]);
     expect(result[1].playParticipants.map((player) => player.name)).toEqual(['Alice', 'Carol']);
+  });
+});
+
+describe('SessionsService user play notes', () => {
+  it('returns every user note with its author and current-user marker', async () => {
+    const play = { id: 'play-1', sessionId: 'session-1', notes: null };
+    const repositories = new Map<unknown, unknown>([
+      [PlaySessionGame, { findOneBy: jest.fn().mockResolvedValue(play) }],
+      [PlayResult, { findBy: jest.fn().mockResolvedValue([]) }],
+      [PlaySessionPlayer, { findBy: jest.fn().mockResolvedValue([]) }],
+      [PlayUserNote, { findBy: jest.fn().mockResolvedValue([
+        { playId: 'play-1', userId: 'user-1', notes: 'My note' },
+        { playId: 'play-1', userId: 'user-2', notes: 'Their note' },
+      ]) }],
+    ]);
+    const service = new SessionsService(
+      {} as never,
+      {} as never,
+      {} as never,
+      { findOneBy: jest.fn().mockResolvedValue({ id: 'session-1', groupId: 'group-1', playedAt: new Date('2026-09-10T00:00:00Z') }) } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { findOne: jest.fn().mockResolvedValue({ id: 'group-1' }), getMembers: jest.fn().mockResolvedValue([
+        { id: 'user-1', username: 'alice', displayName: 'Alice' },
+        { id: 'user-2', username: 'bob', displayName: 'Bob' },
+      ]) } as never,
+      { getRepository: jest.fn((entity) => repositories.get(entity)) } as never,
+      {} as never,
+    );
+
+    const result = await service.getPlay('group-1', 'play-1', 'user-1');
+
+    expect(result.notes).toEqual([
+      expect.objectContaining({ userId: 'user-1', notes: 'My note', displayName: 'Alice', isCurrentUser: true }),
+      expect.objectContaining({ userId: 'user-2', notes: 'Their note', displayName: 'Bob', isCurrentUser: false }),
+    ]);
+  });
+
+  it('upserts and removes only the authenticated user note', async () => {
+    const play = { id: 'play-1', sessionId: 'session-1' };
+    const playRepo = { findOneBy: jest.fn().mockResolvedValue(play) };
+    const noteRepo = {
+      upsert: jest.fn().mockResolvedValue({}),
+      delete: jest.fn().mockResolvedValue({ affected: 1 }),
+    };
+    const service = new SessionsService(
+      {} as never,
+      {} as never,
+      {} as never,
+      { findOneBy: jest.fn().mockResolvedValue({ id: 'session-1', groupId: 'group-1' }) } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { findOne: jest.fn().mockResolvedValue({ id: 'group-1' }) } as never,
+      { getRepository: jest.fn((entity) => entity === PlaySessionGame ? playRepo : noteRepo) } as never,
+      {} as never,
+    );
+
+    await service.updatePlayNote('group-1', 'play-1', { notes: ' Alice note ' }, 'user-1');
+    await service.updatePlayNote('group-1', 'play-1', { notes: null }, 'user-1');
+
+    expect(noteRepo.upsert).toHaveBeenCalledWith(
+      { playId: 'play-1', userId: 'user-1', notes: 'Alice note' },
+      ['playId', 'userId'],
+    );
+    expect(noteRepo.delete).toHaveBeenCalledWith({ playId: 'play-1', userId: 'user-1' });
   });
 });
 

@@ -16,6 +16,7 @@ import { SessionsService } from './sessions.service';
 import { UploadsModule } from '../uploads/uploads.module';
 import { Place } from '../scheduling/place.entity';
 import { PlaceVisibility } from '../scheduling/place-visibility.entity';
+import { PlayUserNote } from './play-user-note.entity';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { PlaceVisibility } from '../scheduling/place-visibility.entity';
       PlaySessionProposalGame,
       Place,
       PlaceVisibility,
+      PlayUserNote,
     ]),
     GroupsModule,
     UploadsModule,

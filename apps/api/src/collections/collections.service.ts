@@ -27,6 +27,7 @@ import { CreateListDto } from './dto/create-list.dto';
 import { UpdateListDto } from './dto/update-list.dto';
 import { AddListGameDto } from './dto/add-list-game.dto';
 import { UpdateListGameDto } from './dto/update-list-game.dto';
+import { PlayUserNote } from '../sessions/play-user-note.entity';
 
 export interface SyncSummary {
   added: number;
@@ -54,6 +55,7 @@ export class CollectionsService {
     @InjectRepository(Group) private readonly groups: Repository<Group>,
     @InjectRepository(PlaySession) private readonly sessions: Repository<PlaySession>,
     @InjectRepository(PlaySessionGame) private readonly sessionGames: Repository<PlaySessionGame>,
+    @InjectRepository(PlayUserNote) private readonly playNotes: Repository<PlayUserNote>,
     private readonly bgg: BggService,
     private readonly games: GamesService,
     private readonly keycloak: KeycloakAdminClient,
@@ -392,8 +394,12 @@ export class CollectionsService {
     const groupRows = sessions.length
       ? await this.groups.findBy({ id: In([...new Set(sessions.map((session) => session.groupId))]) })
       : [];
+    const noteRows = playRows.length
+      ? await this.playNotes.findBy({ playId: In(playRows.map((play) => play.id)), userId })
+      : [];
     const groupNameById = new Map(groupRows.map((group) => [group.id, group.name]));
     const sessionById = new Map(sessions.map((session) => [session.id, session]));
+    const noteByPlayId = new Map(noteRows.map((note) => [note.playId, note.notes]));
     return {
       game,
       reviews: reviewViews,
@@ -405,7 +411,7 @@ export class CollectionsService {
         sessionId: session.id,
         groupId: session.groupId,
         playedAt: session.playedAt,
-        notes: play.notes ?? session.notes,
+        notes: noteByPlayId.get(play.id) ?? null,
         status: play.status,
         durationMinutes: play.durationMinutes,
         canEdit: true,

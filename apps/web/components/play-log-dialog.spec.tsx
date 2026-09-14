@@ -45,6 +45,8 @@ describe('PlayLogDialog', () => {
     const group = screen.getByRole('combobox', { name: 'Group' }) as HTMLSelectElement;
     expect(group.value).toBe('');
     expect(screen.getByRole('option', { name: 'Choose a group' })).toBeTruthy();
+    expect(screen.queryByLabelText('Date')).toBeNull();
+    expect(screen.queryByText('Players')).toBeNull();
     expect(apiFetch).not.toHaveBeenCalled();
 
     fireEvent.change(group, { target: { value: 'group-1' } });
@@ -83,9 +85,9 @@ describe('PlayLogDialog', () => {
     apiFetch.mockImplementation(async (input, init) => {
       const url = String(input);
       if (url.includes('/play-players')) return { ok: true, json: async () => roster } as Response;
-      if (url.endsWith('/plays/play-1') && !init?.method) return { ok: true, json: async () => ({ status: 'finished', durationMinutes: null, notes: 'Old note', players: [{ userId: 'user-1', guestPlayerId: null, isWinner: false, score: null }] }) } as Response;
+      if (url.endsWith('/plays/play-1') && !init?.method) return { ok: true, json: async () => ({ status: 'finished', durationMinutes: null, notes: [{ id: 'user-1', userId: 'user-1', notes: 'Old note', username: 'alice', displayName: 'Alice', nickname: null, isCurrentUser: true }], players: [{ userId: 'user-1', guestPlayerId: null, isWinner: false, score: null }] }) } as Response;
       if (url.endsWith('/uploads/plays/play-1')) return { ok: true, json: async () => [] } as Response;
-      if (url.endsWith('/plays/play-1') && init?.method === 'PATCH') return { ok: true, json: async () => ({}) } as Response;
+      if (url.endsWith('/plays/play-1/note') && init?.method === 'PATCH') return { ok: true, json: async () => ({ userId: 'user-1', notes: 'Updated note' }) } as Response;
       throw new Error(`Unexpected request: ${url}`);
     });
 
@@ -102,9 +104,10 @@ describe('PlayLogDialog', () => {
     fireEvent.change(notes, { target: { value: 'Updated note' } });
     fireEvent.blur(notes);
 
-    await waitFor(() => expect(apiFetch.mock.calls.some(([path, init]) => String(path).endsWith('/plays/play-1') && init?.method === 'PATCH')).toBe(true));
-    const patchCall = apiFetch.mock.calls.find(([path, init]) => String(path).endsWith('/plays/play-1') && init?.method === 'PATCH');
+    await waitFor(() => expect(apiFetch.mock.calls.some(([path, init]) => String(path).endsWith('/plays/play-1/note') && init?.method === 'PATCH')).toBe(true));
+    const patchCall = apiFetch.mock.calls.find(([path, init]) => String(path).endsWith('/plays/play-1/note') && init?.method === 'PATCH');
     expect(JSON.parse(String(patchCall?.[1]?.body)).notes).toBe('Updated note');
+    expect(JSON.parse(String(patchCall?.[1]?.body)).players).toBeUndefined();
     expect(screen.queryByRole('button', { name: 'Save changes' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
   });
@@ -128,7 +131,7 @@ describe('PlayLogDialog', () => {
     expect(screen.queryByText('No players selected.')).toBeNull();
     expect(apiFetch.mock.calls.find(([path]) => String(path).endsWith('/plays/play-1'))?.[1]).toEqual({ cache: 'no-store' });
 
-    resolvePlay({ ok: true, json: async () => ({ status: 'finished', durationMinutes: null, notes: null, players: [
+    resolvePlay({ ok: true, json: async () => ({ status: 'finished', durationMinutes: null, notes: [], players: [
       { userId: 'user-1', guestPlayerId: null, isWinner: false, score: null },
       { userId: null, guestPlayerId: 'guest-1', isWinner: false, score: null },
     ] }) } as Response);
@@ -163,7 +166,7 @@ describe('PlayLogDialog', () => {
     rerender(<PlayLogDialog {...props} open />);
     await waitFor(() => expect(playResolvers.length).toBeGreaterThan(initialRequestCount));
     for (const resolve of playResolvers.slice(initialRequestCount)) {
-      resolve({ ok: true, json: async () => ({ status: 'finished', durationMinutes: null, notes: null, players: [
+      resolve({ ok: true, json: async () => ({ status: 'finished', durationMinutes: null, notes: [], players: [
         { userId: 'user-1', guestPlayerId: null, isWinner: false, score: null },
         { userId: null, guestPlayerId: 'guest-1', isWinner: false, score: null },
       ] }) } as Response);
@@ -171,7 +174,7 @@ describe('PlayLogDialog', () => {
     expect(await screen.findByLabelText('Bob (guest) score')).toBeTruthy();
 
     for (const resolve of playResolvers.slice(0, initialRequestCount)) {
-      resolve({ ok: true, json: async () => ({ status: 'finished', durationMinutes: null, notes: null, players: [
+      resolve({ ok: true, json: async () => ({ status: 'finished', durationMinutes: null, notes: [], players: [
         { userId: 'user-1', guestPlayerId: null, isWinner: false, score: null },
       ] }) } as Response);
     }
@@ -197,5 +200,31 @@ describe('PlayLogDialog', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Retry creating play' }));
     expect(await screen.findByRole('button', { name: 'Delete play' })).toBeTruthy();
     expect(attempts).toBe(2);
+  });
+
+  it('shows non-player note authors as ghosts and removes the list with the last note', async () => {
+    apiFetch.mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes('/play-players')) return { ok: true, json: async () => roster } as Response;
+      if (url.endsWith('/plays/play-1') && !init?.method) return { ok: true, json: async () => ({
+        status: 'finished',
+        durationMinutes: null,
+        notes: [{ id: 'user-1', userId: 'user-1', notes: 'I watched this one', username: 'alice', displayName: 'Alice', nickname: null, isCurrentUser: true }],
+        players: [{ userId: null, guestPlayerId: 'guest-1', isWinner: false, score: null }],
+      }) } as Response;
+      if (url.endsWith('/uploads/plays/play-1')) return { ok: true, json: async () => [] } as Response;
+      if (url.endsWith('/plays/play-1/note') && init?.method === 'PATCH') return { ok: true, json: async () => ({ userId: 'user-1', notes: null }) } as Response;
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    render(<PlayLogDialog inline game={{ id: 42, name: 'Azul' } as never} open editPlayId="play-1" defaults={{ groupId: 'group-1', playedDate: '2026-09-10', userIds: [] }} onOpenChange={jest.fn()} />);
+
+    expect(await screen.findByText('Ghosts')).toBeTruthy();
+    const note = screen.getByLabelText('Alice ghost note');
+    fireEvent.change(note, { target: { value: '' } });
+    fireEvent.blur(note);
+
+    await waitFor(() => expect(screen.queryByText('Ghosts')).toBeNull());
+    expect(screen.getByLabelText('Your note')).toBeTruthy();
   });
 });

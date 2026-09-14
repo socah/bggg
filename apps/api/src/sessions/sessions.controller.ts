@@ -7,6 +7,7 @@ import { SessionsService } from './sessions.service';
 import { UpdatePlayDto } from './dto/update-play.dto';
 import { UpdateSessionPlaceDto } from './dto/update-session-place.dto';
 import { PlayPlayersQueryDto } from './dto/play-players-query.dto';
+import { UpdatePlayNoteDto } from './dto/update-play-note.dto';
 
 interface AuthenticatedRequest {
   user: { sub: string };
@@ -80,6 +81,16 @@ export class SessionsController {
     @Request() req: AuthenticatedRequest,
   ) {
     return this.sessionsService.updatePlay(groupId, playId, dto, req.user.sub);
+  }
+
+  @Patch('plays/:playId/note')
+  updatePlayNote(
+    @Param('groupId', ParseUUIDPipe) groupId: string,
+    @Param('playId', ParseUUIDPipe) playId: string,
+    @Body() dto: UpdatePlayNoteDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.sessionsService.updatePlayNote(groupId, playId, dto, req.user.sub);
   }
 
   @Delete('plays/:playId')

@@ -97,6 +97,7 @@ export class UsersService implements OnApplicationBootstrap {
       }
       await manager.query(`DELETE FROM invites WHERE created_by = $1 AND used_at IS NULL`, [userId]);
       await manager.query(`DELETE FROM group_members WHERE user_id = $1`, [userId]);
+      await manager.query(`DELETE FROM play_user_notes WHERE user_id = $1`, [userId]);
 
       // Shared and historical rows remain, but no longer point at the deleted
       // Keycloak subject. This preserves sessions and logged-play history.

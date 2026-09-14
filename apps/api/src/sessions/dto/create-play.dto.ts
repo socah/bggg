@@ -63,11 +63,6 @@ export class CreatePlayDto {
   @Max(10080)
   durationMinutes?: number;
 
-  @IsOptional()
-  @IsString()
-  @MaxLength(5000)
-  notes?: string;
-
   @IsArray()
   @ArrayMinSize(1)
   @ArrayMaxSize(100)

@@ -21,6 +21,8 @@ import { Place } from '../scheduling/place.entity';
 import { PlaceVisibility } from '../scheduling/place-visibility.entity';
 import { UpdateSessionPlaceDto } from './dto/update-session-place.dto';
 import type { PlayPlayersQueryDto } from './dto/play-players-query.dto';
+import { PlayUserNote } from './play-user-note.entity';
+import type { UpdatePlayNoteDto } from './dto/update-play-note.dto';
 
 export function rankMatchingSessions(
   sessions: PlaySession[],
@@ -163,6 +165,9 @@ export class SessionsService {
     const results = plays.length
       ? await this.dataSource.getRepository(PlayResult).findBy({ playId: In(plays.map((play) => play.id)) })
       : [];
+    const myNotes = plays.length
+      ? await this.dataSource.getRepository(PlayUserNote).findBy({ playId: In(plays.map((play) => play.id)), userId })
+      : [];
     const guestIds = sessionPlayers.flatMap((player) => player.guestPlayerId ? [player.guestPlayerId] : []);
     const [groupMembers, guestPlayers] = await Promise.all([
       this.groupsService.getMembers(groupId, userId),
@@ -176,6 +181,7 @@ export class SessionsService {
     const memberById = new Map(groupMembers.map((member) => [member.id, member]));
     const guestById = new Map(guestPlayers.map((guest) => [guest.id, guest]));
     const participantById = new Map(sessionPlayers.map((player) => [player.id, player]));
+    const myNoteByPlayId = new Map(myNotes.map((note) => [note.playId, note.notes]));
     const participantSummary = (player: PlaySessionPlayer) => {
       if (player.userId) {
         const member = memberById.get(player.userId);
@@ -194,7 +200,7 @@ export class SessionsService {
       playedDate: sessionById.get(play.sessionId)!.playedAt.toISOString().slice(0, 10),
       status: play.status,
       durationMinutes: play.durationMinutes,
-      notes: play.notes,
+      notes: myNoteByPlayId.get(play.id) ?? null,
       canEdit: true,
       sessionPlace: sessionById.get(play.sessionId)!.placeId
         ? { id: sessionById.get(play.sessionId)!.placeId!, name: placeById.get(sessionById.get(play.sessionId)!.placeId!)?.name ?? 'Unknown place' }
@@ -331,7 +337,7 @@ export class SessionsService {
         gameId: dto.gameId,
         status: dto.status ?? 'finished',
         durationMinutes: dto.durationMinutes ?? null,
-        notes: dto.notes?.trim() || null,
+        notes: null,
         loggedBy: userId,
       }));
 
@@ -379,13 +385,30 @@ export class SessionsService {
     if (!play) throw new NotFoundException('Play not found');
     const session = await this.sessions.findOneBy({ id: play.sessionId, groupId });
     if (!session) throw new NotFoundException('Play not found');
-    const results = await this.dataSource.getRepository(PlayResult).findBy({ playId });
+    const [results, notes, groupMembers] = await Promise.all([
+      this.dataSource.getRepository(PlayResult).findBy({ playId }),
+      this.dataSource.getRepository(PlayUserNote).findBy({ playId }),
+      this.groupsService.getMembers(groupId, userId),
+    ]);
     const participants = results.length
       ? await this.dataSource.getRepository(PlaySessionPlayer).findBy({ id: In(results.map((result) => result.sessionPlayerId)) })
       : [];
     const resultByPlayer = new Map(results.map((result) => [result.sessionPlayerId, result]));
+    const memberById = new Map(groupMembers.map((member) => [member.id, member]));
     return {
       ...play,
+      notes: notes.map((note) => {
+        const member = memberById.get(note.userId);
+        return {
+          id: note.userId,
+          userId: note.userId,
+          notes: note.notes,
+          username: member?.username ?? 'unknown-member',
+          displayName: member?.displayName ?? 'Unknown member',
+          nickname: member?.nickname ?? null,
+          isCurrentUser: note.userId === userId,
+        };
+      }),
       playedDate: session.playedAt.toISOString().slice(0, 10),
       players: participants.map((participant) => ({
         userId: participant.userId,
@@ -442,10 +465,26 @@ export class SessionsService {
       await this.removeOrphanedSessionPlayers(entityManager, session.id);
       play.status = dto.status ?? play.status;
       if (dto.durationMinutes !== undefined) play.durationMinutes = dto.durationMinutes;
-      if (dto.notes !== undefined) play.notes = dto.notes?.trim() || null;
       const saved = await entityManager.getRepository(PlaySessionGame).save(play);
       return { ...saved, sessionId: session.id, results };
     });
+  }
+
+  async updatePlayNote(groupId: string, playId: string, dto: UpdatePlayNoteDto, userId: string) {
+    await this.groupsService.findOne(groupId, userId);
+    const play = await this.dataSource.getRepository(PlaySessionGame).findOneBy({ id: playId });
+    if (!play) throw new NotFoundException('Play not found');
+    const session = await this.sessions.findOneBy({ id: play.sessionId, groupId });
+    if (!session) throw new NotFoundException('Play not found');
+
+    const noteRepo = this.dataSource.getRepository(PlayUserNote);
+    const notes = dto.notes?.trim() || null;
+    if (!notes) {
+      await noteRepo.delete({ playId, userId });
+      return { userId, notes: null };
+    }
+    await noteRepo.upsert({ playId, userId, notes }, ['playId', 'userId']);
+    return { userId, notes };
   }
 
   async removePlay(groupId: string, playId: string, userId: string): Promise<void> {

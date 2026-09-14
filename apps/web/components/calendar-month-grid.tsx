@@ -180,7 +180,7 @@ function WeekRowExpander({
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={artwork} alt="" className="size-8 rounded-sm object-cover" />
                 ) : <span className="flex size-8 items-center justify-center rounded-sm bg-accent-2 font-display text-accent-2-ink">{play.game.name.charAt(0)}</span>}
-                <strong className="min-w-0 truncate">{expanded ? `${play.game.name} play details` : play.game.name}</strong>
+                <strong className="min-w-0 truncate">{expanded ? `${play.game.name} details` : play.game.name}</strong>
                 <ParticipantIcons participants={play.playParticipants} leftAligned />
                 {play.durationMinutes && <span className="shrink-0 text-xs text-text-muted">{play.durationMinutes} min</span>}
                 {play.status === 'abandoned' && <span className="shrink-0 text-xs font-semibold text-accent">Abandoned</span>}
@@ -190,7 +190,7 @@ function WeekRowExpander({
               <Disclosure expanded={expanded}><div className="border-t border-border"><PlayLogDialog inline embedded game={play.game} open={expanded} editPlayId={play.id} defaults={{ groupId: play.groupId, playedDate: play.playedDate, userIds: [] }} onOpenChange={(open) => { if (!open) onExpandedPlayChange(null); }} onLogged={onPlayLogged} /></div></Disclosure>
             </div>;
           })}
-          {newPlay && <PlayLogDialog inline game={newPlay.game} open defaults={{ groupId: newPlay.groupId, playedDate: currentDate, userIds: [] }} onOpenChange={(open) => { if (!open) onNewPlayChange(null); }} onLogged={onPlayLogged} />}
+          {newPlay && <PlayLogDialog inline game={newPlay.game} open defaults={{ groupId: newPlay.groupId, playedDate: currentDate, userIds: [] }} onOpenChange={(open) => { if (!open) onNewPlayChange(null); }} onLogged={onPlayLogged} onCreated={(playId) => { onNewPlayChange(null); onExpandedPlayChange(playId); onPlayLogged(); }} />}
           {canPropose && (currentProposals.length === 0 || currentDraftOpen) ? <InlineProposalPanel proposalId={null} draftDate={currentDate} groups={groups} defaultGroupId={defaultGroupId} onProposalsChanged={onProposalsChanged} onPlayLogged={onPlayLogged} onSelectProposal={() => onSetDraftOpen(false)} /> : canPropose ? <div className="flex justify-start"><Button type="button" variant="secondary" className="px-3 py-1 text-xs" onClick={() => onSetDraftOpen(true)}>+ Add proposal</Button></div> : null}
         </div>}
       </div>

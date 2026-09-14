@@ -16,6 +16,7 @@ import { PlaySessionGame } from '../scheduling/play-session-game.entity';
 import { KeycloakModule } from '../keycloak/keycloak.module';
 import { PersonalList } from './personal-list.entity';
 import { PersonalListItem } from './personal-list-item.entity';
+import { PlayUserNote } from '../sessions/play-user-note.entity';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { PersonalListItem } from './personal-list-item.entity';
       PlaySessionGame,
       PersonalList,
       PersonalListItem,
+      PlayUserNote,
     ]),
     // BggModule exports BggService (username verification + collection
     // fetching); GamesModule exports GamesService (catalogue hydration).

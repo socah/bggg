@@ -18,6 +18,7 @@ import { PlaySessionGame } from '../scheduling/play-session-game.entity';
 import { KeycloakAdminClient } from '../keycloak/keycloak-admin.client';
 import { PersonalList } from './personal-list.entity';
 import { PersonalListItem } from './personal-list-item.entity';
+import { PlayUserNote } from '../sessions/play-user-note.entity';
 
 function makeGame(overrides: Partial<Game> = {}): Game {
   return {
@@ -156,6 +157,7 @@ describe('CollectionsService', () => {
         { provide: getRepositoryToken(Group), useValue: emptyRepo },
         { provide: getRepositoryToken(PlaySession), useValue: emptyRepo },
         { provide: getRepositoryToken(PlaySessionGame), useValue: emptyRepo },
+        { provide: getRepositoryToken(PlayUserNote), useValue: emptyRepo },
         { provide: BggService, useValue: mockBggService },
         { provide: GamesService, useValue: mockGamesService },
         { provide: KeycloakAdminClient, useValue: { getUser: jest.fn() } },

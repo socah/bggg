@@ -429,12 +429,23 @@ CREATE TABLE IF NOT EXISTS play_session_games (
   status      TEXT  NOT NULL DEFAULT 'finished'
                     CHECK (status IN ('finished', 'abandoned')),
   duration_minutes INT CHECK (duration_minutes > 0 AND duration_minutes <= 10080),
-  notes       TEXT,
+  notes       TEXT, -- legacy shared notes; new notes are stored per user below
   logged_by   TEXT  NOT NULL,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_play_session_games_session ON play_session_games(session_id);
+
+-- One visible note per authenticated user per logged play. A note author who
+-- is not one of the play's players is displayed as a ghost.
+CREATE TABLE IF NOT EXISTS play_user_notes (
+  play_id    UUID NOT NULL REFERENCES play_session_games(id) ON DELETE CASCADE,
+  user_id    TEXT NOT NULL,
+  notes      TEXT NOT NULL CHECK (LENGTH(notes) <= 5000),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (play_id, user_id)
+);
 
 -- Reusable group-wide identities for players without platform accounts.
 -- Linking rewrites their historical participation to linked_user_id.
@@ -457,8 +468,6 @@ CREATE TABLE IF NOT EXISTS guest_players (
 --   The game record and other players' results are unaffected.
 -- ── PLAY SESSION PLAYERS ──────────────────────────────────────────────────
 -- Tracks which group members attended the session — not all members play every night.
--- notes: per-player personal note ("I had a terrible opening hand but recovered").
---   Separate from the session-level notes, which are shared context for everyone.
 CREATE TABLE IF NOT EXISTS play_session_players (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   session_id      UUID NOT NULL REFERENCES play_sessions(id) ON DELETE CASCADE,

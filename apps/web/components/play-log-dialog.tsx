@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { UserIdentityLink } from '@/components/user-identity-link';
 import { apiFetch } from '@/lib/api';
 import { useGroups } from '@/hooks/use-groups';
-import type { GameCardGame, GroupMemberInfo } from '@/lib/types';
+import type { GameCardGame, GroupMemberInfo, PublicUserIdentity } from '@/lib/types';
 import { groupDisplayName, groupUsername } from '@/lib/user-identity';
 
 interface GuestPlayer {
@@ -29,6 +29,12 @@ interface PlayerValue {
   selected: boolean;
   isWinner: boolean;
   score: string;
+}
+
+interface PlayNote extends PublicUserIdentity {
+  userId: string;
+  notes: string;
+  isCurrentUser: boolean;
 }
 
 export interface PlayLogDefaults {
@@ -64,6 +70,7 @@ export function PlayLogDialog({
   editPlayId,
   onOpenChange,
   onLogged,
+  onCreated,
   inline = false,
   embedded = false,
 }: {
@@ -73,6 +80,7 @@ export function PlayLogDialog({
   editPlayId?: string;
   onOpenChange: (open: boolean) => void;
   onLogged?: () => void;
+  onCreated?: (playId: string) => void;
   inline?: boolean;
   embedded?: boolean;
 }) {
@@ -82,6 +90,7 @@ export function PlayLogDialog({
   const [status, setStatus] = useState<'finished' | 'abandoned'>('finished');
   const [duration, setDuration] = useState('');
   const [notes, setNotes] = useState('');
+  const [playNotes, setPlayNotes] = useState<PlayNote[]>([]);
   const [roster, setRoster] = useState<PlayerRoster | null>(null);
   const [players, setPlayers] = useState<Record<string, PlayerValue>>({});
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -115,6 +124,7 @@ export function PlayLogDialog({
     setStatus('finished');
     setDuration('');
     setNotes('');
+    setPlayNotes([]);
     setPhotos([]);
     setExistingPhotos([]);
     setPlayerPickerOpen(false);
@@ -139,13 +149,14 @@ export function PlayLogDialog({
     apiFetch(`/groups/${defaults.groupId}/plays/${editPlayId}`, { cache: 'no-store' })
       .then(async (response) => {
         if (!response.ok) throw new Error('Unable to load this play');
-        return response.json() as Promise<{ status: 'finished' | 'abandoned'; durationMinutes: number | null; notes: string | null; players: Array<{ userId: string | null; guestPlayerId: string | null; isWinner: boolean; score: string | null }> }>;
+        return response.json() as Promise<{ status: 'finished' | 'abandoned'; durationMinutes: number | null; notes: PlayNote[]; players: Array<{ userId: string | null; guestPlayerId: string | null; isWinner: boolean; score: string | null }> }>;
       })
       .then((play) => {
         if (requestId !== playRequest.current) return;
         setStatus(play.status);
         setDuration(play.durationMinutes ? String(play.durationMinutes) : '');
-        setNotes(play.notes ?? '');
+        setPlayNotes(play.notes);
+        setNotes(play.notes.find((note) => note.isCurrentUser)?.notes ?? '');
         setPlayers(Object.fromEntries(play.players.map((player) => [player.userId ? `user:${player.userId}` : `guest:${player.guestPlayerId}`, { selected: true, isWinner: player.isWinner, score: player.score ?? '' }])));
       })
       .catch((reason: unknown) => {
@@ -206,7 +217,7 @@ export function PlayLogDialog({
     }));
   }
 
-  async function savePlay(overrides: { status?: 'finished' | 'abandoned'; duration?: string; notes?: string; players?: Record<string, PlayerValue> } = {}) {
+  async function savePlay(overrides: { status?: 'finished' | 'abandoned'; duration?: string; players?: Record<string, PlayerValue> } = {}) {
     if (!currentPlayId || !groupId) return;
     const nextPlayers = overrides.players ?? players;
     const playerPayload = selectedPlayerPayload(nextPlayers);
@@ -215,19 +226,49 @@ export function PlayLogDialog({
       return;
     }
     const nextDuration = overrides.duration ?? duration;
-    const nextNotes = overrides.notes ?? notes;
     setSaving(true);
     setError(null);
     try {
       await mutate(`/groups/${groupId}/plays/${currentPlayId}`, 'PATCH', {
         status: overrides.status ?? status,
         durationMinutes: nextDuration ? Number(nextDuration) : null,
-        notes: nextNotes.trim() || null,
         players: playerPayload,
       });
       onLogged?.();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to save play');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveNotes() {
+    if (!currentPlayId || !groupId) return;
+    const currentUser = roster?.members.find((member) => member.isCurrentUser);
+    const currentNote = playNotes.find((note) => note.isCurrentUser);
+    const userId = currentUser?.id ?? currentNote?.userId;
+    if (!userId) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const response = await mutate(`/groups/${groupId}/plays/${currentPlayId}/note`, 'PATCH', { notes: notes.trim() || null });
+      const saved = await response.json() as { userId: string; notes: string | null };
+      setPlayNotes((current) => {
+        const others = current.filter((note) => note.userId !== saved.userId);
+        if (!saved.notes) return others;
+        return [...others, {
+          userId: saved.userId,
+          notes: saved.notes,
+          username: currentUser?.username ?? currentNote?.username ?? 'unknown-member',
+          displayName: currentUser?.displayName ?? currentNote?.displayName ?? 'Unknown member',
+          nickname: currentUser?.nickname ?? currentNote?.nickname ?? null,
+          isCurrentUser: true,
+          id: saved.userId,
+        }];
+      });
+      onLogged?.();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to save note');
     } finally {
       setSaving(false);
     }
@@ -335,7 +376,8 @@ export function PlayLogDialog({
       const play = (await response.json()) as { id: string; sessionId: string };
       setCreatedPlayId(play.id);
       setSessionId(play.sessionId);
-      onLogged?.();
+      if (onCreated) onCreated(play.id);
+      else onLogged?.();
     }).catch((reason: unknown) => {
       createStarted.current = false;
       setCreationFailed(true);
@@ -383,8 +425,28 @@ export function PlayLogDialog({
     ...availableGuests.map((guest) => ({ key: `guest:${guest.id}`, name: `${guest.name} (guest)`, member: null, guest })),
   ];
   const selectedPlayers = rosterPlayers.filter((player) => players[player.key]?.selected);
+  const selectedUserIds = new Set(selectedPlayers.flatMap((player) => player.key.startsWith('user:') ? [player.key.slice(5)] : []));
+  const currentUser = roster?.members.find((member) => member.isCurrentUser);
+  const currentNote = playNotes.find((note) => note.isCurrentUser);
+  const currentUserId = currentUser?.id ?? currentNote?.userId;
+  const currentUserIsPlayer = Boolean(currentUserId && selectedUserIds.has(currentUserId));
+  const ghostNotes = playNotes.filter((note) => !selectedUserIds.has(note.userId));
   const guestWithSettings = availableGuests.find((guest) => guest.id === guestSettingsId);
-  const content = <>
+  const choosingGroup = !defaults?.groupId && !currentPlayId;
+  const content = choosingGroup ? <>
+        <div className="flex items-start justify-between gap-4">
+          <div><h3 className="font-display text-xl">Log {game?.name}</h3></div>
+          {!inline && <DialogClose className="text-sm text-text-muted">Close</DialogClose>}
+        </div>
+        <label className="mt-5 flex min-w-0 flex-col gap-2 text-xs font-semibold text-text-muted"><span>Group</span>
+          <select required value={groupId} disabled={saving} onChange={(event) => { setGroupId(event.target.value); setRoster(null); setSessionId(null); setPlayers({}); }} className="h-10 min-h-10 w-full rounded-sm border border-border bg-surface px-2 text-sm text-text">
+            <option value="" disabled>Choose a group</option>
+            {groups.map((group) => <option key={group.id} value={group.id}>{group.isSolo ? `${group.name} (solo)` : group.name}</option>)}
+          </select>
+        </label>
+        {error && <p role="alert" className="mt-3 text-sm text-accent">{error}</p>}
+        {saving && <p role="status" className="mt-3 text-xs text-text-muted">Creating play...</p>}
+  </> : <>
         {!embedded && (
         <div className="flex items-start justify-between gap-4">
           <div>{inline ? <h3 className="font-display text-xl">{currentPlayId ? 'Edit' : 'Log'} {game?.name}</h3> : <DialogTitle className="font-display text-2xl">{currentPlayId ? 'Edit' : 'Log'} {game?.name}</DialogTitle>}<p className="mt-1 text-sm text-text-muted">Changes are saved automatically.</p></div>
@@ -422,12 +484,15 @@ export function PlayLogDialog({
             <div className="mt-2 flex flex-col gap-2">
               {selectedPlayers.map((player) => {
                  const value = players[player.key] ?? { selected: false, isWinner: false, score: '' };
-                  return <div key={player.key} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 rounded-sm border border-border bg-surface p-2 sm:grid-cols-[minmax(0,1fr)_auto_10rem_auto] sm:gap-2 sm:p-3">
+                  const playerNote = player.key.startsWith('user:') ? playNotes.find((note) => note.userId === player.key.slice(5)) : undefined;
+                  const isCurrentUser = player.key === `user:${currentUserId}`;
+                   return <div key={player.key} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 rounded-sm border border-border bg-surface p-2 sm:grid-cols-[minmax(0,1fr)_auto_10rem_auto] sm:gap-2 sm:p-3">
                      <div className="flex min-w-0 items-center justify-between gap-2"><strong className="truncate">{player.member ? <UserIdentityLink user={player.member} groupId={groupId} /> : player.name}</strong>{player.guest && roster?.canManageGuests && <button type="button" className="min-h-9 shrink-0 px-2 text-xs font-semibold text-text-muted underline" onClick={() => { setGuestSettingsId(player.guest!.id); setGuestSettingsOpen(true); }}>Settings</button>}</div>
                     <label className="col-start-1 row-start-2 flex items-center gap-2 text-xs sm:col-auto sm:row-auto"><input type="checkbox" checked={value.isWinner} disabled={saving || !currentPlayId || !value.selected} onChange={(event) => updatePlayer(player.key, { isWinner: event.target.checked }, true)} />Winner</label>
                     <Input className="col-start-2 row-start-2 h-9 min-h-9 w-28 sm:col-auto sm:row-auto sm:h-11 sm:w-auto" aria-label={`${player.name} score`} placeholder="Score" maxLength={100} value={value.score} disabled={saving || !currentPlayId || !value.selected} onChange={(event) => updatePlayer(player.key, { score: event.target.value })} onBlur={() => void savePlay()} />
-                    <button type="button" className="col-start-2 row-start-1 min-h-8 px-1 text-xs font-semibold text-accent sm:col-auto sm:row-auto sm:min-h-9 sm:px-2" disabled={saving || !currentPlayId || selectedPlayers.length === 1} onClick={() => updatePlayer(player.key, { selected: false, isWinner: false, score: '' }, true)}>Remove</button>
-                 </div>;
+                     <button type="button" className="col-start-2 row-start-1 min-h-8 px-1 text-xs font-semibold text-accent sm:col-auto sm:row-auto sm:min-h-9 sm:px-2" disabled={saving || !currentPlayId || selectedPlayers.length === 1} onClick={() => updatePlayer(player.key, { selected: false, isWinner: false, score: '' }, true)}>Remove</button>
+                     {isCurrentUser ? <label className="col-span-full mt-1 text-xs font-semibold text-text-muted">Your note<textarea aria-label={`${player.name} note`} rows={2} maxLength={5000} value={notes} disabled={saving || !currentPlayId} onChange={(event) => setNotes(event.target.value)} onBlur={() => void saveNotes()} className="mt-1 w-full resize-y rounded-sm border border-border bg-surface-raised p-2 text-sm font-normal text-text" /></label> : playerNote ? <p className="col-span-full mt-1 whitespace-pre-wrap text-sm text-text">{playerNote.notes}</p> : null}
+                  </div>;
                })}
               {!loadingRoster && !loadingPlay && selectedPlayers.length === 0 && <p className="text-sm text-text-muted">No players selected.</p>}
             </div>
@@ -448,11 +513,18 @@ export function PlayLogDialog({
               <div className="mt-2 flex flex-col gap-2 sm:flex-row"><select aria-label={`Account for ${guestWithSettings.name}`} value={linkTargets[guestWithSettings.id] ?? ''} onChange={(event) => setLinkTargets((current) => ({ ...current, [guestWithSettings.id]: event.target.value }))} className="min-h-10 min-w-0 flex-1 rounded-sm border border-border bg-surface px-2 text-sm"><option value="">Choose member</option>{roster.members.map((member) => <option key={member.id} value={member.id}>{groupDisplayName(member)}</option>)}</select><Button type="button" variant="secondary" disabled={saving || !linkTargets[guestWithSettings.id]} onClick={() => void linkGuest(guestWithSettings)}>Link and merge</Button></div>
               <Button type="button" variant="ghost" className="mt-2 min-h-9 px-0 text-xs text-accent" disabled={saving} onClick={() => void removeGuest(guestWithSettings)}>Remove from player list</Button>
             </div>}</div></div>
-          </section>
+           </section>
 
-          <label className="text-xs font-semibold text-text-muted">Notes
-            <textarea rows={3} maxLength={5000} value={notes} disabled={saving || !currentPlayId} onChange={(event) => setNotes(event.target.value)} onBlur={() => void savePlay()} className="mt-1 w-full resize-y rounded-sm border border-border bg-surface p-2 text-sm text-text" />
-          </label>
+          {ghostNotes.length > 0 && <section>
+            <h3 className="font-display text-lg">Ghosts</h3>
+            <div className="mt-2 flex flex-col gap-2">{ghostNotes.map((note) => <div key={note.userId} className="rounded-sm border border-border bg-surface p-3">
+              <strong><UserIdentityLink user={{ id: note.userId, username: note.username, displayName: note.displayName, nickname: note.nickname }} groupId={groupId} /></strong>
+              {note.isCurrentUser ? <label className="mt-2 block text-xs font-semibold text-text-muted">Your note<textarea aria-label={`${note.displayName} ghost note`} rows={2} maxLength={5000} value={notes} disabled={saving || !currentPlayId} onChange={(event) => setNotes(event.target.value)} onBlur={() => void saveNotes()} className="mt-1 w-full resize-y rounded-sm border border-border bg-surface-raised p-2 text-sm font-normal text-text" /></label> : <p className="mt-2 whitespace-pre-wrap text-sm">{note.notes}</p>}
+            </div>)}</div>
+          </section>}
+          {!currentUserIsPlayer && !currentNote && <label className="text-xs font-semibold text-text-muted">Your note
+            <textarea rows={3} maxLength={5000} value={notes} disabled={saving || !currentPlayId} onChange={(event) => setNotes(event.target.value)} onBlur={() => void saveNotes()} className="mt-1 w-full resize-y rounded-sm border border-border bg-surface p-2 text-sm font-normal text-text" />
+          </label>}
           <label className="text-xs font-semibold text-text-muted">Photos
             <Input type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={saving || !currentPlayId} onChange={(event) => { const files = Array.from(event.target.files ?? []); setPhotos(files); void addPhotos(files); }} className="mt-1" />
             {photos.length > 0 && <span className="mt-1 block font-normal">{photos.length} photo{photos.length === 1 ? '' : 's'} selected</span>}
