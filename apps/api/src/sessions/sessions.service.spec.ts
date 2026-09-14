@@ -116,6 +116,8 @@ describe('SessionsService play creation', () => {
       gameId: 42,
       playedDate: '2026-09-10',
       status: 'finished',
+      startTime: '23:00',
+      endTime: '01:00',
       players: [{ userId: 'user-1' }],
     }, 'user-1');
 
@@ -124,7 +126,12 @@ describe('SessionsService play creation', () => {
       ['group-1', '2026-09-10'],
     );
     expect(sessionRepo.save).not.toHaveBeenCalled();
-    expect(playRepo.create).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'session-1' }));
+    expect(playRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: 'session-1',
+      startedAt: new Date('2026-09-10T23:00:00.000Z'),
+      endedAt: new Date('2026-09-11T01:00:00.000Z'),
+      durationMinutes: 120,
+    }));
     expect(result.sessionId).toBe('session-1');
   });
 });
@@ -250,7 +257,7 @@ describe('SessionsService user play notes', () => {
 
 describe('SessionsService play participant cleanup', () => {
   it('removes only players no longer referenced by any play in the session', async () => {
-    const session = { id: 'session-1', groupId: 'group-1' };
+    const session = { id: 'session-1', groupId: 'group-1', playedAt: new Date('2026-09-10T00:00:00Z') };
     const play = { id: 'play-1', sessionId: session.id, loggedBy: 'user-1', status: 'finished', durationMinutes: null, notes: null };
     const alice = { id: 'player-1', sessionId: session.id, userId: 'user-1', guestPlayerId: null };
     const bob = { id: 'player-2', sessionId: session.id, userId: null, guestPlayerId: 'guest-1' };
@@ -304,9 +311,16 @@ describe('SessionsService play participant cleanup', () => {
 
     await service.updatePlay('group-1', play.id, {
       status: 'finished',
+      startTime: '18:30',
+      endTime: '20:00',
       players: [{ userId: 'user-1' }],
     }, 'user-1');
 
     expect(participantRepo.remove).toHaveBeenCalledWith([bob]);
+    expect(playRepo.save).toHaveBeenCalledWith(expect.objectContaining({
+      startedAt: new Date('2026-09-10T18:30:00.000Z'),
+      endedAt: new Date('2026-09-10T20:00:00.000Z'),
+      durationMinutes: 90,
+    }));
   });
 });

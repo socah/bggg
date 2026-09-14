@@ -227,4 +227,33 @@ describe('PlayLogDialog', () => {
     await waitFor(() => expect(screen.queryByText('Ghosts')).toBeNull());
     expect(screen.getByLabelText('Your note')).toBeTruthy();
   });
+
+  it('uses the interval dial and saves start and end times together', async () => {
+    apiFetch.mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes('/play-players')) return { ok: true, json: async () => roster } as Response;
+      if (url.endsWith('/plays/play-1') && !init?.method) return { ok: true, json: async () => ({
+        status: 'finished', durationMinutes: 90, startedAt: '2026-09-10T18:30:00.000Z', endedAt: '2026-09-10T20:00:00.000Z', notes: [],
+        players: [{ userId: 'user-1', guestPlayerId: null, isWinner: false, score: null }],
+      }) } as Response;
+      if (url.endsWith('/uploads/plays/play-1')) return { ok: true, json: async () => [] } as Response;
+      if (url.endsWith('/plays/play-1') && init?.method === 'PATCH') return { ok: true, json: async () => ({}) } as Response;
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    render(<PlayLogDialog inline game={{ id: 42, name: 'Azul' } as never} open editPlayId="play-1" defaults={{ groupId: 'group-1', playedDate: '2026-09-10', userIds: [] }} onOpenChange={jest.fn()} />);
+
+    const times = await screen.findByRole('button', { name: 'Set play times' });
+    await waitFor(() => expect(times.textContent).toContain('18:30'));
+    expect(times.textContent).toContain('20:00');
+    expect(times.textContent).toContain('1h 30m');
+    expect(screen.queryByLabelText('Duration (minutes)')).toBeNull();
+
+    fireEvent.click(times);
+    fireEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    await waitFor(() => expect(apiFetch.mock.calls.some(([path, init]) => path === '/groups/group-1/plays/play-1' && init?.method === 'PATCH')).toBe(true));
+    const patch = apiFetch.mock.calls.find(([path, init]) => path === '/groups/group-1/plays/play-1' && init?.method === 'PATCH');
+    expect(JSON.parse(String(patch?.[1]?.body))).toEqual(expect.objectContaining({ startTime: '18:30', endTime: '20:00' }));
+  });
 });

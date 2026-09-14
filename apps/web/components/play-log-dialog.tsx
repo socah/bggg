@@ -9,6 +9,9 @@ import { apiFetch } from '@/lib/api';
 import { useGroups } from '@/hooks/use-groups';
 import type { GameCardGame, GroupMemberInfo, PublicUserIdentity } from '@/lib/types';
 import { groupDisplayName, groupUsername } from '@/lib/user-identity';
+import { TimePickerDialog } from '@/components/ui/time-picker-dialog';
+import { hhmm } from '@/lib/datetime';
+import { formatDuration, intervalDuration } from '@/lib/time-interval';
 
 interface GuestPlayer {
   id: string;
@@ -88,7 +91,10 @@ export function PlayLogDialog({
   const [groupId, setGroupId] = useState('');
   const [playedDate, setPlayedDate] = useState(todayKey());
   const [status, setStatus] = useState<'finished' | 'abandoned'>('finished');
-  const [duration, setDuration] = useState('');
+  const [startTime, setStartTime] = useState('');
+  const [endTime, setEndTime] = useState('');
+  const [durationMinutes, setDurationMinutes] = useState<number | null>(null);
+  const [timePickerOpen, setTimePickerOpen] = useState(false);
   const [notes, setNotes] = useState('');
   const [playNotes, setPlayNotes] = useState<PlayNote[]>([]);
   const [roster, setRoster] = useState<PlayerRoster | null>(null);
@@ -122,7 +128,10 @@ export function PlayLogDialog({
     setGroupId(nextGroupId);
     setPlayedDate(defaults?.playedDate ?? todayKey());
     setStatus('finished');
-    setDuration('');
+    setStartTime('');
+    setEndTime('');
+    setDurationMinutes(null);
+    setTimePickerOpen(false);
     setNotes('');
     setPlayNotes([]);
     setPhotos([]);
@@ -149,12 +158,14 @@ export function PlayLogDialog({
     apiFetch(`/groups/${defaults.groupId}/plays/${editPlayId}`, { cache: 'no-store' })
       .then(async (response) => {
         if (!response.ok) throw new Error('Unable to load this play');
-        return response.json() as Promise<{ status: 'finished' | 'abandoned'; durationMinutes: number | null; notes: PlayNote[]; players: Array<{ userId: string | null; guestPlayerId: string | null; isWinner: boolean; score: string | null }> }>;
+        return response.json() as Promise<{ status: 'finished' | 'abandoned'; durationMinutes: number | null; startedAt: string | null; endedAt: string | null; notes: PlayNote[]; players: Array<{ userId: string | null; guestPlayerId: string | null; isWinner: boolean; score: string | null }> }>;
       })
       .then((play) => {
         if (requestId !== playRequest.current) return;
         setStatus(play.status);
-        setDuration(play.durationMinutes ? String(play.durationMinutes) : '');
+        setStartTime(play.startedAt ? hhmm(play.startedAt) : '');
+        setEndTime(play.endedAt ? hhmm(play.endedAt) : '');
+        setDurationMinutes(play.durationMinutes);
         setPlayNotes(play.notes);
         setNotes(play.notes.find((note) => note.isCurrentUser)?.notes ?? '');
         setPlayers(Object.fromEntries(play.players.map((player) => [player.userId ? `user:${player.userId}` : `guest:${player.guestPlayerId}`, { selected: true, isWinner: player.isWinner, score: player.score ?? '' }])));
@@ -217,7 +228,7 @@ export function PlayLogDialog({
     }));
   }
 
-  async function savePlay(overrides: { status?: 'finished' | 'abandoned'; duration?: string; players?: Record<string, PlayerValue> } = {}) {
+  async function savePlay(overrides: { status?: 'finished' | 'abandoned'; startTime?: string | null; endTime?: string | null; players?: Record<string, PlayerValue> } = {}) {
     if (!currentPlayId || !groupId) return;
     const nextPlayers = overrides.players ?? players;
     const playerPayload = selectedPlayerPayload(nextPlayers);
@@ -225,13 +236,13 @@ export function PlayLogDialog({
       setError('Select at least one player.');
       return;
     }
-    const nextDuration = overrides.duration ?? duration;
+    const changesTime = overrides.startTime !== undefined || overrides.endTime !== undefined;
     setSaving(true);
     setError(null);
     try {
       await mutate(`/groups/${groupId}/plays/${currentPlayId}`, 'PATCH', {
         status: overrides.status ?? status,
-        durationMinutes: nextDuration ? Number(nextDuration) : null,
+        ...(changesTime ? { startTime: overrides.startTime, endTime: overrides.endTime } : {}),
         players: playerPayload,
       });
       onLogged?.();
@@ -470,9 +481,13 @@ export function PlayLogDialog({
                  {(['finished', 'abandoned'] as const).map((value) => <button key={value} type="button" aria-pressed={status === value} disabled={saving || !currentPlayId} onClick={() => { setStatus(value); void savePlay({ status: value }); }} className={`flex-1 px-3 text-sm font-semibold capitalize ${status === value ? 'bg-accent-2 text-accent-2-ink' : 'bg-surface text-text-muted'}`}>{value}</button>)}
               </div>
             </fieldset>
-            <label className="flex min-w-0 flex-col gap-2 text-xs font-semibold text-text-muted"><span>Duration (minutes)</span>
-              <Input type="number" min="1" max="10080" value={duration} disabled={saving || !currentPlayId} onChange={(event) => setDuration(event.target.value)} onBlur={() => void savePlay()} className="h-10 min-h-10 w-full" />
-            </label>
+            <div className="sm:col-span-2">
+              <div className="grid grid-cols-3 gap-2 text-xs font-semibold text-text-muted"><span>Start</span><span>End</span><span>Duration</span></div>
+              <button type="button" aria-label="Set play times" disabled={saving || !currentPlayId} onClick={() => setTimePickerOpen(true)} className="mt-2 grid min-h-10 w-full grid-cols-3 items-center gap-2 rounded-sm border border-border bg-surface px-3 text-left text-sm text-text disabled:opacity-50">
+                <span>{startTime || 'Set time'}</span><span>{endTime || 'Set time'}</span><span>{durationMinutes ? formatDuration(durationMinutes) : '-'}</span>
+              </button>
+              {(startTime || endTime) && <button type="button" disabled={saving || !currentPlayId} onClick={() => { setStartTime(''); setEndTime(''); setDurationMinutes(null); void savePlay({ startTime: null, endTime: null }); }} className="mt-1 text-xs text-text-muted underline">Clear times</button>}
+            </div>
           </div>
 
           <section>
@@ -537,6 +552,7 @@ export function PlayLogDialog({
           {error && <p role="alert" className="text-sm text-accent">{error}</p>}
           <div className="flex min-h-10 flex-wrap items-center gap-2">{currentPlayId && <Button type="button" variant="ghost" className="text-accent" disabled={saving} onClick={() => void deletePlay()}>Delete play</Button>}{creationFailed && <Button type="button" variant="secondary" disabled={saving} onClick={() => setCreationAttempt((current) => current + 1)}>Retry creating play</Button>}<span className="ml-auto text-xs text-text-muted" role="status">{saving ? (currentPlayId ? 'Saving...' : 'Creating play...') : currentPlayId ? 'Changes saved automatically' : creationFailed ? 'Play was not created' : 'Preparing play...'}</span></div>
         </form>
+        <TimePickerDialog open={timePickerOpen} startValue={startTime} endValue={endTime} title="Choose play times" onOpenChange={setTimePickerOpen} onConfirm={(start, end) => { setStartTime(start); setEndTime(end); setDurationMinutes(intervalDuration(start, end)); setTimePickerOpen(false); void savePlay({ startTime: start, endTime: end }); }} />
   </>;
 
   if (inline) return <div className={`${embedded ? '' : 'rounded-md border border-border'} bg-surface-raised p-4`} style={embedded ? undefined : { boxShadow: 'var(--shadow-card)' }}>{content}</div>;

@@ -23,6 +23,7 @@ import { UpdateSessionPlaceDto } from './dto/update-session-place.dto';
 import type { PlayPlayersQueryDto } from './dto/play-players-query.dto';
 import { PlayUserNote } from './play-user-note.entity';
 import type { UpdatePlayNoteDto } from './dto/update-play-note.dto';
+import { resolveAvailabilityWindow } from '../scheduling/resolve-window';
 
 export function rankMatchingSessions(
   sessions: PlaySession[],
@@ -200,6 +201,8 @@ export class SessionsService {
       playedDate: sessionById.get(play.sessionId)!.playedAt.toISOString().slice(0, 10),
       status: play.status,
       durationMinutes: play.durationMinutes,
+      startedAt: play.startedAt,
+      endedAt: play.endedAt,
       notes: myNoteByPlayId.get(play.id) ?? null,
       canEdit: true,
       sessionPlace: sessionById.get(play.sessionId)!.placeId
@@ -278,6 +281,12 @@ export class SessionsService {
 
     const start = new Date(`${dto.playedDate}T00:00:00.000Z`);
     const end = new Date(`${dto.playedDate}T23:59:59.999Z`);
+    if ((dto.startTime === undefined) !== (dto.endTime === undefined)) {
+      throw new BadRequestException('Start and end times must be provided together');
+    }
+    const playWindow = dto.startTime && dto.endTime
+      ? resolveAvailabilityWindow(dto.playedDate, dto.startTime, dto.endTime)
+      : null;
     return this.dataSource.transaction(async (entityManager) => {
       // Serializes the get-or-create path for this group and day so two
       // simultaneous play logs cannot both decide that no session exists.
@@ -336,7 +345,11 @@ export class SessionsService {
         sessionId: session.id,
         gameId: dto.gameId,
         status: dto.status ?? 'finished',
-        durationMinutes: dto.durationMinutes ?? null,
+        durationMinutes: playWindow
+          ? Math.round((playWindow.end.getTime() - playWindow.start.getTime()) / 60_000)
+          : dto.durationMinutes ?? null,
+        startedAt: playWindow?.start ?? null,
+        endedAt: playWindow?.end ?? null,
         notes: null,
         loggedBy: userId,
       }));
@@ -440,6 +453,13 @@ export class SessionsService {
       throw new BadRequestException('Every player must belong to the group roster');
     }
     const guestById = new Map(guestRows.map((guest) => [guest.id, guest]));
+    const changesTime = dto.startTime !== undefined || dto.endTime !== undefined;
+    if (changesTime && !(
+      (dto.startTime === null && dto.endTime === null)
+      || (typeof dto.startTime === 'string' && typeof dto.endTime === 'string')
+    )) {
+      throw new BadRequestException('Start and end times must be provided together');
+    }
 
     return this.dataSource.transaction(async (entityManager) => {
       const participantRepo = entityManager.getRepository(PlaySessionPlayer);
@@ -465,6 +485,14 @@ export class SessionsService {
       await this.removeOrphanedSessionPlayers(entityManager, session.id);
       play.status = dto.status ?? play.status;
       if (dto.durationMinutes !== undefined) play.durationMinutes = dto.durationMinutes;
+      if (changesTime) {
+        const window = typeof dto.startTime === 'string' && typeof dto.endTime === 'string'
+          ? resolveAvailabilityWindow(session.playedAt.toISOString().slice(0, 10), dto.startTime, dto.endTime)
+          : null;
+        play.startedAt = window?.start ?? null;
+        play.endedAt = window?.end ?? null;
+        play.durationMinutes = window ? Math.round((window.end.getTime() - window.start.getTime()) / 60_000) : null;
+      }
       const saved = await entityManager.getRepository(PlaySessionGame).save(play);
       return { ...saved, sessionId: session.id, results };
     });

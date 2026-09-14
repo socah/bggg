@@ -147,6 +147,8 @@ function TimePickerInner({ startValue, endValue, title, onClose, onConfirm }: Ti
   const handAngle = stage === 'end'
     ? startAngle + duration / (12 * 60) * 360
     : startAngle;
+  const selectedPosition = stage === 'end' ? clockPositionMinutes(end) : clockPositionMinutes(start);
+  const startPosition = clockPositionMinutes(start);
 
   return (
     <DialogContent className="flex max-w-xs flex-col items-center p-4 select-none">
@@ -202,7 +204,7 @@ function TimePickerInner({ startValue, endValue, title, onClose, onConfirm }: Ti
           return label ? (
             <span
               key={index}
-              className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 text-xs font-medium text-text-muted"
+              className={cn('pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-1/2 text-xs font-medium', index * TIME_STEP_MINUTES === selectedPosition || (stage === 'end' && index * TIME_STEP_MINUTES === startPosition) ? 'font-bold text-black' : 'text-text-muted')}
               style={{ left: point.x, top: point.y }}
             >
               {clockFromPosition(index * TIME_STEP_MINUTES, 'AM').hour}

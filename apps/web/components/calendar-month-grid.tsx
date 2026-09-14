@@ -13,6 +13,8 @@ import { PlayLogDialog } from '@/components/play-log-dialog';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { SessionPlaceControl } from '@/components/session-place-control';
 import { DisclosureChevron } from '@/components/ui/disclosure-chevron';
+import { hhmm } from '@/lib/datetime';
+import { formatDuration } from '@/lib/time-interval';
 
 // Column labels for the Monday-first grid — one initial per weekday,
 // left to right Mon..Sun.
@@ -182,7 +184,8 @@ function WeekRowExpander({
                 ) : <span className="flex size-8 items-center justify-center rounded-sm bg-accent-2 font-display text-accent-2-ink">{play.game.name.charAt(0)}</span>}
                 <strong className="min-w-0 truncate">{expanded ? `${play.game.name} details` : play.game.name}</strong>
                 <ParticipantIcons participants={play.playParticipants} leftAligned />
-                {play.durationMinutes && <span className="shrink-0 text-xs text-text-muted">{play.durationMinutes} min</span>}
+                {play.startedAt && play.endedAt && <span className="shrink-0 text-xs text-text-muted">{hhmm(play.startedAt)}–{hhmm(play.endedAt)}</span>}
+                {play.durationMinutes && <span className="shrink-0 text-xs text-text-muted">{formatDuration(play.durationMinutes)}</span>}
                 {play.status === 'abandoned' && <span className="shrink-0 text-xs font-semibold text-accent">Abandoned</span>}
                 <span className="flex-1" />
                 <DisclosureChevron expanded={expanded} />

@@ -429,9 +429,13 @@ CREATE TABLE IF NOT EXISTS play_session_games (
   status      TEXT  NOT NULL DEFAULT 'finished'
                     CHECK (status IN ('finished', 'abandoned')),
   duration_minutes INT CHECK (duration_minutes > 0 AND duration_minutes <= 10080),
+  started_at  TIMESTAMPTZ,
+  ended_at    TIMESTAMPTZ,
   notes       TEXT, -- legacy shared notes; new notes are stored per user below
   logged_by   TEXT  NOT NULL,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CHECK ((started_at IS NULL) = (ended_at IS NULL)),
+  CHECK (ended_at IS NULL OR ended_at > started_at)
 );
 
 CREATE INDEX IF NOT EXISTS idx_play_session_games_session ON play_session_games(session_id);

@@ -17,6 +17,12 @@ export class PlaySessionGame {
   @Column({ name: 'duration_minutes', type: 'int', nullable: true })
   durationMinutes!: number | null;
 
+  @Column({ name: 'started_at', type: 'timestamptz', nullable: true })
+  startedAt!: Date | null;
+
+  @Column({ name: 'ended_at', type: 'timestamptz', nullable: true })
+  endedAt!: Date | null;
+
   @Column({ type: 'text', nullable: true })
   notes!: string | null;
 

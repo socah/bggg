@@ -14,7 +14,8 @@ import { UserIdentityLink } from '@/components/user-identity-link';
 import { PlayLogDialog, type PlayLogDefaults } from '@/components/play-log-dialog';
 import { DisclosureChevron } from '@/components/ui/disclosure-chevron';
 import { apiFetch } from '@/lib/api';
-import { formatDateDmy } from '@/lib/datetime';
+import { formatDateDmy, hhmm } from '@/lib/datetime';
+import { formatDuration } from '@/lib/time-interval';
 import { groupDisplayName } from '@/lib/user-identity';
 import type {
   BggSearchResult,
@@ -488,7 +489,8 @@ export function GameDetailsSheet({
                       <strong className="shrink-0">{formatDateDmy(play.playedAt)}</strong>
                       <span className="shrink-0 font-semibold">{expanded ? 'Play details' : play.groupName}</span>
                       {!expanded && play.notes && <span className="min-w-0 max-w-48 truncate text-xs text-text-muted">{play.notes}</span>}
-                      {play.durationMinutes && <span className="shrink-0 text-xs text-text-muted">{play.durationMinutes} min</span>}
+                      {play.startedAt && play.endedAt && <span className="shrink-0 text-xs text-text-muted">{hhmm(play.startedAt)}–{hhmm(play.endedAt)}</span>}
+                      {play.durationMinutes && <span className="shrink-0 text-xs text-text-muted">{formatDuration(play.durationMinutes)}</span>}
                       {play.status === 'abandoned' && <span className="shrink-0 text-xs font-semibold text-accent">Abandoned</span>}
                       <span className="flex-1" />
                       <DisclosureChevron expanded={expanded} />

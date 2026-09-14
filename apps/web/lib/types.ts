@@ -210,6 +210,8 @@ export interface GamePlaySummary {
   notes: string | null;
   status: 'finished' | 'abandoned';
   durationMinutes: number | null;
+  startedAt: string | null;
+  endedAt: string | null;
   canEdit: boolean;
   groupName: string;
 }
@@ -224,6 +226,8 @@ export interface CalendarPlaySummary {
   playedDate: string;
   status: 'finished' | 'abandoned';
   durationMinutes: number | null;
+  startedAt: string | null;
+  endedAt: string | null;
   notes: string | null;
   canEdit: boolean;
   sessionParticipants: CalendarParticipant[];

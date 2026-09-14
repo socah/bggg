@@ -414,6 +414,8 @@ export class CollectionsService {
         notes: noteByPlayId.get(play.id) ?? null,
         status: play.status,
         durationMinutes: play.durationMinutes,
+        startedAt: play.startedAt,
+        endedAt: play.endedAt,
         canEdit: true,
         groupName: groupNameById.get(session.groupId) ?? 'Group',
       }; }).filter((play): play is NonNullable<typeof play> => play !== null)

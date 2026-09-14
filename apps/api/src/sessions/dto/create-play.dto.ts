@@ -12,6 +12,7 @@ import {
   IsUUID,
   Max,
   MaxLength,
+  Matches,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -62,6 +63,14 @@ export class CreatePlayDto {
   @Min(1)
   @Max(10080)
   durationMinutes?: number;
+
+  @IsOptional()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'startTime must be in HH:mm 24-hour format' })
+  startTime?: string;
+
+  @IsOptional()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'endTime must be in HH:mm 24-hour format' })
+  endTime?: string;
 
   @IsArray()
   @ArrayMinSize(1)
