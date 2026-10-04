@@ -53,6 +53,13 @@ export function GamePickerDialog<T extends GameCardGame,>({
   function changeOpen(nextOpen: boolean) {
     if (!nextOpen && historyEntry.current) {
       historyEntry.current = false;
+      const previousScrollRestoration = window.history.scrollRestoration;
+      window.history.scrollRestoration = 'manual';
+      window.addEventListener('popstate', () => {
+        window.setTimeout(() => {
+          window.history.scrollRestoration = previousScrollRestoration;
+        }, 0);
+      }, { once: true });
       window.history.back();
     }
     onOpenChange(nextOpen);

@@ -1,11 +1,18 @@
-import { afterEach, describe, expect, it, jest } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import { GamePickerDialog } from './game-picker-dialog';
 
 const game = { id: 1, bggId: 230802, name: 'Azul', thumbnail: '/azul.jpg', image: null, minPlayers: 2, maxPlayers: 4, playingTime: 45, yearPublished: 2017, rating: 7.8 };
 
-afterEach(cleanup);
+beforeEach(() => {
+  Object.defineProperty(window.history, 'scrollRestoration', { configurable: true, writable: true, value: 'auto' });
+});
+
+afterEach(() => {
+  cleanup();
+  jest.restoreAllMocks();
+});
 
 describe('GamePickerDialog', () => {
   it('keeps the picker open and marks a clicked game as added', async () => {
@@ -26,6 +33,7 @@ describe('GamePickerDialog', () => {
   it('supports thumbnail-based single selection without ticks', async () => {
     const onOpenChange = jest.fn();
     const onAdd = jest.fn<(selected: typeof game) => Promise<boolean>>(async () => true);
+    const back = jest.spyOn(window.history, 'back').mockImplementation(() => {});
     render(<GamePickerDialog singleSelect open title="Choose a game" games={[game]} onOpenChange={onOpenChange} onAdd={onAdd} />);
     const row = screen.getByRole('button', { name: /Azul/ });
     expect(row.getAttribute('aria-pressed')).toBeNull();
@@ -34,5 +42,11 @@ describe('GamePickerDialog', () => {
     fireEvent.click(row);
     await waitFor(() => expect(onAdd).toHaveBeenCalledWith(game));
     expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(back).toHaveBeenCalled();
+    expect(window.history.scrollRestoration).toBe('manual');
+
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    expect(window.history.scrollRestoration).toBe('auto');
   });
 });

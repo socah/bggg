@@ -68,6 +68,10 @@ export class R2Service {
     // R2 ignores this value but the SDK requires the field to be set.
     region: 'auto',
     endpoint: process.env.R2_ENDPOINT,
+    // The SDK otherwise adds a CRC32 for the empty presign-time body. The
+    // browser later sends the real image, so R2 rejects that mismatched
+    // checksum and its CORS-less error surfaces only as a network failure.
+    requestChecksumCalculation: 'WHEN_REQUIRED',
     credentials: {
       accessKeyId: process.env.R2_ACCESS_KEY_ID!,
       secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,

@@ -10,7 +10,10 @@ export function GET(request: NextRequest) {
 
   const logoutUrl = new URL(`${issuer.replace(/\/$/, '')}/protocol/openid-connect/logout`);
   logoutUrl.searchParams.set('client_id', clientId);
-  logoutUrl.searchParams.set('post_logout_redirect_uri', new URL('/web/login', request.url).toString());
+  logoutUrl.searchParams.set(
+    'post_logout_redirect_uri',
+    new URL('/web/login', process.env.AUTH_URL ?? request.url).toString(),
+  );
 
   return NextResponse.redirect(logoutUrl);
 }
