@@ -17,6 +17,8 @@ import { KeycloakModule } from '../keycloak/keycloak.module';
 import { PersonalList } from './personal-list.entity';
 import { PersonalListItem } from './personal-list-item.entity';
 import { PlayUserNote } from '../sessions/play-user-note.entity';
+import { PlayPhoto } from '../uploads/play-photo.entity';
+import { R2Service } from '../uploads/r2.service';
 
 @Module({
   imports: [
@@ -33,6 +35,7 @@ import { PlayUserNote } from '../sessions/play-user-note.entity';
       PersonalList,
       PersonalListItem,
       PlayUserNote,
+      PlayPhoto,
     ]),
     // BggModule exports BggService (username verification + collection
     // fetching); GamesModule exports GamesService (catalogue hydration).
@@ -41,7 +44,7 @@ import { PlayUserNote } from '../sessions/play-user-note.entity';
     KeycloakModule,
   ],
   controllers: [CollectionsController],
-  providers: [CollectionsService],
+  providers: [CollectionsService, R2Service],
   exports: [CollectionsService],
 })
 export class CollectionsModule {}

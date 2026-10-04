@@ -21,6 +21,6 @@ export class UpsertReviewDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(5000)
+  @MaxLength(20000)
   body?: string;
 }

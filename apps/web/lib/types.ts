@@ -214,6 +214,7 @@ export interface GamePlaySummary {
   endedAt: string | null;
   canEdit: boolean;
   groupName: string;
+  photos: Array<{ id: string; playId: string; url: string }>;
 }
 
 export interface CalendarPlaySummary {

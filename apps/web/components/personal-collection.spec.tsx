@@ -2,8 +2,9 @@ import { afterEach, describe, expect, it, jest } from '@jest/globals';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 const apiFetch = jest.fn(async (path: string, init?: RequestInit) => {
-  void init;
-  const body = path.endsWith('/details')
+  const body = path.endsWith('/review') && init?.method === 'PUT'
+    ? { id: 1, userId: 'me', gameId: 1, rating: 8.5, complexityScore: null, depthScore: null, body: null, source: 'manual', updatedAt: '2026-09-01T00:00:00.000Z' }
+    : path.endsWith('/details')
     ? { reviews: [], plays: [] }
     : path === '/bgg-account'
       ? { account: {} }
@@ -82,6 +83,25 @@ describe('GameDetailsSheet history', () => {
 });
 
 describe('GameDetailsSheet interactions', () => {
+  it('opens the most extensive review and keeps the personal review switch available', async () => {
+    apiFetch.mockImplementationOnce(async () => ({ ok: true, json: async () => ({
+      reviews: [
+        { id: 1, userId: 'me', displayName: 'Alice', username: 'alice', profileGroupId: null, isMine: true, rating: 8, complexityScore: null, depthScore: null, body: 'Mine.', source: 'manual', updatedAt: '2026-09-01T00:00:00.000Z' },
+        { id: 2, userId: 'bob', displayName: 'Bob', username: 'bob', profileGroupId: null, isMine: false, rating: 9, complexityScore: 3, depthScore: 4, body: '## The long view\n\nThis is the substantially longer review of the game.', source: 'manual', updatedAt: '2026-09-02T00:00:00.000Z' },
+      ],
+      plays: [],
+    }) } as Response));
+
+    render(<GameDetailsSheet game={game} open onOpenChange={jest.fn()} />);
+
+    expect(await screen.findByRole('heading', { name: 'The long view' })).toBeTruthy();
+    const mine = screen.getByRole('button', { name: 'Your review' });
+    expect(mine).toBeTruthy();
+    fireEvent.click(mine);
+    expect(await screen.findByText('Mine.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeTruthy();
+  });
+
   it('logs a play in the group that opened the game details', async () => {
     render(<GameDetailsSheet game={game} groupId="group-created" open onOpenChange={jest.fn()} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Log a play' }));

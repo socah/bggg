@@ -19,6 +19,8 @@ import { KeycloakAdminClient } from '../keycloak/keycloak-admin.client';
 import { PersonalList } from './personal-list.entity';
 import { PersonalListItem } from './personal-list-item.entity';
 import { PlayUserNote } from '../sessions/play-user-note.entity';
+import { PlayPhoto } from '../uploads/play-photo.entity';
+import { R2Service } from '../uploads/r2.service';
 
 function makeGame(overrides: Partial<Game> = {}): Game {
   return {
@@ -100,6 +102,7 @@ describe('CollectionsService', () => {
   };
   const mockReviewsRepo = {
     findBy: jest.fn(),
+    find: jest.fn(),
     findOneBy: jest.fn(),
     create: jest.fn(),
     save: jest.fn(),
@@ -127,6 +130,8 @@ describe('CollectionsService', () => {
     create: jest.fn(),
     save: jest.fn(),
   };
+  const mockPlayPhotosRepo = { find: jest.fn() };
+  const mockR2Service = { createPresignedGetUrl: jest.fn() };
 
   const mockBggService = {
     getUser: jest.fn(),
@@ -158,9 +163,11 @@ describe('CollectionsService', () => {
         { provide: getRepositoryToken(PlaySession), useValue: emptyRepo },
         { provide: getRepositoryToken(PlaySessionGame), useValue: emptyRepo },
         { provide: getRepositoryToken(PlayUserNote), useValue: emptyRepo },
+        { provide: getRepositoryToken(PlayPhoto), useValue: mockPlayPhotosRepo },
         { provide: BggService, useValue: mockBggService },
         { provide: GamesService, useValue: mockGamesService },
         { provide: KeycloakAdminClient, useValue: { getUser: jest.fn() } },
+        { provide: R2Service, useValue: mockR2Service },
       ],
     }).compile();
 
@@ -514,6 +521,32 @@ describe('CollectionsService', () => {
       await service.importCollection('user-1');
 
       expect(mockReviewsRepo.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getGameDetails', () => {
+    it('signs photos only for plays in groups visible to the requester', async () => {
+      mockGamesService.findByIds.mockResolvedValue([makeGame()]);
+      mockReviewsRepo.find.mockResolvedValue([]);
+      emptyRepo.findBy
+        .mockResolvedValueOnce([{ userId: 'user-1', groupId: 'group-1' }])
+        .mockResolvedValueOnce([{ userId: 'user-1', groupId: 'group-1' }])
+        .mockResolvedValueOnce([{ id: 'play-1', sessionId: 'session-1', gameId: 1, status: 'finished', durationMinutes: null, startedAt: null, endedAt: null }])
+        .mockResolvedValueOnce([{ id: 'group-1', name: 'Thursday Games' }])
+        .mockResolvedValueOnce([]);
+      emptyRepo.find.mockResolvedValueOnce([{ id: 'session-1', groupId: 'group-1', playedAt: new Date('2026-09-10T12:00:00.000Z') }]);
+      mockPlayPhotosRepo.find.mockResolvedValue([{ id: 'photo-1', playId: 'play-1', key: 'play-photos/user-1/photo-1', createdAt: new Date() }]);
+      mockR2Service.createPresignedGetUrl.mockResolvedValue('https://r2.example/photo-1');
+
+      const details = await service.getGameDetails('user-1', 1);
+
+      expect(details.plays).toEqual([expect.objectContaining({
+        id: 'play-1',
+        photos: [{ id: 'photo-1', playId: 'play-1', url: 'https://r2.example/photo-1' }],
+      })]);
+      expect(mockPlayPhotosRepo.find).toHaveBeenCalledWith(expect.objectContaining({
+        where: { playId: In(['play-1']) },
+      }));
     });
   });
 

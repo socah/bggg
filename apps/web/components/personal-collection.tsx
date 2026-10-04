@@ -4,7 +4,7 @@ import { DragEvent, FormEvent, ReactNode, useEffect, useEffectEvent, useRef, use
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Dialog, DialogClose, DialogContent, DialogSheetContent, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogClose, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { CollectionListAccordion } from '@/components/collection-list-accordion';
@@ -12,6 +12,7 @@ import { GameArtwork } from '@/components/game-artwork';
 import { GamePickerDialog } from '@/components/game-picker-dialog';
 import { UserIdentityLink } from '@/components/user-identity-link';
 import { PlayLogDialog, type PlayLogDefaults } from '@/components/play-log-dialog';
+import { ReviewArticle, ReviewEditor } from '@/components/review-article';
 import { DisclosureChevron } from '@/components/ui/disclosure-chevron';
 import { apiFetch } from '@/lib/api';
 import { formatDateDmy, hhmm } from '@/lib/datetime';
@@ -22,6 +23,7 @@ import type {
   CollectionGame,
   CollectionGameDetails,
   GameCardGame,
+  GameReview,
   PersonalGameList,
   PersonalListGame,
   PersonalReview,
@@ -211,6 +213,8 @@ export function GameDetailsSheet({
   const [complexity, setComplexity] = useState('');
   const [depth, setDepth] = useState('');
   const [body, setBody] = useState('');
+  const [selectedReviewId, setSelectedReviewId] = useState<number | 'mine'>('mine');
+  const [editingReview, setEditingReview] = useState(false);
   const [targetListId, setTargetListId] = useState('');
   const [logOpen, setLogOpen] = useState(false);
   const [editingPlayId, setEditingPlayId] = useState<string | null>(null);
@@ -242,7 +246,7 @@ export function GameDetailsSheet({
     onOpenChange(nextOpen);
   }
 
-  async function loadDetails(currentGame: GameCardGame) {
+  async function loadDetails(currentGame: GameCardGame, preferredReview?: number | 'mine', keepEditing = false) {
     const response = await apiFetch(`/bgg-account/games/${currentGame.id}/details`, { cache: 'no-store' });
     if (!response.ok) throw new Error(await responseError(response));
     const next = (await response.json()) as CollectionGameDetails;
@@ -257,6 +261,9 @@ export function GameDetailsSheet({
     setComplexity(nextComplexity);
     setDepth(nextDepth);
     setBody(nextBody);
+    const longest = [...next.reviews].sort((a, b) => (b.body?.length ?? 0) - (a.body?.length ?? 0))[0];
+    setSelectedReviewId(preferredReview ?? (longest?.isMine ? 'mine' : longest?.id ?? 'mine'));
+    setEditingReview(keepEditing || (!mine && !longest));
   }
 
   useEffect(() => {
@@ -289,8 +296,28 @@ export function GameDetailsSheet({
         }),
       });
       if (!response.ok) throw new Error(await responseError(response));
+      const saved = (await response.json()) as Omit<GameReview, 'displayName' | 'nickname' | 'username' | 'profileGroupId' | 'isMine'>;
       savedReviewPayload.current = statePayload;
       setReviewSaved(true);
+      setSelectedReviewId('mine');
+      setDetails((current) => {
+        if (!current) return current;
+        const existingMine = current.reviews.find((review) => review.isMine);
+        const mineView: GameReview = {
+          ...saved,
+          displayName: existingMine?.displayName ?? 'You',
+          nickname: existingMine?.nickname ?? null,
+          username: existingMine?.username ?? 'you',
+          profileGroupId: existingMine?.profileGroupId ?? groupId ?? null,
+          isMine: true,
+        };
+        return {
+          ...current,
+          reviews: existingMine
+            ? current.reviews.map((review) => review.isMine ? mineView : review)
+            : [mineView, ...current.reviews],
+        };
+      });
       onReviewChanged?.();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : 'Unable to save review');
@@ -344,6 +371,9 @@ export function GameDetailsSheet({
   }
 
   const mine = details?.reviews.find((review) => review.isMine);
+  const selectedReview = selectedReviewId === 'mine'
+    ? mine
+    : details?.reviews.find((review) => review.id === selectedReviewId);
   const imported = mine?.source === 'bgg';
   const containingLists = game ? lists.filter((list) => list.items.some((item) => item.id === game.id)) : [];
   const availableLists = game ? lists.filter((list) => !list.items.some((item) => item.id === game.id)) : [];
@@ -352,7 +382,7 @@ export function GameDetailsSheet({
 
   return (
     <Dialog open={open} onOpenChange={changeOpen}>
-      <DialogSheetContent className="w-full sm:w-[36rem] sm:max-w-[90vw]">
+      <DialogContent aria-describedby={undefined} className="max-h-[94vh] w-[calc(100%-1rem)] max-w-6xl overflow-y-auto p-4 sm:p-6">
         <div className="flex items-start justify-between gap-3">
           {game && <GameArtwork game={game} className="h-28 w-24" alt={`${game.name} cover`} />}
           <div className="min-w-0 flex-1">
@@ -366,42 +396,57 @@ export function GameDetailsSheet({
         {!details && !error && <p className="py-12 text-center text-sm text-text-muted">Loading reviews and plays...</p>}
         {details && (
           <div className="mt-6 flex flex-col gap-7">
+            <section aria-labelledby="reviews-heading">
+              <div className="border-b border-border pb-4">
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-accent">Community notebook</p>
+                <h2 id="reviews-heading" className="mt-1 font-display text-3xl">Player reviews</h2>
+                <p className="mt-1 text-sm text-text-muted">Long-form impressions, table stories, and the plays behind them.</p>
+              </div>
+
+              <div className="mt-4 flex gap-2 overflow-x-auto pb-2" aria-label="Choose a review">
+                <button type="button" aria-pressed={selectedReviewId === 'mine'} className={`shrink-0 rounded-full border px-4 py-2 text-sm font-bold ${selectedReviewId === 'mine' ? 'border-accent bg-accent text-accent-ink' : 'border-border bg-surface'}`} onClick={() => { setSelectedReviewId('mine'); setEditingReview(!mine); }}>Your review{!mine && ' · Start writing'}</button>
+                {details.reviews.filter((review) => !review.isMine).sort((a, b) => (b.body?.length ?? 0) - (a.body?.length ?? 0)).map((review) => (
+                  <button key={review.id} type="button" aria-pressed={selectedReviewId === review.id} className={`shrink-0 rounded-full border px-4 py-2 text-sm font-bold ${selectedReviewId === review.id ? 'border-accent-2 bg-accent-2 text-accent-2-ink' : 'border-border bg-surface'}`} onClick={() => { setSelectedReviewId(review.id); setEditingReview(false); }}>{review.nickname || review.displayName || review.username}</button>
+                ))}
+              </div>
+
+              <div className="mt-4 rounded-md border border-border bg-surface p-4 sm:p-6" style={{ boxShadow: 'var(--shadow-card)' }}>
+                {selectedReviewId === 'mine' && (editingReview || !mine) ? (
+                  <form onSubmit={(event) => event.preventDefault()} className="flex flex-col gap-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div><h3 className="font-display text-2xl">{mine ? 'Edit your review' : 'Write your review'}</h3><p className="text-sm text-text-muted">Type Markdown directly. Nothing is created until you add a score or write something.</p></div>
+                      {mine && <Button type="button" variant="secondary" onClick={() => setEditingReview(false)}>Done</Button>}
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      <label className="text-xs font-semibold text-text-muted">Rating<Input type="number" min="1" max="10" step="0.1" value={rating} onChange={(event) => setRating(event.target.value)} className="mt-1 min-h-10 w-full" placeholder="1-10" /></label>
+                      <label className="text-xs font-semibold text-text-muted">Complexity<select value={complexity} onChange={(event) => setComplexity(event.target.value)} className={`mt-1 w-full ${selectClass}`}><option value="">Choose</option>{WEIGHT_SCALE.map((label, index) => ({ label, value: index + 1 })).reverse().map(({ label, value }) => <option key={label} value={value}>{value} - {label}</option>)}</select></label>
+                      <label className="text-xs font-semibold text-text-muted">Depth<select value={depth} onChange={(event) => setDepth(event.target.value)} className={`mt-1 w-full ${selectClass}`}><option value="">Choose</option>{WEIGHT_SCALE.map((label, index) => ({ label, value: index + 1 })).reverse().map(({ label, value }) => <option key={label} value={value}>{value} - {label}</option>)}</select></label>
+                    </div>
+                    {rating && <p className="text-xs text-text-muted"><strong>{rating}/10:</strong> {RATING_SCALE[Math.round(Number(rating))]}</p>}
+                    <ReviewEditor body={body} plays={details.plays} onChange={setBody} />
+                    <div className="flex flex-wrap items-center gap-2">
+                      {mine && !imported && <Button type="button" variant="secondary" disabled={saving} onClick={() => void deleteReview()}>Delete review</Button>}
+                      <span className="text-xs text-text-muted" role="status">{saving ? 'Saving review...' : reviewSaved ? 'Review saved' : 'Changes save automatically'}</span>
+                    </div>
+                  </form>
+                ) : selectedReview ? (
+                  <>
+                    <header className="mb-6 flex flex-wrap items-start justify-between gap-4 border-b border-border pb-4">
+                      <div><p className="text-xs font-bold uppercase tracking-wider text-text-muted">Review by</p><h3 className="mt-1 font-display text-2xl"><UserIdentityLink user={{ id: selectedReview.userId, username: selectedReview.username, displayName: selectedReview.displayName, nickname: selectedReview.nickname }} groupId={selectedReview.profileGroupId} /></h3><p className="mt-1 text-xs text-text-muted">Updated {formatDateDmy(selectedReview.updatedAt)}{selectedReview.source === 'bgg' && ' · Rating synced from BGG'}</p></div>
+                      <div className="flex flex-wrap items-center gap-2">{selectedReview.rating && <Badge>{selectedReview.rating}/10</Badge>}{selectedReview.complexityScore && <Badge>Complexity {selectedReview.complexityScore}/5</Badge>}{selectedReview.depthScore && <Badge>Depth {selectedReview.depthScore}/5</Badge>}{selectedReview.isMine && <Button type="button" variant="secondary" className="min-h-9 px-3" onClick={() => setEditingReview(true)}>Edit</Button>}</div>
+                    </header>
+                    {selectedReview.body ? <ReviewArticle body={selectedReview.body} plays={details.plays} /> : <p className="py-10 text-center text-sm italic text-text-muted">This review currently contains scores only.</p>}
+                  </>
+                ) : null}
+              </div>
+            </section>
+
             {game?.owners && game.owners.length > 0 && (
               <section>
                 <h3 className="font-display text-lg">Owned by</h3>
                 <p className="mt-2 text-sm">{game.owners.map((owner, index) => <span key={owner.id}>{index > 0 && ', '}<UserIdentityLink user={owner} groupId={groupId} /></span>)}</p>
               </section>
             )}
-            <section>
-              <h3 className="font-display text-lg">Your review</h3>
-              <form onSubmit={(event) => event.preventDefault()} className="mt-3 flex flex-col gap-3">
-                  {mine && <p className="text-xs text-text-muted">Editing your existing review.{imported && ' The rating is updated from BGG when you sync; your other edits stay here.'}</p>}
-                  <div className="grid gap-2 sm:grid-cols-3">
-                    <label className="text-xs font-semibold text-text-muted">Rating
-                      <Input type="number" min="1" max="10" step="0.1" value={rating} onChange={(event) => setRating(event.target.value)} className="mt-1 min-h-10 w-full" placeholder="1-10" />
-                    </label>
-                    <label className="text-xs font-semibold text-text-muted">Complexity
-                      <select value={complexity} onChange={(event) => setComplexity(event.target.value)} className={`mt-1 w-full ${selectClass}`}>
-                        <option value="">Choose</option>{WEIGHT_SCALE.map((label, index) => ({ label, value: index + 1 })).reverse().map(({ label, value }) => <option key={label} value={value}>{value} - {label}</option>)}
-                      </select>
-                    </label>
-                    <label className="text-xs font-semibold text-text-muted">Depth
-                      <select value={depth} onChange={(event) => setDepth(event.target.value)} className={`mt-1 w-full ${selectClass}`}>
-                        <option value="">Choose</option>{WEIGHT_SCALE.map((label, index) => ({ label, value: index + 1 })).reverse().map(({ label, value }) => <option key={label} value={value}>{value} - {label}</option>)}
-                      </select>
-                    </label>
-                  </div>
-                  {rating && <p className="text-xs text-text-muted"><strong>{rating}/10:</strong> {RATING_SCALE[Math.round(Number(rating))]}</p>}
-                  <label className="text-xs font-semibold text-text-muted">Comment
-                    <textarea value={body} onChange={(event) => setBody(event.target.value)} rows={4} maxLength={5000} className="mt-1 w-full resize-y rounded-sm border-[length:var(--border-w)] border-border bg-surface-raised p-2 font-body text-sm text-text" placeholder="What did you think?" />
-                  </label>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {mine && !imported && <Button type="button" variant="secondary" disabled={saving} onClick={() => void deleteReview()}>Delete review</Button>}
-                    <span className="text-xs text-text-muted" role="status">{saving ? 'Saving review...' : reviewSaved ? 'Review saved' : 'Changes save automatically'}</span>
-                  </div>
-              </form>
-            </section>
-
             {onMutate && game && (
               <section>
                 <h3 className="font-display text-lg">Additional info</h3>
@@ -465,26 +510,12 @@ export function GameDetailsSheet({
             )}
 
             <section>
-              <h3 className="font-display text-lg">Group reviews <span className="text-sm text-text-muted">({details.reviews.length})</span></h3>
-              <div className="mt-3 flex flex-col gap-3">
-                {details.reviews.length === 0 && <p className="text-sm text-text-muted">No reviews yet.</p>}
-                {details.reviews.map((review) => (
-                  <Card key={review.id} className="p-3">
-                    <div className="flex items-center justify-between gap-2"><strong><UserIdentityLink user={{ id: review.userId, username: review.username, displayName: review.displayName, nickname: review.nickname }} groupId={review.profileGroupId} /></strong>{review.rating && <Badge>{review.rating}/10</Badge>}</div>
-                    <p className="mt-1 text-xs text-text-muted">{review.source === 'bgg' ? 'Rating synced from BGG' : `Complexity ${review.complexityScore ?? '-'} / 5 · Depth ${review.depthScore ?? '-'} / 5`}</p>
-                    {review.body && <p className="mt-2 whitespace-pre-wrap text-sm">{review.body}</p>}
-                  </Card>
-                ))}
-              </div>
-            </section>
-
-            <section>
               <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-display text-lg">Logged plays <span className="text-sm text-text-muted">({details.plays.length})</span></h3><Button type="button" className="min-h-9 px-3 text-xs" onClick={() => setLogOpen(true)}>Log a play</Button></div>
               <div className="mt-3 flex flex-col gap-2">
                 {details.plays.length === 0 && <p className="text-sm text-text-muted">No logged plays in your groups.</p>}
                 {details.plays.map((play) => {
                   const expanded = editingPlayId === play.id;
-                  return <div key={play.id} className="overflow-hidden rounded-sm border border-border bg-surface-raised">
+                  return <div id={`logged-play-${play.id}`} key={play.id} className="scroll-mt-4 overflow-hidden rounded-sm border border-border bg-surface-raised">
                     <button type="button" aria-expanded={expanded} className="flex min-h-11 w-full items-center gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-highlight" onClick={() => setEditingPlayId(expanded ? null : play.id)}>
                       <strong className="shrink-0">{formatDateDmy(play.playedAt)}</strong>
                       <span className="shrink-0 font-semibold">{expanded ? 'Play details' : play.groupName}</span>
@@ -502,7 +533,7 @@ export function GameDetailsSheet({
             </section>
           </div>
         )}
-      </DialogSheetContent>
+      </DialogContent>
        {logOpen && <PlayLogDialog game={game} open={logOpen} defaults={effectivePlayDefaults} onOpenChange={setLogOpen} onLogged={() => { if (game) void loadDetails(game); onPlayLogged?.(); }} />}
     </Dialog>
   );

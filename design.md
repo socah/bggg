@@ -86,10 +86,14 @@ Review fields:
 * Complexity score (1-5)
 * Depth score (1-5)
 * Written review
+  * Markdown headings, lists, bold, and italics in a single edit/read surface
+  * References to authorized logged plays and inline photos from those plays
 
 Requirements:
 
 * Reviews must be editable
+* The most extensive review is the default game-detail view; other reviews are switchable
+* The signed-in user's review entry is always available and starts in edit mode when empty
 * Aggregate scores displayed per game
 * Review history optional future enhancement
 

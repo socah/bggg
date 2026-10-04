@@ -28,6 +28,8 @@ import { UpdateListDto } from './dto/update-list.dto';
 import { AddListGameDto } from './dto/add-list-game.dto';
 import { UpdateListGameDto } from './dto/update-list-game.dto';
 import { PlayUserNote } from '../sessions/play-user-note.entity';
+import { PlayPhoto } from '../uploads/play-photo.entity';
+import { R2Service } from '../uploads/r2.service';
 
 export interface SyncSummary {
   added: number;
@@ -56,9 +58,11 @@ export class CollectionsService {
     @InjectRepository(PlaySession) private readonly sessions: Repository<PlaySession>,
     @InjectRepository(PlaySessionGame) private readonly sessionGames: Repository<PlaySessionGame>,
     @InjectRepository(PlayUserNote) private readonly playNotes: Repository<PlayUserNote>,
+    @InjectRepository(PlayPhoto) private readonly playPhotos: Repository<PlayPhoto>,
     private readonly bgg: BggService,
     private readonly games: GamesService,
     private readonly keycloak: KeycloakAdminClient,
+    private readonly r2: R2Service,
   ) {}
 
   getAccount(userId: string): Promise<BggAccount | null> {
@@ -400,6 +404,20 @@ export class CollectionsService {
     const groupNameById = new Map(groupRows.map((group) => [group.id, group.name]));
     const sessionById = new Map(sessions.map((session) => [session.id, session]));
     const noteByPlayId = new Map(noteRows.map((note) => [note.playId, note.notes]));
+    const visiblePlayIds = playRows
+      .filter((play) => sessionById.has(play.sessionId))
+      .map((play) => play.id);
+    const photoRows = visiblePlayIds.length
+      ? await this.playPhotos.find({
+          where: { playId: In(visiblePlayIds) },
+          order: { createdAt: 'ASC' },
+        })
+      : [];
+    const photoViews = await Promise.all(photoRows.map(async (photo) => ({
+      id: photo.id,
+      playId: photo.playId,
+      url: await this.r2.createPresignedGetUrl(photo.key),
+    })));
     return {
       game,
       reviews: reviewViews,
@@ -418,6 +436,7 @@ export class CollectionsService {
         endedAt: play.endedAt,
         canEdit: true,
         groupName: groupNameById.get(session.groupId) ?? 'Group',
+        photos: photoViews.filter((photo) => photo.playId === play.id),
       }; }).filter((play): play is NonNullable<typeof play> => play !== null)
         .sort((a, b) => new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime()),
     };
