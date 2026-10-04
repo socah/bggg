@@ -45,7 +45,7 @@ const PLAY_PHOTOS_PREFIX = 'play-photos';
 // raised or lowered without a code change or redeploy of application logic —
 // matches this project's "raw process.env, no ConfigService" convention
 // (see auth.guard.ts). Defaults to 10 MiB if unset.
-const MAX_UPLOAD_BYTES = parseInt(
+export const MAX_UPLOAD_BYTES = parseInt(
   process.env.MAX_UPLOAD_BYTES ?? String(10 * 1024 * 1024),
   10,
 );
@@ -121,6 +121,24 @@ export class R2Service {
     });
 
     return { url, expiresIn: PRESIGN_EXPIRY_SECONDS };
+  }
+
+  async uploadObject(key: string, contentType: string, body: Buffer): Promise<void> {
+    if (!ALLOWED_CONTENT_TYPES.includes(contentType)) {
+      throw new UnsupportedMediaTypeException(
+        `${contentType} is not an allowed image type`,
+      );
+    }
+    if (!this.isUploadSizeAllowed(body.length)) {
+      throw new PayloadTooLargeException('Uploaded file exceeds the file size limit');
+    }
+
+    await this.client.send(new PutObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+      ContentType: contentType,
+      Body: body,
+    }));
   }
 
   // The object key is generated here, server-side, from the requesting

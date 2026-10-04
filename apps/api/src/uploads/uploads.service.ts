@@ -12,6 +12,7 @@ import { PlayPhoto } from './play-photo.entity';
 import { R2Service } from './r2.service';
 import { PresignUploadDto } from './dto/presign-upload.dto';
 import { ConfirmUploadDto } from './dto/confirm-upload.dto';
+import { UploadPhotoDto } from './dto/upload-photo.dto';
 import { PlaySession } from '../scheduling/play-session.entity';
 import { PlaySessionGame } from '../scheduling/play-session-game.entity';
 import { GroupsService } from '../groups/groups.service';
@@ -54,6 +55,25 @@ export class UploadsService {
     );
 
     return { url, key, expiresIn };
+  }
+
+  async upload(
+    userId: string,
+    dto: UploadPhotoDto,
+    file: { buffer: Buffer; mimetype: string; size: number },
+  ) {
+    await this.assertPlayAccess(userId, dto.sessionId, dto.playId);
+    const currentTotalBytes = await this.getTotalStorageBytes();
+    if (!this.r2Service.hasCapacityFor(currentTotalBytes, file.size)) {
+      throw new HttpException(
+        'R2 storage quota would be exceeded by this upload',
+        HttpStatus.INSUFFICIENT_STORAGE,
+      );
+    }
+
+    const key = this.r2Service.buildObjectKey(userId);
+    await this.r2Service.uploadObject(key, file.mimetype, file.buffer);
+    return this.confirm(userId, { ...dto, key });
   }
 
   // Return type is PlayPhoto plus a runtime-only `url` — see the presigned

@@ -202,6 +202,22 @@ errors. Confirmation remains the authoritative enforcement point; a dishonest
 client can waste one upload's bandwidth, but cannot leave an oversized object
 stored or recorded.
 
+### Update — 2026-10-04: Same-Origin Uploads
+
+The direct browser-to-R2 flow was retired after repeated browser-only
+`NetworkError` failures even though production-equivalent preflight and PUT
+requests both succeeded against R2. The browser now sends one authenticated
+multipart request to `POST /uploads/photo` on the app's own origin. NestJS
+enforces the file-size and MIME-type allowlists, writes the bytes to the private
+R2 bucket with its S3 client, and creates the `PlayPhoto` row after checking the
+stored object metadata and total quota.
+
+This adds one hop through the application server, but uploads are capped at 10
+MiB and traffic is low. Reliability and useful API error responses are more
+valuable here than avoiding that small amount of server bandwidth. Presigned
+GET URLs remain unchanged because displaying an image does not require a CORS
+preflight or a cross-origin JavaScript response.
+
 ### Follow-Up: Approximate Free-Tier Storage Quota
 
 Beyond a single file's size, R2's free tier caps *total* bucket storage (10

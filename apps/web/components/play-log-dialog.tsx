@@ -350,20 +350,18 @@ export function PlayLogDialog({
   }
 
   async function uploadPhoto(file: File, sessionId: string, playId: string) {
-    const presignResponse = await mutate('/uploads/presign', 'POST', {
-      sessionId,
-      playId,
-      contentType: file.type,
-      contentLength: file.size,
+    const body = new FormData();
+    body.set('sessionId', sessionId);
+    body.set('playId', playId);
+    body.set('photo', file);
+    const uploadResponse = await apiFetch('/uploads/photo', {
+      method: 'POST',
+      body,
     });
-    const presign = (await presignResponse.json()) as { url: string; key: string };
-    const uploadResponse = await fetch(presign.url, {
-      method: 'PUT',
-      headers: { 'Content-Type': file.type },
-      body: file,
-    });
-    if (!uploadResponse.ok) throw new Error(`Could not upload ${file.name}`);
-    await mutate('/uploads/confirm', 'POST', { sessionId, playId, key: presign.key });
+    if (!uploadResponse.ok) {
+      const payload = await uploadResponse.json().catch(() => null) as { message?: string } | null;
+      throw new Error(payload?.message || `Could not upload ${file.name}`);
+    }
   }
 
   useEffect(() => {
@@ -544,10 +542,12 @@ export function PlayLogDialog({
             <Input type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={saving || !currentPlayId} onChange={(event) => { const files = Array.from(event.target.files ?? []); setPhotos(files); void addPhotos(files); }} className="mt-1" />
             {photos.length > 0 && <span className="mt-1 block font-normal">{photos.length} photo{photos.length === 1 ? '' : 's'} selected</span>}
           </label>
-          {existingPhotos.length > 0 && <div className="grid grid-cols-3 gap-2">{existingPhotos.map((photo) => (
-            // Presigned R2 hosts are runtime-configured and cannot be listed in next/image config.
-            // eslint-disable-next-line @next/next/no-img-element
-            <img key={photo.id} src={photo.url} alt="Play" className="aspect-square w-full rounded-sm object-cover" />
+          {existingPhotos.length > 0 && <div className="grid grid-cols-3 gap-2">{existingPhotos.map((photo, index) => (
+            <a key={photo.id} href={photo.url} target="_blank" rel="noreferrer" aria-label={`View play photo ${index + 1}`} className="block overflow-hidden rounded-sm outline-offset-2 focus-visible:outline-2 focus-visible:outline-accent">
+              {/* Presigned R2 hosts are runtime-configured and cannot be listed in next/image config. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={photo.url} alt={`Play photo ${index + 1}`} loading="lazy" className="aspect-square w-full object-cover transition-transform hover:scale-[1.03]" />
+            </a>
           ))}</div>}
           {error && <p role="alert" className="text-sm text-accent">{error}</p>}
           <div className="flex min-h-10 flex-wrap items-center gap-2">{currentPlayId && <Button type="button" variant="ghost" className="text-accent" disabled={saving} onClick={() => void deletePlay()}>Delete play</Button>}{creationFailed && <Button type="button" variant="secondary" disabled={saving} onClick={() => setCreationAttempt((current) => current + 1)}>Retry creating play</Button>}<span className="ml-auto text-xs text-text-muted" role="status">{saving ? (currentPlayId ? 'Saving...' : 'Creating play...') : currentPlayId ? 'Changes saved automatically' : creationFailed ? 'Play was not created' : 'Preparing play...'}</span></div>

@@ -216,7 +216,7 @@ Responsibilities:
 * JWT validation (tokens issued by Keycloak)
 * Business logic
 * Validation
-* Presigned upload URL generation for Cloudflare R2 (file bytes go client → R2 directly, not through NestJS)
+* Authenticated photo uploads to Cloudflare R2 through NestJS; this avoids browser-specific cross-origin failures while R2 remains private
 * BGG API integration (game lookup, collection sync)
 * Background jobs (collection sync via `@nestjs/schedule`)
 * iCal feed generation (play session scheduling)
@@ -280,31 +280,29 @@ Reasons:
 
 Cover art is served directly from BGG CDN URLs — no local storage needed.
 
-Upload flow (presigned URL — NestJS never touches file bytes):
+Upload flow (same-origin API request, then server-side R2 write):
 
 ```text
 Client                          NestJS                        Cloudflare R2
-  |--- POST /uploads/presign --->|                                  |
-  |                              | (generates object key,           |
-  |                              |  signs a short-lived PUT URL)    |
-  |<-- { url, key } -------------|                                  |
-  |------------------------------ PUT file (direct) --------------->|
-  |--- POST /uploads/confirm --->|                                  |
-  |     { key }                  | (persists key/URL in PostgreSQL) |
+  |--- POST /uploads/photo ------>|                                  |
+  |     multipart file           | (validates access, size, MIME)   |
+  |                              |--- PutObject ------------------->|
+  |                              |<-- stored object metadata -------|
+  |<-- photo record + GET URL ---| (persists key in PostgreSQL)     |
 ```
 
 Object key is always generated server-side (never client-supplied) and the
-signature is scoped to one key, one content-type, one exact size, and a
-short expiry window (minutes) — see `notes/3_r2_uploads.md` for the full
-rationale.
+API validates access, content type, and size before writing to R2. Photo reads
+use short-lived presigned GET URLs — see `notes/3_r2_uploads.md` for the full
+rationale and the history of the earlier direct-upload design.
 
 Limits enforced (both configurable via env, defaults shown):
 
-* Per-file size: 10 MiB (`MAX_UPLOAD_BYTES`), pinned into the presigned
-  URL's signature so R2 itself rejects a PUT of the wrong size
+* Per-file size: 10 MiB (`MAX_UPLOAD_BYTES`), enforced by the multipart parser
+  and checked again before the API writes to R2
 * Total bucket storage: 10 GiB (`R2_MAX_STORAGE_BYTES`), matching the free
   tier — checked (approximately; not an atomic reservation) against the sum
-  of confirmed photos' real sizes before a new presign URL is issued
+  of confirmed photos' real sizes before a new object is written
 
 ---
 
