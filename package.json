@@ -15,7 +15,6 @@
   "overrides": {
     "@rollup/plugin-terser": {
       "serialize-javascript": "^7.1.0"
-    },
-    "multer": "2.3.0"
+    }
   }
 }

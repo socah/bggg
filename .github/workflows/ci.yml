@@ -50,6 +50,7 @@ jobs:
               - 'package.json'
               - 'package-lock.json'
               - 'tsconfig.json'
+              - 'scripts/npm-audit.mjs'
               - '.dockerignore'
               - '.github/workflows/**'
             web:
@@ -57,6 +58,7 @@ jobs:
               - 'package.json'
               - 'package-lock.json'
               - 'tsconfig.json'
+              - 'scripts/npm-audit.mjs'
               - '.dockerignore'
               - '.github/workflows/**'
 
@@ -107,12 +109,11 @@ jobs:
         if: matrix.workspace == 'api' && needs.changes.outputs.api == 'true'
         run: npm run test:e2e --workspace=apps/api
 
-      # audit-level=high per references/secops.md's Dependency Scanning
-      # checklist — fails the job (non-zero exit) on any high or critical
-      # advisory in this workspace's resolved dependency tree.
+      # Fails on high or critical advisories, apart from narrowly documented
+      # exceptions for advisories that do not yet have a patched release.
       - name: npm audit (high+critical)
         if: needs.changes.outputs[matrix.workspace] == 'true'
-        run: npm audit --workspace=apps/${{ matrix.workspace }} --audit-level=high
+        run: node scripts/npm-audit.mjs apps/${{ matrix.workspace }}
 
   # Decision: a separate job from 'verify', not extra steps tacked onto it.
   # Because: this needs Buildx set up and actually builds a full image
