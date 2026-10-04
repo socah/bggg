@@ -132,6 +132,12 @@ await fetch('/api/uploads/confirm', {
 });
 ```
 
+The signed URL handles authorization, but it does not bypass the browser's
+same-origin policy. `infra/terraform/cloudflare.tf` also manages the bucket's
+CORS rule, allowing the configured application origins to send `PUT` requests
+with a `Content-Type` header. Without that rule, the browser's preflight fails
+before the upload reaches R2 and `fetch` reports only a generic network error.
+
 ### What Is Happening Step by Step
 
 1. **Client asks the server for permission**, not for the file location. The

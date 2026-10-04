@@ -24,3 +24,6 @@ boot_volume_size_in_gbs  = 150
 ssh_public_key           = "ssh-ed25519 AAAA... you@yourmachine"
 cloudflare_api_token     = "your-cloudflare-api-token"
 cloudflare_account_id    = ""
+# Add the exact local origin here too when testing uploads from a browser,
+# for example: ["https://bggg.duckdns.org", "http://localhost:3000"]
+r2_cors_allowed_origins  = ["https://bggg.duckdns.org"]

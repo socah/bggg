@@ -49,7 +49,7 @@ case "$*" in
   *clientId=web*fields\ id*) printf '[ { "id" : "web-client-id" } ]' ;;
   *clientId=web*) printf '%s' "$WEB_JSON" ;;
   *clientId=api-service*) printf '%s' "$API_JSON" ;;
-  *update\ clients/*) printf 'update client\n' >>"$EXEC_LOG" ;;
+  *update\ clients/*) printf 'update client %s\n' "$*" >>"$EXEC_LOG" ;;
   *) printf 'unexpected query: %s\n' "$*" >&2; exit 1 ;;
 esac
 EOF
@@ -75,6 +75,8 @@ check "missing: existing unrelated lines preserved" \
   "$( [ "$(head -n1 "$WORK/env1")" = "DB_NAME=bggg_dev" ] && echo expected || echo wrong)"
 check "missing: web redirect URI uses allocated port" \
   "$( grep -q 'update client' "$WORK/exec.log" && echo expected || echo missing )"
+check "missing: post-logout redirect uses allocated port" \
+  "$( grep -q 'post.logout.redirect.uris.*http://localhost:3990/web/login' "$WORK/exec.log" && echo expected || echo missing )"
 
 # --- 2: empty values get filled --------------------------------------------
 printf 'AUTH_KEYCLOAK_SECRET=\nKEYCLOAK_API_SERVICE_SECRET=\n' > "$WORK/env2"

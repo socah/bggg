@@ -32,4 +32,15 @@ run_kcadm update "realms/$REALM" \
   -s loginTheme=bggg \
   -s ssoSessionIdleTimeout=2592000 \
   -s ssoSessionMaxLifespan=7776000 >/dev/null
-echo "Keycloak user profile, theme, and session lifetimes synchronized."
+
+web_client_id=$(run_kcadm get clients -r "$REALM" -q clientId=web --fields id 2>/dev/null \
+  | tr -d ' \t\n\r' \
+  | sed 's/.*"id":"//; s/".*//')
+[ -n "$web_client_id" ] || {
+  echo "sync-user-profile: could not find client 'web'" >&2
+  exit 1
+}
+run_kcadm update "clients/$web_client_id" -r "$REALM" \
+  -s 'attributes."post.logout.redirect.uris"="http://localhost:3000/web/login##https://bggg.duckdns.org/web/login"' >/dev/null
+
+echo "Keycloak user profile, theme, session lifetimes, and logout redirects synchronized."

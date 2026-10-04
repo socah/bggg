@@ -71,3 +71,17 @@ variable "r2_bucket_name" {
   type        = string
   default     = "bggg-uploads"
 }
+
+variable "r2_cors_allowed_origins" {
+  description = "Browser origins allowed to upload photos directly to R2 with presigned URLs"
+  type        = list(string)
+  default     = ["https://bggg.duckdns.org"]
+
+  validation {
+    condition = alltrue([
+      for origin in var.r2_cors_allowed_origins :
+      can(regex("^https?://[^/]+$", origin))
+    ])
+    error_message = "R2 CORS origins must contain only scheme, host, and optional port, with no trailing slash or path."
+  }
+}

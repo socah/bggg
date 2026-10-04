@@ -189,6 +189,16 @@ services:
       - traefik.http.routers.keycloak.middlewares=ratelimit,secheaders,auth-stripprefix
       - traefik.http.routers.keycloak.service=keycloak
       - traefik.http.services.keycloak.loadbalancer.server.port=8080
+      # The admin SPA requests many hashed JS modules concurrently. Sending
+      # static assets through the shared 10 req/s limiter intermittently
+      # returns 429 for a module, which browsers report as a failed dynamic
+      # import. Keep auth/admin endpoints limited, but serve immutable assets
+      # through this more-specific router without the rate limiter.
+      - traefik.http.routers.keycloak-resources.rule=Host(`${DOMAIN_NAME}`) && PathPrefix(`/auth/resources`)
+      - traefik.http.routers.keycloak-resources.entrypoints=websecure
+      - traefik.http.routers.keycloak-resources.tls.certresolver=le
+      - traefik.http.routers.keycloak-resources.middlewares=secheaders,auth-stripprefix
+      - traefik.http.routers.keycloak-resources.service=keycloak
 
   vault:
     # Same split as 'db' and 'keycloak' again: tag here, environment-specific

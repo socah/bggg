@@ -89,7 +89,8 @@ web_client_id=$(kcadm get clients -r boardgame -q clientId=web --fields id 2>/de
 web_port=${WEB_HOST_PORT:-3000}
 kcadm update "clients/$web_client_id" -r boardgame \
   -s "redirectUris=[\"http://localhost:$web_port/*\",\"https://bggg.duckdns.org/*\"]" \
-  -s "webOrigins=[\"http://localhost:$web_port\",\"https://bggg.duckdns.org\"]" >/dev/null
+  -s "webOrigins=[\"http://localhost:$web_port\",\"https://bggg.duckdns.org\"]" \
+  -s "attributes.\"post.logout.redirect.uris\"=\"http://localhost:$web_port/web/login##https://bggg.duckdns.org/web/login\"" >/dev/null
 
 upsert AUTH_KEYCLOAK_SECRET "$web_secret"
 upsert KEYCLOAK_API_SERVICE_SECRET "$api_secret"

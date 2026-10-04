@@ -12,7 +12,7 @@ resource "cloudflare_r2_bucket" "uploads" {
   name       = var.r2_bucket_name
   # Closest R2 location hint to where the OCI VM actually runs — R2 doesn't
   # guarantee physical placement, but this nudges it.
-  location = "EEUR"
+  location = "eeur"
 
   # This bucket holds real user-uploaded play session photos, not
   # scaffolding — unlike the VM (safe to destroy/recreate because durable
@@ -22,4 +22,23 @@ resource "cloudflare_r2_bucket" "uploads" {
   lifecycle {
     prevent_destroy = true
   }
+}
+
+# Presigned URLs authorize an upload, but browsers still require the bucket to
+# approve the cross-origin PUT preflight. Without this policy, the browser
+# rejects the upload as a generic network error before sending the image.
+resource "cloudflare_r2_bucket_cors" "uploads" {
+  account_id  = var.cloudflare_account_id
+  bucket_name = cloudflare_r2_bucket.uploads.name
+
+  rules = [{
+    id = "browser-photo-uploads"
+    allowed = {
+      origins = var.r2_cors_allowed_origins
+      methods = ["PUT"]
+      headers = ["Content-Type"]
+    }
+    expose_headers  = ["ETag"]
+    max_age_seconds = 3600
+  }]
 }

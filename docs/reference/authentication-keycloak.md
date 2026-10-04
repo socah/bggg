@@ -69,8 +69,9 @@ assume a normal deploy applied it.
 
 The deployment reconciliation script is the exception for the settings it
 explicitly owns. `sync-user-profile.sh` updates the login theme, user profile,
-and realm session lifetimes on every deploy. Login sessions have a 30-day idle
-timeout and a 90-day maximum lifespan; Auth.js uses the same 90-day ceiling.
+realm session lifetimes, and the web client's valid post-logout redirects on
+every deploy. Login sessions have a 30-day idle timeout and a 90-day maximum
+lifespan; Auth.js uses the same 90-day ceiling.
 
 Keycloak's database password must remain stable for the lifetime of
 `keycloak_db_data`. Production stores it as `KEYCLOAK_DB_PASSWORD` in
@@ -161,6 +162,16 @@ the iframe handshake, surfaced as its own untranslated `somethingWentWrong`
 error boundary). `keycloak`'s router keeps only the base `secheaders`
 (HSTS + nosniff, no frame policy), falling back to Keycloak's own default
 (`X-Frame-Options: SAMEORIGIN`) instead of Traefik overriding it.
+
+## Keycloak static resources must not use the shared rate limiter
+
+The admin console loads enough JavaScript modules concurrently to exceed the
+shared Traefik limiter's burst of 20. A rejected module gets a `429`, which the
+browser surfaces as `error loading dynamically imported module` and leaves the
+admin console unusable. A more-specific `keycloak-resources` router serves
+`/auth/resources/*` with `secheaders` and `auth-stripprefix`, but without
+`ratelimit`. The general Keycloak router still rate-limits login and Admin API
+requests.
 
 ## The PWA service worker must not intercept Keycloak's `/auth/*` requests
 

@@ -11,7 +11,7 @@ terraform {
     }
     cloudflare = {
       source  = "cloudflare/cloudflare"
-      version = "~> 4.0"
+      version = "~> 5.0"
     }
   }
 }
@@ -23,7 +23,7 @@ provider "oci" {
   tenancy_ocid     = var.oci_tenancy_ocid
   user_ocid        = var.oci_user_ocid
   fingerprint      = var.oci_fingerprint
-  private_key_path = var.oci_private_key_path
+  private_key_path = pathexpand(var.oci_private_key_path)
   region           = var.oci_region
 
   # How long the provider keeps retrying an API call it considers
@@ -124,9 +124,9 @@ resource "oci_core_instance" "app_server" {
   }
 
   source_details {
-    source_type = "image"
-    source_id   = var.oci_image_id
-    boot_volume_size_in_gbs = var.boot_volume_size_in_gbs 
+    source_type             = "image"
+    source_id               = var.oci_image_id
+    boot_volume_size_in_gbs = var.boot_volume_size_in_gbs
   }
 
   metadata = {

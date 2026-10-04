@@ -30,6 +30,8 @@ check "migration task does not require a running api service" \
   "$(grep -A4 -- '- name: Run database migrations' "$TASKS_FILE" | grep -q ' run --rm --no-deps api ' && printf expected || printf missing)"
 check "deploy reconciles the Keycloak user profile" \
   "$(grep -A5 -- '- name: Reconcile Keycloak user profile' "$TASKS_FILE" | grep -q '/sync-user-profile.sh' && printf expected || printf missing)"
+check "Keycloak static resources bypass the shared rate limiter" \
+  "$(grep -q 'keycloak-resources.middlewares=secheaders,auth-stripprefix' "$SCRIPT_DIR/../../docker-compose.yml" && printf expected || printf missing)"
 check "api runtime image includes workspace dependencies" \
   "$(grep -c '^COPY --from=build /workspace/apps/api/node_modules ./apps/api/node_modules$' "$DOCKERFILE" | grep -q '^1$' && printf expected || printf missing)"
 

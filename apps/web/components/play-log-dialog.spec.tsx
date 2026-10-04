@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 const apiFetch = jest.fn<typeof fetch>();
+const r2Fetch = jest.fn<typeof fetch>();
+const originalFetch = global.fetch;
 
 jest.unstable_mockModule('@/lib/api', () => ({ apiFetch }));
 jest.unstable_mockModule('@/hooks/use-groups', () => ({
@@ -27,6 +29,8 @@ const roster = {
 describe('PlayLogDialog', () => {
   beforeEach(() => {
     apiFetch.mockReset();
+    r2Fetch.mockReset();
+    global.fetch = r2Fetch;
     apiFetch.mockImplementation(async (input, init) => {
       const url = String(input);
       if (url.includes('/play-players')) return { ok: true, json: async () => roster } as Response;
@@ -37,7 +41,10 @@ describe('PlayLogDialog', () => {
     });
   });
 
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    global.fetch = originalFetch;
+  });
 
   it('requires an explicit group choice when opened from Personal mode', async () => {
     render(<PlayLogDialog inline game={{ id: 42, name: 'Azul' } as never} open onOpenChange={jest.fn()} />);
@@ -255,5 +262,33 @@ describe('PlayLogDialog', () => {
     await waitFor(() => expect(apiFetch.mock.calls.some(([path, init]) => path === '/groups/group-1/plays/play-1' && init?.method === 'PATCH')).toBe(true));
     const patch = apiFetch.mock.calls.find(([path, init]) => path === '/groups/group-1/plays/play-1' && init?.method === 'PATCH');
     expect(JSON.parse(String(patch?.[1]?.body))).toEqual(expect.objectContaining({ startTime: '18:30', endTime: '20:00' }));
+  });
+
+  it('uploads a selected photo to its presigned R2 URL before confirming it', async () => {
+    apiFetch.mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes('/play-players')) return { ok: true, json: async () => roster } as Response;
+      if (url.endsWith('/plays/play-1') && !init?.method) return { ok: true, json: async () => ({ status: 'finished', durationMinutes: null, notes: [], players: [{ userId: 'user-1', guestPlayerId: null, isWinner: false, score: null }] }) } as Response;
+      if (url.endsWith('/uploads/plays/play-1')) return { ok: true, json: async () => [] } as Response;
+      if (url.endsWith('/uploads/presign') && init?.method === 'POST') return { ok: true, json: async () => ({ url: 'https://example.r2.cloudflarestorage.com/upload', key: 'play-photos/user-1/photo' }) } as Response;
+      if (url.endsWith('/uploads/confirm') && init?.method === 'POST') return { ok: true, json: async () => ({}) } as Response;
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    r2Fetch.mockResolvedValue({ ok: true } as Response);
+    const photo = new File(['photo'], 'table.webp', { type: 'image/webp' });
+
+    render(<PlayLogDialog inline game={{ id: 42, name: 'Azul' } as never} open editPlayId="play-1" defaults={{ groupId: 'group-1', playedDate: '2026-09-10', userIds: [] }} onOpenChange={jest.fn()} />);
+
+    const input = await screen.findByLabelText('Photos');
+    await waitFor(() => expect(input.hasAttribute('disabled')).toBe(false));
+    fireEvent.change(input, { target: { files: [photo] } });
+
+    await waitFor(() => expect(r2Fetch).toHaveBeenCalledWith(
+      'https://example.r2.cloudflarestorage.com/upload',
+      { method: 'PUT', headers: { 'Content-Type': 'image/webp' }, body: photo },
+    ));
+    await waitFor(() => expect(apiFetch.mock.calls.some(([path, init]) => path === '/uploads/confirm' && init?.method === 'POST')).toBe(true));
+    const confirm = apiFetch.mock.calls.find(([path, init]) => path === '/uploads/confirm' && init?.method === 'POST');
+    expect(JSON.parse(String(confirm?.[1]?.body))).toEqual({ sessionId: 'session-1', playId: 'play-1', key: 'play-photos/user-1/photo' });
   });
 });
