@@ -14,7 +14,7 @@ import { ProposalRsvpSection } from '@/components/proposal-rsvp-section';
 import { UserIdentityLink } from '@/components/user-identity-link';
 import { ProposalChat } from '@/components/proposal-chat';
 import { GameDetailsSheet } from '@/components/personal-collection';
-import { PlayLogDialog } from '@/components/play-log-dialog';
+import { PlayLogDialog, type PlayLogDefaults } from '@/components/play-log-dialog';
 import { GamePickerDialog } from '@/components/game-picker-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -65,6 +65,7 @@ export interface InlineProposalPanelProps {
   defaultGroupId?: string;
   onProposalsChanged?: () => void;
   onPlayLogged?: () => void;
+  onSelectPlayGame?: (game: GameCardGame, defaults: PlayLogDefaults) => void;
   onSelectProposal?: (proposal: Proposal) => void;
   embedded?: boolean;
 }
@@ -77,6 +78,7 @@ export function InlineProposalPanel({
   defaultGroupId,
   onProposalsChanged,
   onPlayLogged,
+  onSelectPlayGame,
   onSelectProposal,
   embedded = false,
 }: InlineProposalPanelProps) {
@@ -482,7 +484,16 @@ export function InlineProposalPanel({
                     ) : <span className="size-12 shrink-0 rounded-sm bg-surface-raised" />}
                     <span className="truncate underline-offset-2 hover:underline">{game.name}</span>
                    </button>
-                   {detail.proposal.status === 'confirmed' && <Button type="button" variant="secondary" className="min-h-9 shrink-0 px-3 text-xs" onClick={() => setPlayGame(game)}>Log play</Button>}
+                   {detail.proposal.status === 'confirmed' && <Button type="button" variant="secondary" className="min-h-9 shrink-0 px-3 text-xs" onClick={() => {
+                     const defaults = {
+                       groupId: detail.proposal.groupId,
+                       playedDate: detail.proposal.proposedDate,
+                       proposalId: detail.proposal.id,
+                       userIds: detail.rsvps.filter((rsvp) => rsvp.status !== 'no').map((rsvp) => rsvp.userId),
+                     };
+                     if (onSelectPlayGame) onSelectPlayGame(game, defaults);
+                     else setPlayGame(game);
+                   }}>Log play</Button>}
                    {detail.proposal.status === 'collecting' && proposedByMe && <button type="button" className="ml-auto text-xs text-text-muted underline hover:text-accent" disabled={existingGames.pendingAction !== null} onClick={() => void existingGames.removeSuggestion(proposalGameId)}>Remove</button>}
                 </li>
               ))}

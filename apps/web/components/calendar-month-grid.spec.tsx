@@ -6,7 +6,7 @@ const apiFetch = jest.fn<typeof fetch>();
 jest.unstable_mockModule('@/lib/api', () => ({ apiFetch }));
 
 jest.unstable_mockModule('@/components/inline-proposal-panel', () => ({
-  InlineProposalPanel: ({ proposalId, draftDate }: { proposalId: string | null; draftDate?: string }) => proposalId ? <div>Existing proposal</div> : <div>Proposal draft {draftDate}</div>,
+  InlineProposalPanel: ({ proposalId, draftDate, onSelectPlayGame }: { proposalId: string | null; draftDate?: string; onSelectPlayGame?: (game: never, defaults: never) => void }) => proposalId ? <div>Existing proposal{onSelectPlayGame && <button type="button" onClick={() => onSelectPlayGame({ id: 42, name: 'Azul' } as never, { groupId: 'group-proposal', playedDate: '2026-05-01', proposalId, userIds: ['user-1'] } as never)}>Log proposed game</button>}</div> : <div>Proposal draft {draftDate}</div>,
 }));
 
 jest.unstable_mockModule('@/components/calendar-play-launcher', () => ({
@@ -309,8 +309,9 @@ describe('CalendarMonthGrid', () => {
       game: { id: 42, name: 'Azul', image: null, thumbnail: null }, playedDate: '2026-05-01', status: 'finished' as const,
       durationMinutes: null, notes: null, canEdit: true, sessionParticipants: [], playParticipants: [], sessionPlace: null,
     };
-    let requestCount = 0;
-    apiFetch.mockImplementation(async () => ({ ok: true, json: async () => requestCount++ === 0 ? [] : [play] }) as Response);
+    apiFetch
+      .mockResolvedValueOnce({ ok: true, json: async () => [] } as Response)
+      .mockResolvedValue({ ok: true, json: async () => [play] } as Response);
     render(<CalendarMonthGrid proposals={[]} groups={[{ id: groupId, name: 'Thursday Games', ownerId: 'user-1', isSolo: false, createdAt: '' }]} defaultGroupId={defaultGroupId} />);
     await waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(1));
     fireEvent.click(screen.getByRole('button', { name: 'May 1, 2026' }));
@@ -322,5 +323,42 @@ describe('CalendarMonthGrid', () => {
     expect(screen.getByText('Inline logged play play-new')).toBeTruthy();
     expect(screen.queryByText('Inline logged play')).toBeNull();
     await waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(2));
+  });
+
+  it('moves a proposal play into an expanded logged-play panel and focuses it', async () => {
+    const existingPlay = {
+      id: 'play-existing', sessionId: 'session-proposal', proposalId: 'proposal-1', groupId: 'group-proposal', groupName: 'Game Night',
+      game: { id: 7, name: 'Catan', image: null, thumbnail: null }, playedDate: '2026-05-01', status: 'finished' as const,
+      durationMinutes: null, notes: null, canEdit: true, sessionParticipants: [], playParticipants: [], sessionPlace: null,
+    };
+    const play = {
+      id: 'play-new', sessionId: 'session-proposal', proposalId: 'proposal-1', groupId: 'group-proposal', groupName: 'Game Night',
+      game: { id: 42, name: 'Azul', image: null, thumbnail: null }, playedDate: '2026-05-01', status: 'finished' as const,
+      durationMinutes: null, notes: null, canEdit: true, sessionParticipants: [], playParticipants: [], sessionPlace: null,
+    };
+    apiFetch
+      .mockResolvedValueOnce({ ok: true, json: async () => [existingPlay] } as Response)
+      .mockResolvedValue({ ok: true, json: async () => [existingPlay, play] } as Response);
+    render(<CalendarMonthGrid proposals={[{
+      id: 'proposal-1', groupId: 'group-proposal', createdBy: 'user-1', proposedDate: '2026-05-01', hostId: null,
+      status: 'confirmed', confirmedStart: null, confirmedEnd: null, createdAt: '2026-04-01T00:00:00.000Z',
+    }]} groups={[{ id: 'group-proposal', name: 'Game Night', ownerId: 'user-1', isSolo: false, createdAt: '' }]} defaultGroupId="group-proposal" />);
+    await screen.findByRole('button', { name: 'Played Catan' });
+    fireEvent.click(screen.getByRole('button', { name: 'May 1, 2026, 1 proposal, 1 logged play' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Expand session details' }));
+
+    const proposalPanel = screen.getByText('Existing proposal').parentElement!;
+    fireEvent.click(screen.getByRole('button', { name: 'Log proposed game' }));
+    const temporaryEditor = screen.getByText('Inline logged play');
+    expect(proposalPanel.contains(temporaryEditor)).toBe(false);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Complete play creation' }));
+
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(2));
+    const playRow = (await screen.findByText('Azul details')).closest('button')!;
+    expect(screen.getByText('Inline logged play play-new')).toBeTruthy();
+    expect(playRow.getAttribute('aria-expanded')).toBe('true');
+    expect(document.activeElement).toBe(playRow);
+    expect(proposalPanel.contains(screen.getByText('Inline logged play play-new'))).toBe(false);
   });
 });

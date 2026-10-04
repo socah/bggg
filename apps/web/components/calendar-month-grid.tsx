@@ -9,7 +9,7 @@ import { proposalStatusClasses } from '@/components/proposal-status-badge';
 import { cn } from '@/lib/cn';
 import { CalendarPlayLauncher } from '@/components/calendar-play-launcher';
 import { apiFetch } from '@/lib/api';
-import { PlayLogDialog } from '@/components/play-log-dialog';
+import { PlayLogDialog, type PlayLogDefaults } from '@/components/play-log-dialog';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { SessionPlaceControl } from '@/components/session-place-control';
 import { DisclosureChevron } from '@/components/ui/disclosure-chevron';
@@ -22,6 +22,7 @@ const WEEKDAY_INITIALS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'] as const;
 const playsCache = new Map<string, CalendarPlaySummary[]>();
 
 type CalendarItem = Proposal | ProposalWithGroup;
+type PendingCalendarPlay = { game: CalendarPlaySummary['game']; defaults: PlayLogDefaults };
 
 function hasGroupName(item: CalendarItem): item is ProposalWithGroup {
   return 'groupName' in item;
@@ -85,8 +86,8 @@ interface WeekRowExpanderProps {
   onPlayLogged: () => void;
   expandedPlayId: string | null;
   onExpandedPlayChange: (id: string | null) => void;
-  newPlay: { game: CalendarPlaySummary['game']; groupId: string } | null;
-  onNewPlayChange: (play: { game: CalendarPlaySummary['game']; groupId: string } | null) => void;
+  newPlay: PendingCalendarPlay | null;
+  onNewPlayChange: (play: PendingCalendarPlay | null) => void;
 }
 
 function WeekRowExpander({
@@ -110,6 +111,8 @@ function WeekRowExpander({
   const [cachedPlays, setCachedPlays] = useState<CalendarPlaySummary[]>(dayPlays);
   const [cachedDraftOpen, setCachedDraftOpen] = useState<boolean>(draftOpen);
   const contentRef = useRef<HTMLDivElement>(null);
+  const playRowRefs = useRef(new Map<string, HTMLButtonElement>());
+  const focusedPlayIdRef = useRef<string | null>(null);
   const [contentHeight, setContentHeight] = useState<number | null>(null);
   const [expandedProposals, setExpandedProposals] = useState<Record<string, boolean>>({});
 
@@ -141,6 +144,18 @@ function WeekRowExpander({
     return () => observer.disconnect();
   }, [isExpanded, currentDate, currentDraftOpen]);
 
+  useEffect(() => {
+    if (!expandedPlayId) {
+      focusedPlayIdRef.current = null;
+      return;
+    }
+    const row = playRowRefs.current.get(expandedPlayId);
+    if (row && focusedPlayIdRef.current !== expandedPlayId) {
+      row.focus();
+      focusedPlayIdRef.current = expandedPlayId;
+    }
+  }, [expandedPlayId, currentPlays]);
+
   return (
     <div
       className={cn(
@@ -164,7 +179,7 @@ function WeekRowExpander({
                 {proposal.session && <div className="w-56 max-w-[40%]"><SessionPlaceControl groupId={proposal.groupId} sessionId={proposal.session.id} place={proposal.session.place} canEdit={Boolean(proposal.canManage)} onChanged={() => { onProposalsChanged?.(); }} /></div>}
                 <button type="button" aria-label={expanded ? 'Collapse session details' : 'Expand session details'} aria-expanded={expanded} onClick={() => setExpandedProposals((current) => ({ ...current, [proposal.id]: !expanded }))} className="ml-auto flex self-stretch flex-1 items-center justify-end p-2 text-text-muted"><DisclosureChevron expanded={expanded} /></button>
               </div>
-              <Disclosure expanded={expanded}><div className="border-t border-border"><InlineProposalPanel embedded proposalId={proposal.id} groups={groups} defaultGroupId={defaultGroupId} onProposalsChanged={onProposalsChanged} onPlayLogged={onPlayLogged} /></div></Disclosure>
+              <Disclosure expanded={expanded}><div className="border-t border-border"><InlineProposalPanel embedded proposalId={proposal.id} groups={groups} defaultGroupId={defaultGroupId} onProposalsChanged={onProposalsChanged} onPlayLogged={onPlayLogged} onSelectPlayGame={(game, defaults) => onNewPlayChange({ game, defaults })} /></div></Disclosure>
             </div>;
           })}
           {[...new Map(currentPlays.filter((play) => !play.proposalId).map((play) => [play.sessionId, play])).values()].map((session) => <div key={session.sessionId} className="flex min-h-11 flex-wrap items-center gap-3 rounded-sm border border-border bg-surface-raised px-3 py-2">
@@ -176,7 +191,7 @@ function WeekRowExpander({
             const expanded = expandedPlayId === play.id;
             const artwork = play.game.thumbnail || play.game.image;
             return <div key={play.id} className="overflow-hidden rounded-sm border border-border bg-surface-raised">
-              <button type="button" aria-expanded={expanded} onClick={() => onExpandedPlayChange(expanded ? null : play.id)} className="flex min-h-12 w-full items-center gap-3 px-3 py-2 text-left">
+              <button ref={(element) => { if (element) playRowRefs.current.set(play.id, element); else playRowRefs.current.delete(play.id); }} type="button" aria-expanded={expanded} onClick={() => onExpandedPlayChange(expanded ? null : play.id)} className="flex min-h-12 w-full items-center gap-3 px-3 py-2 text-left">
                 {artwork ? (
                   // BGG image hosts are external and vary at runtime.
                   // eslint-disable-next-line @next/next/no-img-element
@@ -193,7 +208,7 @@ function WeekRowExpander({
               <Disclosure expanded={expanded}><div className="border-t border-border"><PlayLogDialog inline embedded game={play.game} open={expanded} editPlayId={play.id} defaults={{ groupId: play.groupId, playedDate: play.playedDate, userIds: [] }} onOpenChange={(open) => { if (!open) onExpandedPlayChange(null); }} onLogged={onPlayLogged} /></div></Disclosure>
             </div>;
           })}
-          {newPlay && <PlayLogDialog inline game={newPlay.game} open defaults={{ groupId: newPlay.groupId, playedDate: currentDate, userIds: [] }} onOpenChange={(open) => { if (!open) onNewPlayChange(null); }} onLogged={onPlayLogged} onCreated={(playId) => { onNewPlayChange(null); onExpandedPlayChange(playId); onPlayLogged(); }} />}
+          {newPlay && <PlayLogDialog inline game={newPlay.game} open defaults={newPlay.defaults} onOpenChange={(open) => { if (!open) onNewPlayChange(null); }} onLogged={onPlayLogged} onCreated={(playId) => { onNewPlayChange(null); onExpandedPlayChange(playId); onPlayLogged(); }} />}
           {canPropose && (currentProposals.length === 0 || currentDraftOpen) ? <InlineProposalPanel proposalId={null} draftDate={currentDate} groups={groups} defaultGroupId={defaultGroupId} onProposalsChanged={onProposalsChanged} onPlayLogged={onPlayLogged} onSelectProposal={() => onSetDraftOpen(false)} /> : canPropose ? <div className="flex justify-start"><Button type="button" variant="secondary" className="px-3 py-1 text-xs" onClick={() => onSetDraftOpen(true)}>+ Add proposal</Button></div> : null}
         </div>}
       </div>
@@ -221,7 +236,7 @@ export function CalendarMonthGrid({
   const [playState, setPlayState] = useState<{ key: string; rows: CalendarPlaySummary[] }>(() => ({ key: initialGroupIdsKey, rows: playsCache.get(initialGroupIdsKey) ?? [] }));
   const [playRefresh, setPlayRefresh] = useState(0);
   const [expandedPlayId, setExpandedPlayId] = useState<string | null>(null);
-  const [newPlay, setNewPlay] = useState<{ game: CalendarPlaySummary['game']; groupId: string } | null>(null);
+  const [newPlay, setNewPlay] = useState<PendingCalendarPlay | null>(null);
   const groupIdsKey = (defaultGroupId ? [defaultGroupId] : groups.map((group) => group.id)).join(',');
   const plays = useMemo(() => playState.key === groupIdsKey ? playState.rows : playsCache.get(groupIdsKey) ?? [], [groupIdsKey, playState]);
 
@@ -414,7 +429,7 @@ export function CalendarMonthGrid({
                            return <button key={item.id} type="button" aria-label={item.label} title={item.label} className="pointer-events-auto shrink-0 rounded-sm hover:ring-2 hover:ring-accent-2" onClick={() => { setActiveDate(key); setExpandedPlayId(item.play.id); }}>{thumbnail}</button>;
                         })}
                        </span>}
-                       {key <= toDateKey(new Date()) && <div className={`pointer-events-auto mt-auto overflow-hidden transition-[max-height,opacity,padding] duration-200 ease-out ${isSelected ? 'max-h-12 pt-1 opacity-100' : 'pointer-events-none max-h-0 pt-0 opacity-0'}`} aria-hidden={!isSelected} inert={!isSelected}><CalendarPlayLauncher compact date={key} groups={groups} defaultGroupId={defaultGroupId} onLogged={() => setPlayRefresh((current) => current + 1)} onSelectGame={(game, groupId) => setNewPlay({ game, groupId: defaultGroupId ? groupId : '' })} /></div>}
+                       {key <= toDateKey(new Date()) && <div className={`pointer-events-auto mt-auto overflow-hidden transition-[max-height,opacity,padding] duration-200 ease-out ${isSelected ? 'max-h-12 pt-1 opacity-100' : 'pointer-events-none max-h-0 pt-0 opacity-0'}`} aria-hidden={!isSelected} inert={!isSelected}><CalendarPlayLauncher compact date={key} groups={groups} defaultGroupId={defaultGroupId} onLogged={() => setPlayRefresh((current) => current + 1)} onSelectGame={(game, groupId) => setNewPlay({ game, defaults: { groupId: defaultGroupId ? groupId : '', playedDate: key, userIds: [] } })} /></div>}
                        </div>
                     </div>
                   );

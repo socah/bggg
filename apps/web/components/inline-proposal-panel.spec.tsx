@@ -185,6 +185,30 @@ describe('InlineProposalPanel', () => {
     proposalGames = [];
   });
 
+  it('hands confirmed proposal plays to the calendar with proposal defaults', () => {
+    proposalStatus = 'confirmed';
+    proposalGames = [{
+      proposalGameId: 'pg-1',
+      game: { id: 1, bggId: 13, name: 'Catan', image: null, thumbnail: null, minPlayers: 3, maxPlayers: 4, playingTime: 90, yearPublished: 1995, rating: 7.1 },
+      voteCount: 2,
+      votedByMe: false,
+      downvotedByMe: false,
+      proposedByMe: true,
+    }];
+    const onSelectPlayGame = jest.fn();
+    render(<InlineProposalPanel proposalId="proposal-1" groups={[{ id: 'group-1', name: 'Game Night', ownerId: 'user-1', isSolo: false, createdAt: '2026-09-01T12:00:00.000Z' }]} onSelectPlayGame={onSelectPlayGame} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Log play' }));
+
+    expect(onSelectPlayGame).toHaveBeenCalledWith(proposalGames[0].game, {
+      groupId: 'group-1',
+      playedDate: '2026-09-03',
+      proposalId: 'proposal-1',
+      userIds: ['user-1'],
+    });
+    proposalGames = [];
+  });
+
   it('supports place downvotes and lets the suggester remove a place', () => {
     proposalStatus = 'collecting';
     proposalPlaces = [{

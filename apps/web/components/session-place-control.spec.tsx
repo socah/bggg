@@ -23,11 +23,11 @@ describe('SessionPlaceControl', () => {
     const select = await screen.findByRole('combobox', { name: 'Session place' });
     await screen.findByRole('option', { name: "Alice's home" });
     fireEvent.change(select, { target: { value: 'place-1' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Set' }));
 
     await waitFor(() => {
       expect(apiMutate).toHaveBeenCalledWith('/groups/group-1/sessions/session-1/place', 'PATCH', { placeId: 'place-1' });
       expect(onChanged).toHaveBeenCalledWith({ id: 'place-1', name: "Alice's home" });
     });
+    expect(screen.queryByRole('button', { name: 'Set' })).toBeNull();
   });
 });

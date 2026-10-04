@@ -68,9 +68,14 @@
   // which only exists in the mounted project — not inside the image.
   "postCreateCommand": "npm install && bash .devcontainer/setup-herdr.sh",
 
-  // Runs every time the container starts (every VS Code open or resume).
-  // Syncs node_modules with the lockfile after a git pull without requiring
-  // a manual npm install. npm install is a no-op when nothing has changed,
-  // so the overhead on a clean start is negligible.
-  "postStartCommand": "npm install"
+  "containerEnv": {
+    "HOME": "/home/node"
+  },
+
+  "remoteEnv": {
+    "HOME": "/home/node"
+  },
+
+  "remoteUser": "node",
+  "userEnvProbe": "none"
 }
