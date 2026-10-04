@@ -24,7 +24,7 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
   const session = await getApiSession();
 
   if (!session || session.error === 'RefreshTokenError') {
-    await signOut({ redirectTo: '/web/login' });
+    await signOut({ redirectTo: '/web/logout' });
     throw new Error('Session expired');
   }
 
@@ -44,7 +44,7 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
       response = await fetch(`/api${path}`, { ...init, headers });
     }
     if (response.status === 401) {
-      await signOut({ redirectTo: '/web/login' });
+      await signOut({ redirectTo: '/web/logout' });
       throw new Error('Session expired');
     }
   }

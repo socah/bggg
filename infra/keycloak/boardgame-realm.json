@@ -5,6 +5,8 @@
 
   "sslRequired": "external",
   "registrationAllowed": false,
+  "ssoSessionIdleTimeout": 2592000,
+  "ssoSessionMaxLifespan": 7776000,
 
   "clients": [
     {

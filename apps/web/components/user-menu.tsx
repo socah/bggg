@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { logOut } from '@/lib/actions';
+import { signOut } from 'next-auth/react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   DropdownMenu,
@@ -41,14 +41,9 @@ export function UserMenu({ name }: { name: string }) {
           <Link href="/settings">Settings</Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        {/* No <form> here on purpose. Radix's MenuItem closes (and unmounts)
-            the portal synchronously on click, which races a native form
-            submit — the form can be gone before the submit event lands, so
-            the action never runs. Calling the server action directly from
-            onSelect is a plain async function call: it is already in flight
-            before the menu unmounts, and nothing about it depends on the DOM
-            still being there. */}
-        <DropdownMenuItem onSelect={() => void logOut()}>Log out</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => void signOut({ redirectTo: '/web/logout' })}>
+          Log out
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

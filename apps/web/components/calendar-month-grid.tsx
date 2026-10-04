@@ -22,7 +22,7 @@ const WEEKDAY_INITIALS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'] as const;
 const playsCache = new Map<string, CalendarPlaySummary[]>();
 
 type CalendarItem = Proposal | ProposalWithGroup;
-type PendingCalendarPlay = { game: CalendarPlaySummary['game']; defaults: PlayLogDefaults };
+type PendingCalendarPlay = { game: CalendarPlaySummary['game']; defaults: PlayLogDefaults; hiddenUntilCreated?: boolean };
 
 function hasGroupName(item: CalendarItem): item is ProposalWithGroup {
   return 'groupName' in item;
@@ -151,7 +151,8 @@ function WeekRowExpander({
     }
     const row = playRowRefs.current.get(expandedPlayId);
     if (row && focusedPlayIdRef.current !== expandedPlayId) {
-      row.focus();
+      row.focus({ preventScroll: true });
+      row.scrollIntoView({ behavior: 'smooth', block: 'start' });
       focusedPlayIdRef.current = expandedPlayId;
     }
   }, [expandedPlayId, currentPlays]);
@@ -179,7 +180,7 @@ function WeekRowExpander({
                 {proposal.session && <div className="w-56 max-w-[40%]"><SessionPlaceControl groupId={proposal.groupId} sessionId={proposal.session.id} place={proposal.session.place} canEdit={Boolean(proposal.canManage)} onChanged={() => { onProposalsChanged?.(); }} /></div>}
                 <button type="button" aria-label={expanded ? 'Collapse session details' : 'Expand session details'} aria-expanded={expanded} onClick={() => setExpandedProposals((current) => ({ ...current, [proposal.id]: !expanded }))} className="ml-auto flex self-stretch flex-1 items-center justify-end p-2 text-text-muted"><DisclosureChevron expanded={expanded} /></button>
               </div>
-              <Disclosure expanded={expanded}><div className="border-t border-border"><InlineProposalPanel embedded proposalId={proposal.id} groups={groups} defaultGroupId={defaultGroupId} onProposalsChanged={onProposalsChanged} onPlayLogged={onPlayLogged} onSelectPlayGame={(game, defaults) => onNewPlayChange({ game, defaults })} /></div></Disclosure>
+              <Disclosure expanded={expanded}><div className="border-t border-border"><InlineProposalPanel embedded proposalId={proposal.id} groups={groups} defaultGroupId={defaultGroupId} onProposalsChanged={onProposalsChanged} onPlayLogged={onPlayLogged} onSelectPlayGame={(game, defaults) => onNewPlayChange({ game, defaults, hiddenUntilCreated: true })} /></div></Disclosure>
             </div>;
           })}
           {[...new Map(currentPlays.filter((play) => !play.proposalId).map((play) => [play.sessionId, play])).values()].map((session) => <div key={session.sessionId} className="flex min-h-11 flex-wrap items-center gap-3 rounded-sm border border-border bg-surface-raised px-3 py-2">
@@ -208,7 +209,7 @@ function WeekRowExpander({
               <Disclosure expanded={expanded}><div className="border-t border-border"><PlayLogDialog inline embedded game={play.game} open={expanded} editPlayId={play.id} defaults={{ groupId: play.groupId, playedDate: play.playedDate, userIds: [] }} onOpenChange={(open) => { if (!open) onExpandedPlayChange(null); }} onLogged={onPlayLogged} /></div></Disclosure>
             </div>;
           })}
-          {newPlay && <PlayLogDialog inline game={newPlay.game} open defaults={newPlay.defaults} onOpenChange={(open) => { if (!open) onNewPlayChange(null); }} onLogged={onPlayLogged} onCreated={(playId) => { onNewPlayChange(null); onExpandedPlayChange(playId); onPlayLogged(); }} />}
+          {newPlay && <div hidden={newPlay.hiddenUntilCreated}><PlayLogDialog inline game={newPlay.game} open defaults={newPlay.defaults} onOpenChange={(open) => { if (!open) onNewPlayChange(null); }} onLogged={onPlayLogged} onCreated={(playId) => { onNewPlayChange(null); onExpandedPlayChange(playId); onPlayLogged(); }} /></div>}
           {canPropose && (currentProposals.length === 0 || currentDraftOpen) ? <InlineProposalPanel proposalId={null} draftDate={currentDate} groups={groups} defaultGroupId={defaultGroupId} onProposalsChanged={onProposalsChanged} onPlayLogged={onPlayLogged} onSelectProposal={() => onSetDraftOpen(false)} /> : canPropose ? <div className="flex justify-start"><Button type="button" variant="secondary" className="px-3 py-1 text-xs" onClick={() => onSetDraftOpen(true)}>+ Add proposal</Button></div> : null}
         </div>}
       </div>

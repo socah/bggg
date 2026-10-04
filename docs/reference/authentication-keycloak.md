@@ -67,6 +67,11 @@ Whenever `boardgame-realm.json` changes, check the live value actually
 matches (`kcadm.sh get clients -r boardgame -q clientId=<id>`) — don't
 assume a normal deploy applied it.
 
+The deployment reconciliation script is the exception for the settings it
+explicitly owns. `sync-user-profile.sh` updates the login theme, user profile,
+and realm session lifetimes on every deploy. Login sessions have a 30-day idle
+timeout and a 90-day maximum lifespan; Auth.js uses the same 90-day ceiling.
+
 Keycloak's database password must remain stable for the lifetime of
 `keycloak_db_data`. Production stores it as `KEYCLOAK_DB_PASSWORD` in
 Infisical; development worktrees generate it in their local `.env`. Backups

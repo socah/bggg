@@ -15,7 +15,7 @@ export function DeleteAccountSettings() {
     setError(null);
     try {
       await apiMutate('/users/me', 'DELETE');
-      await signOut({ redirectTo: '/web/login' });
+      await signOut({ redirectTo: '/web/logout' });
     } catch (requestError) {
       setError(requestError instanceof ApiError ? requestError.message : 'Unable to delete account');
       setDeleting(false);

@@ -40,6 +40,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     nonce: { name: `authjs.nonce${cookieSuffix}`, options: cookieOptions },
   },
   providers: [Keycloak],
+  session: {
+    // Match Keycloak's absolute session ceiling. Active users can stay signed
+    // in for up to 90 days instead of losing the Auth.js cookie first.
+    maxAge: 60 * 60 * 24 * 90,
+  },
 
   callbacks: {
     // Runs on every request that reads the session. `account` is only

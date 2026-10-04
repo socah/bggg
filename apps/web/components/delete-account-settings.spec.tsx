@@ -36,6 +36,6 @@ describe('DeleteAccountSettings', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Delete account' }));
 
     await waitFor(() => expect(apiMutate).toHaveBeenCalledWith('/users/me', 'DELETE'));
-    expect(signOut).toHaveBeenCalledWith({ redirectTo: '/web/login' });
+    expect(signOut).toHaveBeenCalledWith({ redirectTo: '/web/logout' });
   });
 });

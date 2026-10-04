@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
 const apiFetch = jest.fn<typeof fetch>();
+const scrollIntoView = jest.fn();
 
 jest.unstable_mockModule('@/lib/api', () => ({ apiFetch }));
 
@@ -45,7 +46,9 @@ describe('CalendarMonthGrid', () => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date(2026, 4, 1));
     global.ResizeObserver = ResizeObserverMock as typeof ResizeObserver;
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: scrollIntoView });
     apiFetch.mockReset();
+    scrollIntoView.mockReset();
   });
 
   afterEach(() => {
@@ -351,14 +354,16 @@ describe('CalendarMonthGrid', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Log proposed game' }));
     const temporaryEditor = screen.getByText('Inline logged play');
     expect(proposalPanel.contains(temporaryEditor)).toBe(false);
+    expect(temporaryEditor.closest('[hidden]')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Complete play creation' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Complete play creation', hidden: true }));
 
     await waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(2));
     const playRow = (await screen.findByText('Azul details')).closest('button')!;
     expect(screen.getByText('Inline logged play play-new')).toBeTruthy();
     expect(playRow.getAttribute('aria-expanded')).toBe('true');
     expect(document.activeElement).toBe(playRow);
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
     expect(proposalPanel.contains(screen.getByText('Inline logged play play-new'))).toBe(false);
   });
 });
