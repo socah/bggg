@@ -73,6 +73,12 @@ realm session lifetimes, and the web client's valid post-logout redirects on
 every deploy. Login sessions have a 30-day idle timeout and a 90-day maximum
 lifespan; Auth.js uses the same 90-day ceiling.
 
+Auth.js keeps Keycloak's ID token inside its encrypted session token. Clients
+navigate to `/web/logout` without clearing that session first; the route reads
+the ID token, clears the local Auth.js session, and sends `id_token_hint` to
+Keycloak. That proves which browser session is ending, so Keycloak can log out
+immediately instead of displaying a second confirmation screen.
+
 Keycloak's database password must remain stable for the lifetime of
 `keycloak_db_data`. Production stores it as `KEYCLOAK_DB_PASSWORD` in
 Infisical; development worktrees generate it in their local `.env`. Backups

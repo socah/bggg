@@ -81,18 +81,14 @@ export class R2Service {
   private readonly bucket = process.env.R2_BUCKET!;
 
   // Generates a presigned PUT URL scoped to exactly one object key, one
-  // content type, one exact size, and a short expiry. The caller
+  // content type and a short expiry. The caller
   // (UploadsService) decides WHO is allowed to call this and WHAT key to
   // use — this method only knows how to validate-and-sign.
   //
-  // Decision: contentLength is pinned into the signature (via
-  // PutObjectCommand's ContentLength field), not just checked against a
-  // max here. A plain presigned PUT URL has no "reject anything over X"
-  // primitive the way an S3 POST policy's content-length-range condition
-  // does — the only way to actually bound the upload is to sign one exact
-  // byte count and let R2 reject a PUT whose real Content-Length doesn't
-  // match. The client must know its own file size up front (trivial —
-  // File.size in the browser), so this isn't a real usability cost.
+  // Content-Length is deliberately not signed. Browser JavaScript cannot
+  // control that forbidden header, so signing it makes direct uploads
+  // browser-dependent. confirm() enforces the limit against R2's actual
+  // stored object size and deletes an oversized object.
   async createPresignedUploadUrl(
     key: string,
     contentType: string,
@@ -114,17 +110,12 @@ export class R2Service {
       Bucket: this.bucket,
       Key: key,
       ContentType: contentType,
-      ContentLength: contentLength,
     });
 
     // getSignedUrl never contacts R2 — it computes an HMAC signature locally
     // from the command details, the credentials, and an expiry timestamp,
     // then encodes all of it into the URL's query string. R2 re-derives the
     // same signature on receipt to verify the request wasn't tampered with.
-    // Because ContentLength was part of the command, that signature is only
-    // valid for a PUT whose actual Content-Length header matches exactly —
-    // a client can't declare a small size to pass this check and then send
-    // more bytes.
     const url = await getSignedUrl(this.client, command, {
       expiresIn: PRESIGN_EXPIRY_SECONDS,
     });
@@ -179,6 +170,10 @@ export class R2Service {
   // is not the pattern to copy for a system with real concurrent load.
   hasCapacityFor(currentTotalBytes: number, incomingBytes: number): boolean {
     return currentTotalBytes + incomingBytes <= MAX_STORAGE_BYTES;
+  }
+
+  isUploadSizeAllowed(sizeBytes: number): boolean {
+    return sizeBytes <= MAX_UPLOAD_BYTES;
   }
 
   // Generates a presigned, time-limited GET URL for one exact object key —

@@ -180,23 +180,27 @@ vulnerability.
 
 A plain presigned PUT URL has no "reject anything over X MB" primitive —
 that's a feature of S3 **POST policies** (`content-length-range` condition),
-not PUT presigning. The only way to bound a PUT upload's size is to sign one
-**exact** byte count and let the server (R2) reject a request whose real
-`Content-Length` doesn't match.
+not PUT presigning. Although an exact `Content-Length` can be signed, browser
+JavaScript cannot control that header, so browser uploads need the authoritative
+size check to happen after upload using R2's own object metadata.
 
-Chose: the client declares its file's exact size (`contentLength`, e.g.
-`file.size` in the browser) when requesting the presign. The server rejects
-it up front if it's over a configurable `MAX_UPLOAD_BYTES`, then bakes that
-exact size into the `PutObjectCommand` used for signing — so the actual PUT
-must match it exactly, not just stay under a ceiling.
+Chose: the client declares its file's size (`contentLength`, e.g. `file.size`
+in the browser) when requesting the presign, so the server can reject an
+honest oversized upload before issuing a URL. `Content-Length` is not included
+in the signature because browser JavaScript cannot control that forbidden
+header consistently. At confirmation, the server checks R2's actual
+`HeadObject` size against both `MAX_UPLOAD_BYTES` and the total storage quota,
+deleting and rejecting an object that exceeds either limit.
 
-Alternative considered: let any size through at presign time, then check the
-real size back from R2 in `/uploads/confirm` (already fetching object
-metadata there via `HeadObject`) and delete-and-reject if too large.
+Alternative considered: sign the exact `Content-Length` and rely on R2 to
+reject a mismatch.
 
-Drawback of alternative: wastes bandwidth and briefly stores an oversized
-file before catching it — worse for a project explicitly trying to stay
-within a metered free tier.
+Drawback of alternative: `Content-Length` is a forbidden browser request
+header. Signing it made direct uploads depend on browser-generated transport
+details and caused R2 signature failures that surfaced only as CORS network
+errors. Confirmation remains the authoritative enforcement point; a dishonest
+client can waste one upload's bandwidth, but cannot leave an oversized object
+stored or recorded.
 
 ### Follow-Up: Approximate Free-Tier Storage Quota
 

@@ -2,13 +2,13 @@ import { afterEach, describe, expect, it, jest } from '@jest/globals';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 const apiMutate = jest.fn<(path: string, method: string) => Promise<unknown>>();
-const signOut = jest.fn<(options: { redirectTo: string }) => Promise<void>>();
+const logOut = jest.fn();
 
 jest.unstable_mockModule('@/lib/api', () => ({
   apiMutate,
   ApiError: class ApiError extends Error {},
 }));
-jest.unstable_mockModule('next-auth/react', () => ({ signOut }));
+jest.unstable_mockModule('@/lib/logout', () => ({ logOut }));
 
 const { DeleteAccountSettings } = await import('./delete-account-settings');
 
@@ -36,6 +36,6 @@ describe('DeleteAccountSettings', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Delete account' }));
 
     await waitFor(() => expect(apiMutate).toHaveBeenCalledWith('/users/me', 'DELETE'));
-    expect(signOut).toHaveBeenCalledWith({ redirectTo: '/web/logout' });
+    expect(logOut).toHaveBeenCalled();
   });
 });

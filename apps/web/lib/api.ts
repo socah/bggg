@@ -1,6 +1,7 @@
 'use client';
 
-import { getSession, signOut } from 'next-auth/react';
+import { getSession } from 'next-auth/react';
+import { logOut } from '@/lib/logout';
 
 type ApiSession = Awaited<ReturnType<typeof getSession>>;
 let recentSession: { value: ApiSession; expiresAt: number } | null = null;
@@ -24,7 +25,7 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
   const session = await getApiSession();
 
   if (!session || session.error === 'RefreshTokenError') {
-    await signOut({ redirectTo: '/web/logout' });
+    logOut();
     throw new Error('Session expired');
   }
 
@@ -44,7 +45,7 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
       response = await fetch(`/api${path}`, { ...init, headers });
     }
     if (response.status === 401) {
-      await signOut({ redirectTo: '/web/logout' });
+      logOut();
       throw new Error('Session expired');
     }
   }

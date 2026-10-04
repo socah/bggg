@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { signOut } from 'next-auth/react';
+import { logOut } from '@/lib/logout';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   DropdownMenu,
@@ -41,7 +41,7 @@ export function UserMenu({ name }: { name: string }) {
           <Link href="/settings">Settings</Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => void signOut({ redirectTo: '/web/logout' })}>
+        <DropdownMenuItem onSelect={logOut}>
           Log out
         </DropdownMenuItem>
       </DropdownMenuContent>

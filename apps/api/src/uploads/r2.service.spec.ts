@@ -20,5 +20,13 @@ describe('R2Service', () => {
     const params = new URL(url).searchParams;
     expect(params.has('x-amz-checksum-crc32')).toBe(false);
     expect(params.has('x-amz-sdk-checksum-algorithm')).toBe(false);
+    expect(params.get('X-Amz-SignedHeaders')).toBe('host');
+  });
+
+  it('checks actual object sizes against the upload limit', () => {
+    const service = new R2Service();
+
+    expect(service.isUploadSizeAllowed(10 * 1024 * 1024)).toBe(true);
+    expect(service.isUploadSizeAllowed(10 * 1024 * 1024 + 1)).toBe(false);
   });
 });

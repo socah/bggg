@@ -2,9 +2,9 @@ import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 
-const signOut = jest.fn<(options: { redirectTo: string }) => Promise<void>>();
+const logOut = jest.fn();
 
-jest.unstable_mockModule('next-auth/react', () => ({ signOut }));
+jest.unstable_mockModule('@/lib/logout', () => ({ logOut }));
 jest.unstable_mockModule('@/components/ui/dropdown-menu', () => ({
   DropdownMenu: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   DropdownMenuContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
@@ -24,11 +24,11 @@ describe('UserMenu', () => {
     expect(screen.getByRole('link', { name: 'Settings' }).getAttribute('href')).toBe('/settings');
   });
 
-  it('signs out through the Auth.js endpoint', () => {
+  it('starts the server-managed logout flow', () => {
     render(<UserMenu name="Alice Example" />);
 
     fireEvent.click(screen.getByText('Log out'));
 
-    expect(signOut).toHaveBeenCalledWith({ redirectTo: '/web/logout' });
+    expect(logOut).toHaveBeenCalled();
   });
 });

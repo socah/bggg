@@ -4,6 +4,7 @@ import {
   HttpStatus,
   Injectable,
   NotFoundException,
+  PayloadTooLargeException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -82,6 +83,18 @@ export class UploadsService {
     const head = await this.r2Service.headObject(dto.key);
     if (!head) {
       throw new NotFoundException('No uploaded object found for this key');
+    }
+    if (!this.r2Service.isUploadSizeAllowed(head.sizeBytes)) {
+      await this.r2Service.deleteObject(dto.key);
+      throw new PayloadTooLargeException('Uploaded file exceeds the file size limit');
+    }
+    const currentTotalBytes = await this.getTotalStorageBytes();
+    if (!this.r2Service.hasCapacityFor(currentTotalBytes, head.sizeBytes)) {
+      await this.r2Service.deleteObject(dto.key);
+      throw new HttpException(
+        'R2 storage quota would be exceeded by this upload',
+        HttpStatus.INSUFFICIENT_STORAGE,
+      );
     }
 
     const photo = this.playPhotoRepository.create({

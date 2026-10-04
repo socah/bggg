@@ -4,6 +4,7 @@ import Keycloak from 'next-auth/providers/keycloak';
 // Browsers share localhost cookies across ports. Namespace Auth.js's cookies
 // so separate worktrees do not overwrite each other's sessions.
 const cookieSuffix = process.env.WEB_HOST_PORT ? `.${process.env.WEB_HOST_PORT}` : '';
+export const sessionCookieName = `authjs.session-token${cookieSuffix}`;
 const cookieOptions = {
   httpOnly: true,
   sameSite: 'lax' as const,
@@ -26,7 +27,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   // ('.../web/auth/callback/keycloak').
   basePath: '/web/auth',
   cookies: {
-    sessionToken: { name: `authjs.session-token${cookieSuffix}`, options: cookieOptions },
+    sessionToken: { name: sessionCookieName, options: cookieOptions },
     callbackUrl: { name: `authjs.callback-url${cookieSuffix}`, options: cookieOptions },
     csrfToken: { name: `authjs.csrf-token${cookieSuffix}`, options: cookieOptions },
     pkceCodeVerifier: {
@@ -62,6 +63,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             : typeof token.name === 'string' ? token.name : undefined,
           accessToken: account.access_token,
           refreshToken: account.refresh_token,
+          idToken: account.id_token,
           // account.expires_at is seconds since epoch (OAuth standard),
           // not milliseconds.
           expiresAt: account.expires_at,
@@ -105,6 +107,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           // Keycloak may or may not rotate the refresh token itself —
           // fall back to the existing one if it didn't.
           refreshToken: refreshed.refresh_token ?? token.refreshToken,
+          idToken: refreshed.id_token ?? token.idToken,
           expiresAt: Math.floor(Date.now() / 1000) + refreshed.expires_in,
           // Explicitly clear a stale error from a prior failed refresh —
           // without this, one transient failure permanently locks the
@@ -160,6 +163,7 @@ declare module '@auth/core/jwt' {
   interface JWT {
     accessToken?: string;
     refreshToken?: string;
+    idToken?: string;
     expiresAt?: number;
     error?: 'RefreshTokenError';
     username?: string;

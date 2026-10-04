@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { signOut } from 'next-auth/react';
 import { apiMutate, ApiError } from '@/lib/api';
+import { logOut } from '@/lib/logout';
 import { Button } from '@/components/ui/button';
 
 export function DeleteAccountSettings() {
@@ -15,7 +15,7 @@ export function DeleteAccountSettings() {
     setError(null);
     try {
       await apiMutate('/users/me', 'DELETE');
-      await signOut({ redirectTo: '/web/logout' });
+      logOut();
     } catch (requestError) {
       setError(requestError instanceof ApiError ? requestError.message : 'Unable to delete account');
       setDeleting(false);
