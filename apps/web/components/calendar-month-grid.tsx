@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { buildMonthGrid, placementDateKey, toDateKey, type CalendarDay } from '@/lib/calendar-grid';
 import type { CalendarParticipant, CalendarPlaySummary, Group, Proposal, ProposalWithGroup } from '@/lib/types';
 import { InlineProposalPanel } from '@/components/inline-proposal-panel';
@@ -131,6 +131,29 @@ function WeekRowExpander({
   const today = toDateKey(new Date());
   const canPropose = Boolean(currentDate && currentDate >= today);
 
+  function playRow(play: CalendarPlaySummary) {
+    const expanded = expandedPlayId === play.id;
+    const artwork = play.game.thumbnail || play.game.image;
+    return <div key={play.id} className="overflow-hidden rounded-sm border border-border bg-surface-raised">
+      <button ref={(element) => { if (element) playRowRefs.current.set(play.id, element); else playRowRefs.current.delete(play.id); }} type="button" aria-expanded={expanded} onClick={() => onExpandedPlayChange(expanded ? null : play.id)} className="flex min-h-12 w-full items-center gap-3 px-3 py-2 text-left">
+        {artwork ? (
+          // BGG image hosts are external and vary at runtime.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={artwork} alt="" className="size-8 rounded-sm object-cover" />
+        ) : <span className="flex size-8 items-center justify-center rounded-sm bg-accent-2 font-display text-accent-2-ink">{play.game.name.charAt(0)}</span>}
+        <strong className="min-w-0 truncate">{expanded ? `${play.game.name} details` : play.game.name}</strong>
+        {!defaultGroupId && <span className="hidden shrink-0 rounded-full border border-border px-2 py-0.5 text-xs font-semibold text-text-muted sm:inline">{play.groupName}</span>}
+        <ParticipantIcons participants={play.playParticipants} leftAligned />
+        {play.startedAt && play.endedAt && <span className="shrink-0 text-xs text-text-muted">{hhmm(play.startedAt)}–{hhmm(play.endedAt)}</span>}
+        {play.durationMinutes && <span className="shrink-0 text-xs text-text-muted">{formatDuration(play.durationMinutes)}</span>}
+        {play.status === 'abandoned' && <span className="shrink-0 text-xs font-semibold text-accent">Abandoned</span>}
+        <span className="flex-1" />
+        <DisclosureChevron expanded={expanded} />
+      </button>
+      <Disclosure expanded={expanded}><div className="border-t border-border"><PlayLogDialog inline embedded game={play.game} open={expanded} editPlayId={play.id} defaults={{ groupId: play.groupId, playedDate: play.playedDate, userIds: [] }} onOpenChange={(open) => { if (!open) onExpandedPlayChange(null); }} onLogged={onPlayLogged} /></div></Disclosure>
+    </div>;
+  }
+
   useEffect(() => {
     if (!isExpanded || !contentRef.current) return;
 
@@ -171,44 +194,30 @@ function WeekRowExpander({
         {currentDate && <div className="flex flex-col gap-3">
           {currentProposals.map((proposal) => {
             const expanded = expandedProposals[proposal.id] ?? currentPlays.length === 0;
-            return <div key={proposal.id} className="overflow-hidden rounded-sm border border-border bg-surface-raised">
+            const proposalPlays = currentPlays.filter((play) => play.proposalId === proposal.id);
+            return <Fragment key={proposal.id}><div className="overflow-hidden rounded-sm border border-border bg-surface-raised">
               <div className="flex min-h-11 items-center gap-3 px-3 py-2">
                 <button type="button" aria-expanded={expanded} onClick={() => setExpandedProposals((current) => ({ ...current, [proposal.id]: !expanded }))} className="flex min-w-0 shrink-0 items-center gap-3 text-left">
                   <span className="shrink-0 text-sm font-semibold">{expanded ? 'Session details' : proposal.session ? 'Session' : badgeLabel(proposal)}</span>
+                  {!defaultGroupId && hasGroupName(proposal) && <span className="hidden text-xs font-semibold text-text-muted sm:inline">{proposal.groupName}</span>}
                   <ParticipantIcons participants={proposal.participants ?? []} leftAligned />
                 </button>
                 {proposal.session && <div className="w-56 max-w-[40%]"><SessionPlaceControl groupId={proposal.groupId} sessionId={proposal.session.id} place={proposal.session.place} canEdit={Boolean(proposal.canManage)} onChanged={() => { onProposalsChanged?.(); }} /></div>}
                 <button type="button" aria-label={expanded ? 'Collapse session details' : 'Expand session details'} aria-expanded={expanded} onClick={() => setExpandedProposals((current) => ({ ...current, [proposal.id]: !expanded }))} className="ml-auto flex self-stretch flex-1 items-center justify-end p-2 text-text-muted"><DisclosureChevron expanded={expanded} /></button>
               </div>
               <Disclosure expanded={expanded}><div className="border-t border-border"><InlineProposalPanel embedded proposalId={proposal.id} groups={groups} defaultGroupId={defaultGroupId} onProposalsChanged={onProposalsChanged} onPlayLogged={onPlayLogged} onSelectPlayGame={(game, defaults) => onNewPlayChange({ game, defaults, hiddenUntilCreated: true })} /></div></Disclosure>
-            </div>;
+            </div>{proposalPlays.map(playRow)}</Fragment>;
           })}
-          {[...new Map(currentPlays.filter((play) => !play.proposalId).map((play) => [play.sessionId, play])).values()].map((session) => <div key={session.sessionId} className="flex min-h-11 flex-wrap items-center gap-3 rounded-sm border border-border bg-surface-raised px-3 py-2">
-            <span className="text-xs font-semibold text-text-muted">Logged session</span>
-            <ParticipantIcons participants={session.sessionParticipants} leftAligned />
-            <div className="w-56 max-w-full"><SessionPlaceControl groupId={session.groupId} sessionId={session.sessionId} place={session.sessionPlace} canEdit={session.canEdit} onChanged={onPlayLogged} /></div>
-          </div>)}
-          {currentPlays.map((play) => {
-            const expanded = expandedPlayId === play.id;
-            const artwork = play.game.thumbnail || play.game.image;
-            return <div key={play.id} className="overflow-hidden rounded-sm border border-border bg-surface-raised">
-              <button ref={(element) => { if (element) playRowRefs.current.set(play.id, element); else playRowRefs.current.delete(play.id); }} type="button" aria-expanded={expanded} onClick={() => onExpandedPlayChange(expanded ? null : play.id)} className="flex min-h-12 w-full items-center gap-3 px-3 py-2 text-left">
-                {artwork ? (
-                  // BGG image hosts are external and vary at runtime.
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={artwork} alt="" className="size-8 rounded-sm object-cover" />
-                ) : <span className="flex size-8 items-center justify-center rounded-sm bg-accent-2 font-display text-accent-2-ink">{play.game.name.charAt(0)}</span>}
-                <strong className="min-w-0 truncate">{expanded ? `${play.game.name} details` : play.game.name}</strong>
-                <ParticipantIcons participants={play.playParticipants} leftAligned />
-                {play.startedAt && play.endedAt && <span className="shrink-0 text-xs text-text-muted">{hhmm(play.startedAt)}–{hhmm(play.endedAt)}</span>}
-                {play.durationMinutes && <span className="shrink-0 text-xs text-text-muted">{formatDuration(play.durationMinutes)}</span>}
-                {play.status === 'abandoned' && <span className="shrink-0 text-xs font-semibold text-accent">Abandoned</span>}
-                <span className="flex-1" />
-                <DisclosureChevron expanded={expanded} />
-              </button>
-              <Disclosure expanded={expanded}><div className="border-t border-border"><PlayLogDialog inline embedded game={play.game} open={expanded} editPlayId={play.id} defaults={{ groupId: play.groupId, playedDate: play.playedDate, userIds: [] }} onOpenChange={(open) => { if (!open) onExpandedPlayChange(null); }} onLogged={onPlayLogged} /></div></Disclosure>
-            </div>;
-          })}
+          {[...new Map(currentPlays.filter((play) => !play.proposalId).map((play) => [play.sessionId, play])).values()].map((session) => <Fragment key={session.sessionId}>
+            <div className="flex min-h-10 flex-wrap items-center gap-3 border-b border-border px-1 py-2">
+              <span className="text-xs font-semibold text-text-muted">Logged session</span>
+              {!defaultGroupId && <span className="hidden text-xs font-semibold text-text sm:inline">{session.groupName}</span>}
+              <ParticipantIcons participants={session.sessionParticipants} leftAligned />
+              <div className="w-56 max-w-full"><SessionPlaceControl groupId={session.groupId} sessionId={session.sessionId} place={session.sessionPlace} canEdit={session.canEdit} onChanged={onPlayLogged} /></div>
+            </div>
+            {currentPlays.filter((play) => !play.proposalId && play.sessionId === session.sessionId).map(playRow)}
+          </Fragment>)}
+          {currentPlays.filter((play) => play.proposalId && !currentProposals.some((proposal) => proposal.id === play.proposalId)).map(playRow)}
           {newPlay && <div hidden={newPlay.hiddenUntilCreated}><PlayLogDialog inline game={newPlay.game} open defaults={newPlay.defaults} onOpenChange={(open) => { if (!open) onNewPlayChange(null); }} onLogged={onPlayLogged} onCreated={(playId) => { onNewPlayChange(null); onExpandedPlayChange(playId); onPlayLogged(); }} /></div>}
           {canPropose && (currentProposals.length === 0 || currentDraftOpen) ? <InlineProposalPanel proposalId={null} draftDate={currentDate} groups={groups} defaultGroupId={defaultGroupId} onProposalsChanged={onProposalsChanged} onPlayLogged={onPlayLogged} onSelectProposal={() => onSetDraftOpen(false)} /> : canPropose ? <div className="flex justify-start"><Button type="button" variant="secondary" className="px-3 py-1 text-xs" onClick={() => onSetDraftOpen(true)}>+ Add proposal</Button></div> : null}
         </div>}
@@ -389,8 +398,8 @@ export function CalendarMonthGrid({
                     .filter((play) => !play.proposalId)
                     .map((play) => [play.sessionId, play])).values()];
                   const dayItems = [
-                    ...dayProposals.map((item) => ({ id: `proposal:${item.id}`, kind: 'session' as const, label: compactBadgeLabel(item), title: badgeLabel(item), className: proposalStatusClasses(item.status), participants: item.participants ?? [] })),
-                    ...directSessions.map((session) => ({ id: `session:${session.sessionId}`, kind: 'session' as const, label: 'Logged', title: `Logged session${defaultGroupId ? '' : ` - ${session.groupName}`}`, className: 'bg-surface text-text-muted', participants: session.sessionParticipants })),
+                    ...dayProposals.map((item) => ({ id: `proposal:${item.id}`, kind: 'session' as const, label: compactBadgeLabel(item), groupName: !defaultGroupId && hasGroupName(item) ? item.groupName : null, title: badgeLabel(item), className: proposalStatusClasses(item.status), participants: item.participants ?? [] })),
+                    ...directSessions.map((session) => ({ id: `session:${session.sessionId}`, kind: 'session' as const, label: 'Logged', groupName: defaultGroupId ? null : session.groupName, title: `Logged session${defaultGroupId ? '' : ` - ${session.groupName}`}`, className: 'bg-surface text-text-muted', participants: session.sessionParticipants })),
                     ...dayPlays.map((play) => ({ id: `play:${play.id}`, kind: 'play' as const, label: `Played ${play.game.name}${defaultGroupId ? '' : ` - ${play.groupName}`}`, className: 'bg-highlight text-text', play })),
                   ];
                   const isSelected = activeDate === key;
@@ -415,7 +424,7 @@ export function CalendarMonthGrid({
                       <span className="flex items-center justify-between font-medium">
                         <span className={cn(inMonth && (date.getDay() === 6 || date.getDay() === 0) && 'text-accent')}>{date.getDate()}</span>
                       </span>
-                      {dayItems.filter((item) => item.kind === 'session').map((item) => <span key={item.id} title={`${item.title}${item.participants.length ? `: ${item.participants.map((participant) => participant.name).join(', ')}` : ''}`} className={cn('mt-1 flex w-full min-w-0 items-center gap-1 rounded px-1 font-medium', item.className)}><span className="shrink-0">{item.label}</span>{item.participants.length > 0 && <span className="ml-auto hidden @min-[8rem]/day:block"><ParticipantIcons participants={item.participants.slice(0, 3)} /></span>}</span>)}
+                      {dayItems.filter((item) => item.kind === 'session').map((item) => <span key={item.id} title={`${item.title}${item.participants.length ? `: ${item.participants.map((participant) => participant.name).join(', ')}` : ''}`} className={cn('mt-1 flex w-full min-w-0 items-center gap-1 rounded px-1 font-medium', item.className)}><span className="shrink-0">{item.label}<span className="hidden sm:inline">{item.groupName ? ` · ${item.groupName}` : ''}</span></span>{item.participants.length > 0 && <span className="ml-auto hidden @min-[8rem]/day:block"><ParticipantIcons participants={item.participants.slice(0, 3)} /></span>}</span>)}
                        {dayPlays.length > 0 && <span className="mt-1 flex flex-wrap gap-1">
                         {dayItems.filter((item) => item.kind === 'play').map((item) => {
                           if (item.kind !== 'play') return null;

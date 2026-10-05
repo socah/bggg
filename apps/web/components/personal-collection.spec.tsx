@@ -121,11 +121,40 @@ describe('GameDetailsSheet interactions', () => {
   it('adds to a list as soon as the list is selected', async () => {
     const onMutate = jest.fn<(path: string, init: RequestInit, success: string) => Promise<boolean>>(async () => true);
     render(<GameDetailsSheet game={game} open onOpenChange={jest.fn()} lists={[{ id: 'list-2', name: 'Weekend', type: 'custom', tiers: [], items: [], createdAt: '', updatedAt: '' }]} onMutate={onMutate} />);
-    const selector = await screen.findByDisplayValue('Choose a list');
+    const selector = await screen.findByRole('combobox', { name: 'Add list tag' });
 
     fireEvent.change(selector, { target: { value: 'list-2' } });
 
     await waitFor(() => expect(onMutate).toHaveBeenCalledWith('/bgg-account/lists/list-2/games', expect.objectContaining({ method: 'POST' }), 'Added Azul to Weekend.'));
+  });
+
+  it('shows memberships as editable tags in the personal review', async () => {
+    apiFetch.mockImplementationOnce(async () => ({ ok: true, json: async () => ({
+      reviews: [{ id: 1, userId: 'me', displayName: 'Alice', username: 'alice', profileGroupId: null, isMine: true, rating: 8, complexityScore: null, depthScore: null, body: 'Mine.', source: 'manual', updatedAt: '2026-09-01T00:00:00.000Z' }],
+      plays: [],
+    }) } as Response));
+    const onMutate = jest.fn<(path: string, init: RequestInit, success: string) => Promise<boolean>>(async () => true);
+    const collectionGame = { ...game, source: 'manual' as const, addedAt: '' };
+    const weekend = { id: 'list-2', name: 'Weekend', type: 'custom' as const, tiers: [], items: [{ ...game, tier: null, position: 0 }], createdAt: '', updatedAt: '' };
+    render(<GameDetailsSheet game={game} open onOpenChange={jest.fn()} collectionGame={collectionGame} lists={[weekend]} onMutate={onMutate} />);
+
+    expect(await screen.findByText('Mine.')).toBeTruthy();
+    expect(screen.getByLabelText('Game lists').textContent).toContain('Collection');
+    expect(screen.getByLabelText('Game lists').textContent).toContain('Weekend');
+    expect(screen.queryByText('Additional info')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Weekend tag' }));
+
+    await waitFor(() => expect(onMutate).toHaveBeenCalledWith('/bgg-account/lists/list-2/games/1', { method: 'DELETE' }, ''));
+  });
+
+  it('keeps BGG-managed membership tags non-removable', async () => {
+    const collectionGame = { ...game, source: 'bgg' as const, addedAt: '' };
+    render(<GameDetailsSheet game={game} open onOpenChange={jest.fn()} collectionGame={collectionGame} onMutate={jest.fn(async () => true)} />);
+
+    expect(await screen.findByText('Collection')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Remove Collection tag' })).toBeNull();
+    expect(screen.getByTitle('Managed by BoardGameGeek')).toBeTruthy();
   });
 });
 
@@ -216,14 +245,15 @@ describe('LibraryGame metadata', () => {
     expect(screen.queryByText('2017')).toBeNull();
   });
 
-  it('shows list and game metadata in the details header', async () => {
-    render(<GameDetailsSheet game={game} open onOpenChange={jest.fn()} membershipLabels={['Collection', 'Favorites']} />);
+  it('keeps the details header limited to game metadata', async () => {
+    render(<GameDetailsSheet game={game} open onOpenChange={jest.fn()} />);
 
-    expect(await screen.findByText('Collection')).toBeTruthy();
+    await screen.findByText('Write your review');
     const title = screen.getByRole('link', { name: 'Azul' });
     expect(title.getAttribute('href')).toBe('https://boardgamegeek.com/boardgame/101');
     expect(title.getAttribute('target')).toBe('_blank');
-    expect(screen.getByText('Favorites')).toBeTruthy();
+    expect(screen.queryByText('Community notebook')).toBeNull();
+    expect(screen.queryByText('Player reviews')).toBeNull();
     expect(screen.getByLabelText('BGG rating 7.8').textContent).toBe('7.8');
     expect(screen.getByLabelText('2–4 players').textContent).toBe('👥 2–4');
     expect(screen.getByLabelText('45 minutes').textContent).toBe('🕒 45′');

@@ -273,6 +273,47 @@ describe('CalendarMonthGrid', () => {
     expect(within(cascadiaRow).queryByTitle('Bob')).toBeNull();
   });
 
+  it('uses session rows as separators for plays from different groups', async () => {
+    const play = (id: string, sessionId: string, groupId: string, groupName: string, gameName: string) => ({
+      id,
+      sessionId,
+      proposalId: null,
+      groupId,
+      groupName,
+      game: { id: id === 'play-1' ? 1 : 2, name: gameName, image: null, thumbnail: null },
+      playedDate: '2026-05-01',
+      status: 'finished' as const,
+      durationMinutes: null,
+      notes: null,
+      canEdit: true,
+      sessionParticipants: [{ id: `user:${groupId}`, name: groupName }],
+      playParticipants: [],
+      sessionPlace: null,
+    });
+    apiFetch.mockImplementation(async (input) => ({
+      ok: true,
+      json: async () => String(input).includes('/group-1/')
+        ? [play('play-1', 'session-1', 'group-1', 'Thursday Games', 'Azul')]
+        : [play('play-2', 'session-2', 'group-2', 'Weekend Crew', 'Cascadia')],
+    } as Response));
+
+    render(<CalendarMonthGrid proposals={[]} groups={[
+      { id: 'group-1', name: 'Thursday Games', ownerId: 'user-1', isSolo: false, createdAt: '' },
+      { id: 'group-2', name: 'Weekend Crew', ownerId: 'user-1', isSolo: false, createdAt: '' },
+    ]} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'May 1, 2026, 0 proposals, 2 logged plays' }));
+
+    const separators = screen.getAllByText('Logged session').map((label) => label.parentElement!);
+    const azulRow = screen.getByText('Azul').closest('button')!;
+    const cascadiaRow = screen.getByText('Cascadia').closest('button')!;
+    expect(separators[0].compareDocumentPosition(azulRow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(azulRow.compareDocumentPosition(separators[1]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(separators[1].compareDocumentPosition(cascadiaRow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(azulRow).getByText('Thursday Games').className).toContain('hidden');
+    expect(within(cascadiaRow).getByText('Weekend Crew').className).toContain('sm:inline');
+    expect(screen.getByTitle('Logged session - Thursday Games: Thursday Games').textContent).toContain('Logged · Thursday Games');
+  });
+
   it('resolves avatar colour collisions within a participant list', async () => {
     apiFetch.mockResolvedValue({
       ok: true,

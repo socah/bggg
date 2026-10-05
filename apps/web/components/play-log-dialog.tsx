@@ -96,6 +96,7 @@ export function PlayLogDialog({
   const [durationMinutes, setDurationMinutes] = useState<number | null>(null);
   const [timePickerOpen, setTimePickerOpen] = useState(false);
   const [notes, setNotes] = useState('');
+  const [noteEditorOpen, setNoteEditorOpen] = useState(false);
   const [playNotes, setPlayNotes] = useState<PlayNote[]>([]);
   const [roster, setRoster] = useState<PlayerRoster | null>(null);
   const [players, setPlayers] = useState<Record<string, PlayerValue>>({});
@@ -133,6 +134,7 @@ export function PlayLogDialog({
     setDurationMinutes(null);
     setTimePickerOpen(false);
     setNotes('');
+    setNoteEditorOpen(false);
     setPlayNotes([]);
     setPhotos([]);
     setExistingPhotos([]);
@@ -167,7 +169,9 @@ export function PlayLogDialog({
         setEndTime(play.endedAt ? hhmm(play.endedAt) : '');
         setDurationMinutes(play.durationMinutes);
         setPlayNotes(play.notes);
-        setNotes(play.notes.find((note) => note.isCurrentUser)?.notes ?? '');
+        const ownNote = play.notes.find((note) => note.isCurrentUser)?.notes ?? '';
+        setNotes(ownNote);
+        setNoteEditorOpen(Boolean(ownNote));
         setPlayers(Object.fromEntries(play.players.map((player) => [player.userId ? `user:${player.userId}` : `guest:${player.guestPlayerId}`, { selected: true, isWinner: player.isWinner, score: player.score ?? '' }])));
       })
       .catch((reason: unknown) => {
@@ -277,6 +281,7 @@ export function PlayLogDialog({
           id: saved.userId,
         }];
       });
+      if (!saved.notes) setNoteEditorOpen(false);
       onLogged?.();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to save note');
@@ -447,12 +452,12 @@ export function PlayLogDialog({
           <div><h3 className="font-display text-xl">Log {game?.name}</h3></div>
           {!inline && <DialogClose className="text-sm text-text-muted">Close</DialogClose>}
         </div>
-        <label className="mt-5 flex min-w-0 flex-col gap-2 text-xs font-semibold text-text-muted"><span>Group</span>
-          <select required value={groupId} disabled={saving} onChange={(event) => { setGroupId(event.target.value); setRoster(null); setSessionId(null); setPlayers({}); }} className="h-10 min-h-10 w-full rounded-sm border border-border bg-surface px-2 text-sm text-text">
+        <div className="mt-4">
+          <select aria-label="Group" required value={groupId} disabled={saving} onChange={(event) => { setGroupId(event.target.value); setRoster(null); setSessionId(null); setPlayers({}); }} className="h-10 min-h-10 w-full rounded-sm border border-border bg-surface px-2 text-sm text-text">
             <option value="" disabled>Choose a group</option>
             {groups.map((group) => <option key={group.id} value={group.id}>{group.isSolo ? `${group.name} (solo)` : group.name}</option>)}
           </select>
-        </label>
+        </div>
         {error && <p role="alert" className="mt-3 text-sm text-accent">{error}</p>}
         {saving && <p role="status" className="mt-3 text-xs text-text-muted">Creating play...</p>}
   </> : <>
@@ -462,30 +467,20 @@ export function PlayLogDialog({
           {!inline && <DialogClose className="text-sm text-text-muted">Close</DialogClose>}
         </div>
         )}
-        <form onSubmit={(event) => event.preventDefault()} className={`${embedded ? '' : 'mt-5'} flex flex-col gap-5`}>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="flex min-w-0 flex-col gap-2 text-xs font-semibold text-text-muted"><span>Group</span>
-              <select required value={groupId} disabled={saving || Boolean(defaults?.groupId)} onChange={(event) => { setGroupId(event.target.value); setRoster(null); setSessionId(null); setPlayers({}); }} className="h-10 min-h-10 w-full rounded-sm border border-border bg-surface px-2 text-sm text-text">
+        <form onSubmit={(event) => event.preventDefault()} className={`${embedded ? '' : 'mt-4'} flex flex-col gap-4`}>
+          <div className="flex flex-wrap gap-2">
+            {!defaults?.groupId && <select aria-label="Group" required value={groupId} disabled={saving} onChange={(event) => { setGroupId(event.target.value); setRoster(null); setSessionId(null); setPlayers({}); }} className="h-9 min-h-9 min-w-40 flex-1 rounded-sm border border-border bg-surface px-2 text-sm text-text">
                 {!defaults?.groupId && <option value="" disabled>Choose a group</option>}
                 {groups.map((group) => <option key={group.id} value={group.id}>{group.isSolo ? `${group.name} (solo)` : group.name}</option>)}
-              </select>
-            </label>
-            <label className="flex min-w-0 flex-col gap-2 text-xs font-semibold text-text-muted"><span>Date</span>
-              <Input required type="date" lang="en-GB" max={todayKey()} value={playedDate} disabled={saving || Boolean(defaults)} onChange={(event) => { setPlayedDate(event.target.value); setSessionId(null); setPlayers({}); }} className="h-10 min-h-10 w-full" />
-            </label>
-            <fieldset className="min-w-0 text-xs font-semibold text-text-muted">
-              <legend>Status</legend>
-              <div className="mt-2 flex h-10 min-h-10 w-full overflow-hidden rounded-sm border border-border" aria-label="Play status">
+              </select>}
+            {!defaults && <Input aria-label="Date" required type="date" lang="en-GB" max={todayKey()} value={playedDate} disabled={saving} onChange={(event) => { setPlayedDate(event.target.value); setSessionId(null); setPlayers({}); }} className="h-9 min-h-9 min-w-36 flex-1" />}
+            <fieldset aria-label="Play status" className="flex h-9 min-h-9 min-w-48 flex-1 overflow-hidden rounded-sm border border-border">
                  {(['finished', 'abandoned'] as const).map((value) => <button key={value} type="button" aria-pressed={status === value} disabled={saving || !currentPlayId} onClick={() => { setStatus(value); void savePlay({ status: value }); }} className={`flex-1 px-3 text-sm font-semibold capitalize ${status === value ? 'bg-accent-2 text-accent-2-ink' : 'bg-surface text-text-muted'}`}>{value}</button>)}
-              </div>
             </fieldset>
-            <div className="sm:col-span-2">
-              <div className="grid grid-cols-3 gap-2 text-xs font-semibold text-text-muted"><span>Start</span><span>End</span><span>Duration</span></div>
-              <button type="button" aria-label="Set play times" disabled={saving || !currentPlayId} onClick={() => setTimePickerOpen(true)} className="mt-2 grid min-h-10 w-full grid-cols-3 items-center gap-2 rounded-sm border border-border bg-surface px-3 text-left text-sm text-text disabled:opacity-50">
-                <span>{startTime || 'Set time'}</span><span>{endTime || 'Set time'}</span><span>{durationMinutes ? formatDuration(durationMinutes) : '-'}</span>
-              </button>
-              {(startTime || endTime) && <button type="button" disabled={saving || !currentPlayId} onClick={() => { setStartTime(''); setEndTime(''); setDurationMinutes(null); void savePlay({ startTime: null, endTime: null }); }} className="mt-1 text-xs text-text-muted underline">Clear times</button>}
-            </div>
+            <button type="button" aria-label="Set play times" disabled={saving || !currentPlayId} onClick={() => setTimePickerOpen(true)} className="min-h-9 min-w-52 flex-[2] rounded-sm border border-border bg-surface px-3 text-left text-sm text-text disabled:opacity-50">
+              {startTime && endTime ? `${startTime}–${endTime}${durationMinutes ? ` · ${formatDuration(durationMinutes)}` : ''}` : 'Log playing time'}
+            </button>
+            {(startTime || endTime) && <button type="button" disabled={saving || !currentPlayId} onClick={() => { setStartTime(''); setEndTime(''); setDurationMinutes(null); void savePlay({ startTime: null, endTime: null }); }} className="min-h-9 px-2 text-xs text-text-muted underline">Clear times</button>}
           </div>
 
           <section>
@@ -504,7 +499,7 @@ export function PlayLogDialog({
                     <label className="col-start-1 row-start-2 flex items-center gap-2 text-xs sm:col-auto sm:row-auto"><input type="checkbox" checked={value.isWinner} disabled={saving || !currentPlayId || !value.selected} onChange={(event) => updatePlayer(player.key, { isWinner: event.target.checked }, true)} />Winner</label>
                     <Input className="col-start-2 row-start-2 h-9 min-h-9 w-28 sm:col-auto sm:row-auto sm:h-11 sm:w-auto" aria-label={`${player.name} score`} placeholder="Score" maxLength={100} value={value.score} disabled={saving || !currentPlayId || !value.selected} onChange={(event) => updatePlayer(player.key, { score: event.target.value })} onBlur={() => void savePlay()} />
                      <button type="button" className="col-start-2 row-start-1 min-h-8 px-1 text-xs font-semibold text-accent sm:col-auto sm:row-auto sm:min-h-9 sm:px-2" disabled={saving || !currentPlayId || selectedPlayers.length === 1} onClick={() => updatePlayer(player.key, { selected: false, isWinner: false, score: '' }, true)}>Remove</button>
-                     {isCurrentUser ? <label className="col-span-full mt-1 text-xs font-semibold text-text-muted">Your note<textarea aria-label={`${player.name} note`} rows={2} maxLength={5000} value={notes} disabled={saving || !currentPlayId} onChange={(event) => setNotes(event.target.value)} onBlur={() => void saveNotes()} className="mt-1 w-full resize-y rounded-sm border border-border bg-surface-raised p-2 text-sm font-normal text-text" /></label> : playerNote ? <p className="col-span-full mt-1 whitespace-pre-wrap text-sm text-text">{playerNote.notes}</p> : null}
+                      {isCurrentUser ? (currentNote || noteEditorOpen ? <textarea aria-label={`${player.name} note`} rows={2} maxLength={5000} value={notes} disabled={saving || !currentPlayId} onChange={(event) => setNotes(event.target.value)} onBlur={() => void saveNotes()} className="col-span-full mt-1 w-full resize-y rounded-sm border border-border bg-surface-raised p-2 text-sm text-text" placeholder="Add a note…" /> : <button type="button" disabled={saving || !currentPlayId} onClick={() => setNoteEditorOpen(true)} className="col-span-full justify-self-start text-xs font-semibold text-text-muted underline">+ Add note</button>) : playerNote ? <p className="col-span-full mt-1 whitespace-pre-wrap text-sm text-text">{playerNote.notes}</p> : null}
                   </div>;
                })}
               {!loadingRoster && !loadingPlay && selectedPlayers.length === 0 && <p className="text-sm text-text-muted">No players selected.</p>}
@@ -532,12 +527,10 @@ export function PlayLogDialog({
             <h3 className="font-display text-lg">Ghosts</h3>
             <div className="mt-2 flex flex-col gap-2">{ghostNotes.map((note) => <div key={note.userId} className="rounded-sm border border-border bg-surface p-3">
               <strong><UserIdentityLink user={{ id: note.userId, username: note.username, displayName: note.displayName, nickname: note.nickname }} groupId={groupId} /></strong>
-              {note.isCurrentUser ? <label className="mt-2 block text-xs font-semibold text-text-muted">Your note<textarea aria-label={`${note.displayName} ghost note`} rows={2} maxLength={5000} value={notes} disabled={saving || !currentPlayId} onChange={(event) => setNotes(event.target.value)} onBlur={() => void saveNotes()} className="mt-1 w-full resize-y rounded-sm border border-border bg-surface-raised p-2 text-sm font-normal text-text" /></label> : <p className="mt-2 whitespace-pre-wrap text-sm">{note.notes}</p>}
+              {note.isCurrentUser ? <textarea aria-label={`${note.displayName} ghost note`} rows={2} maxLength={5000} value={notes} disabled={saving || !currentPlayId} onChange={(event) => setNotes(event.target.value)} onBlur={() => void saveNotes()} className="mt-2 w-full resize-y rounded-sm border border-border bg-surface-raised p-2 text-sm text-text" placeholder="Add a note…" /> : <p className="mt-2 whitespace-pre-wrap text-sm">{note.notes}</p>}
             </div>)}</div>
           </section>}
-          {!currentUserIsPlayer && !currentNote && <label className="text-xs font-semibold text-text-muted">Your note
-            <textarea rows={3} maxLength={5000} value={notes} disabled={saving || !currentPlayId} onChange={(event) => setNotes(event.target.value)} onBlur={() => void saveNotes()} className="mt-1 w-full resize-y rounded-sm border border-border bg-surface p-2 text-sm font-normal text-text" />
-          </label>}
+          {!currentUserIsPlayer && !currentNote && (noteEditorOpen ? <textarea aria-label="Your note" rows={3} maxLength={5000} value={notes} disabled={saving || !currentPlayId} onChange={(event) => setNotes(event.target.value)} onBlur={() => void saveNotes()} className="w-full resize-y rounded-sm border border-border bg-surface p-2 text-sm text-text" placeholder="Add a note…" /> : <Button type="button" variant="secondary" className="self-start min-h-9 px-3 text-xs" disabled={saving || !currentPlayId} onClick={() => setNoteEditorOpen(true)}>+ Add note</Button>)}
           <label className="text-xs font-semibold text-text-muted">Photos
             <Input type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={saving || !currentPlayId} onChange={(event) => { const files = Array.from(event.target.files ?? []); setPhotos(files); void addPhotos(files); }} className="mt-1" />
             {photos.length > 0 && <span className="mt-1 block font-normal">{photos.length} photo{photos.length === 1 ? '' : 's'} selected</span>}

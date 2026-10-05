@@ -69,7 +69,7 @@ export function ReviewEditor({ body, plays, onChange }: { body: string; plays: G
   }
 
   return <div className="min-w-0">
-    <textarea ref={textarea} aria-label="Review article" value={body} onChange={(event) => onChange(event.target.value)} rows={20} maxLength={20000} className="w-full resize-y overflow-x-hidden rounded-sm border-[length:var(--border-w)] border-border bg-surface p-4 font-mono text-sm leading-6 text-text [overflow-wrap:anywhere]" placeholder={'## First impressions\n\nWrite your review in Markdown...'} />
+    <textarea ref={textarea} aria-label="Review article" value={body} onChange={(event) => onChange(event.target.value)} rows={14} maxLength={20000} className="w-full resize-y overflow-x-hidden rounded-sm border-[length:var(--border-w)] border-border bg-surface p-4 font-mono text-sm leading-6 text-text [overflow-wrap:anywhere]" placeholder={'## First impressions\n\nWrite your review in Markdown...'} />
     <p className="mt-1 text-xs text-text-muted">Markdown is rendered in this same space when you return to reading view.</p>
     <div className="mt-3 grid gap-2 sm:grid-cols-2">
       <select aria-label="Reference a logged play" defaultValue="" className="min-h-10 rounded-sm border border-border bg-surface px-2 text-sm" onChange={(event) => { const play = plays.find((candidate) => candidate.id === event.target.value); if (play) insert(`[Played ${formatPlayDate(play.playedAt)}](/review-play/${play.id})`); event.target.value = ''; }}>

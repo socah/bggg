@@ -94,6 +94,7 @@ Requirements:
 * Reviews must be editable
 * The most extensive review is the default game-detail view; other reviews are switchable
 * The signed-in user's review entry is always available and starts in edit mode when empty
+* Personal-list memberships appear as tags in the signed-in user's review and are editable with that review
 * Aggregate scores displayed per game
 * Review history optional future enhancement
 

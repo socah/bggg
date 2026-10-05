@@ -33,14 +33,6 @@ type LibraryTab = 'collection' | 'wishlist' | 'saved' | `list:${string}`;
 type ViewMode = 'compact' | 'list';
 type SortMode = 'priority' | 'source' | 'position' | 'name' | 'rating' | 'userRating' | 'complexity' | 'depth' | 'players' | 'time' | 'year' | 'added';
 
-const WISHLIST_PRIORITIES: Record<number, string> = {
-  1: 'Must have',
-  2: 'Love to have',
-  3: 'Like to have',
-  4: 'Thinking about it',
-  5: "Don't buy this",
-};
-
 const RATING_SCALE: Record<number, string> = {
   10: 'Outstanding. Always want to play and expect this will never change.',
   9: 'Excellent game. Always want to play it.',
@@ -187,7 +179,6 @@ export function GameDetailsSheet({
   onMutate,
   playDefaults,
   onPlayLogged,
-  membershipLabels = [],
   onReviewChanged,
 }: {
   game: GameCardGame | null;
@@ -202,7 +193,6 @@ export function GameDetailsSheet({
   onMutate?: (path: string, init: RequestInit, success: string) => Promise<boolean>;
   playDefaults?: PlayLogDefaults;
   onPlayLogged?: () => void;
-  membershipLabels?: string[];
   onReviewChanged?: () => void;
 }) {
   const [details, setDetails] = useState<CollectionGameDetails | null>(null);
@@ -379,15 +369,60 @@ export function GameDetailsSheet({
   const availableLists = game ? lists.filter((list) => !list.items.some((item) => item.id === game.id)) : [];
   const hasAvailableList = !collectionGame || !wishlistGame || !savedGame || availableLists.length > 0;
   const effectivePlayDefaults = playDefaults ?? (groupId ? { groupId, playedDate: todayKey(), userIds: [] } : undefined);
+  const membershipTags = game ? [
+    collectionGame && {
+      key: 'collection',
+      label: 'Collection',
+      removable: collectionGame.source === 'manual',
+      remove: () => onMutate?.(`/bgg-account/games/${game.id}`, { method: 'DELETE' }, `Removed ${game.name} from collection.`),
+    },
+    wishlistGame && {
+      key: 'wishlist',
+      label: 'Wishlist',
+      removable: wishlistGame.source === 'manual',
+      remove: () => onMutate?.(`/bgg-account/wishlist/${game.id}`, { method: 'DELETE' }, `Removed ${game.name} from wishlist.`),
+    },
+    savedGame && {
+      key: 'saved',
+      label: 'Saved',
+      removable: true,
+      remove: () => onMutate?.(`/bgg-account/saved/${game.id}`, { method: 'DELETE' }, `Removed ${game.name} from Saved.`),
+    },
+    ...containingLists.map((list) => ({
+      key: `list:${list.id}`,
+      label: list.name,
+      removable: true,
+      remove: () => onMutate?.(`/bgg-account/lists/${list.id}/games/${game.id}`, { method: 'DELETE' }, ''),
+    })),
+  ].filter((tag): tag is { key: string; label: string; removable: boolean; remove: () => Promise<boolean> | undefined } => Boolean(tag)) : [];
+
+  function reviewMembershipTags(editable: boolean) {
+    if (membershipTags.length === 0 && (!editable || !hasAvailableList)) return null;
+    return <div className="flex flex-wrap items-center gap-1.5" aria-label="Game lists">
+      {membershipTags.map((tag) => tag.removable && editable && onMutate ? (
+        <button key={tag.key} type="button" aria-label={`Remove ${tag.label} tag`} disabled={busy} onClick={() => void tag.remove()} className="inline-flex min-h-7 items-center gap-1 rounded-full border border-accent-2 bg-accent-2/15 px-2.5 text-xs font-semibold text-text hover:border-accent disabled:opacity-50">
+          {tag.label}<span aria-hidden="true">×</span>
+        </button>
+      ) : <span key={tag.key} title={editable && !tag.removable ? 'Managed by BoardGameGeek' : undefined} className="inline-flex min-h-7 items-center rounded-full border border-border bg-surface-raised px-2.5 text-xs font-semibold text-text-muted">{tag.label}</span>)}
+      {editable && onMutate && hasAvailableList && <select aria-label="Add list tag" value={targetListId} disabled={busy} onChange={(event) => void addToSelectedList(event.target.value)} className="min-h-7 rounded-full border border-dashed border-border bg-surface px-2 text-xs text-text-muted">
+        <option value="">+ Add tag</option>
+        {!collectionGame && <option value="built-in:collection">Collection</option>}
+        {!wishlistGame && <option value="built-in:wishlist">Wishlist</option>}
+        {!savedGame && <option value="built-in:saved">Saved</option>}
+        {availableLists.map((list) => <option key={list.id} value={list.id}>{list.name}</option>)}
+      </select>}
+    </div>;
+  }
 
   return (
     <Dialog open={open} onOpenChange={changeOpen}>
-      <DialogContent aria-describedby={undefined} className="max-h-[94vh] w-[calc(100%-1rem)] max-w-6xl overflow-y-auto p-4 sm:p-6">
+      <DialogContent aria-describedby={undefined} className="max-h-[94vh] w-[calc(100%-1rem)] max-w-5xl overflow-y-auto p-4 sm:p-5">
         <div className="flex items-start justify-between gap-3">
-          {game && <GameArtwork game={game} className="h-28 w-24" alt={`${game.name} cover`} />}
+          {game && <GameArtwork game={game} className="h-20 w-16" alt={`${game.name} cover`} />}
           <div className="min-w-0 flex-1">
             <DialogTitle className="font-display text-2xl">{game ? <a href={`https://boardgamegeek.com/boardgame/${game.bggId}`} target="_blank" rel="noreferrer" className="underline decoration-transparent underline-offset-4 hover:decoration-current">{game.name}</a> : null}</DialogTitle>
-            {game && <div className="mt-2"><GameMeta game={game} listLabels={membershipLabels} /></div>}
+            {game && <div className="mt-1"><GameMeta game={game} /></div>}
+            {game?.owners && game.owners.length > 0 && <p className="mt-1 text-xs text-text-muted">Owned by {game.owners.map((owner, index) => <span key={owner.id}>{index > 0 && ', '}<UserIdentityLink user={owner} groupId={groupId} /></span>)}</p>}
           </div>
           <DialogClose className="rounded-sm px-3 py-2 text-sm font-semibold text-text-muted">Close</DialogClose>
         </div>
@@ -395,28 +430,23 @@ export function GameDetailsSheet({
         {error && <p role="alert" className="mt-4 text-sm text-accent">{error}</p>}
         {!details && !error && <p className="py-12 text-center text-sm text-text-muted">Loading reviews and plays...</p>}
         {details && (
-          <div className="mt-6 flex flex-col gap-7">
-            <section aria-labelledby="reviews-heading">
-              <div className="border-b border-border pb-4">
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-accent">Community notebook</p>
-                <h2 id="reviews-heading" className="mt-1 font-display text-3xl">Player reviews</h2>
-                <p className="mt-1 text-sm text-text-muted">Long-form impressions, table stories, and the plays behind them.</p>
-              </div>
-
-              <div className="mt-4 flex gap-2 overflow-x-auto pb-2" aria-label="Choose a review">
-                <button type="button" aria-pressed={selectedReviewId === 'mine'} className={`shrink-0 rounded-full border px-4 py-2 text-sm font-bold ${selectedReviewId === 'mine' ? 'border-accent bg-accent text-accent-ink' : 'border-border bg-surface'}`} onClick={() => { setSelectedReviewId('mine'); setEditingReview(!mine); }}>Your review{!mine && ' · Start writing'}</button>
+          <div className="mt-4 flex flex-col gap-5">
+            <section>
+              <div className="flex gap-1.5 overflow-x-auto pb-1" aria-label="Choose a review">
+                <button type="button" aria-pressed={selectedReviewId === 'mine'} className={`shrink-0 rounded-full border px-3 py-1.5 text-sm font-bold ${selectedReviewId === 'mine' ? 'border-accent bg-accent text-accent-ink' : 'border-border bg-surface'}`} onClick={() => { setSelectedReviewId('mine'); setEditingReview(!mine); }}>Your review{!mine && ' · Start writing'}</button>
                 {details.reviews.filter((review) => !review.isMine).sort((a, b) => (b.body?.length ?? 0) - (a.body?.length ?? 0)).map((review) => (
-                  <button key={review.id} type="button" aria-pressed={selectedReviewId === review.id} className={`shrink-0 rounded-full border px-4 py-2 text-sm font-bold ${selectedReviewId === review.id ? 'border-accent-2 bg-accent-2 text-accent-2-ink' : 'border-border bg-surface'}`} onClick={() => { setSelectedReviewId(review.id); setEditingReview(false); }}>{review.nickname || review.displayName || review.username}</button>
+                  <button key={review.id} type="button" aria-pressed={selectedReviewId === review.id} className={`shrink-0 rounded-full border px-3 py-1.5 text-sm font-bold ${selectedReviewId === review.id ? 'border-accent-2 bg-accent-2 text-accent-2-ink' : 'border-border bg-surface'}`} onClick={() => { setSelectedReviewId(review.id); setEditingReview(false); }}>{review.nickname || review.displayName || review.username}</button>
                 ))}
               </div>
 
-              <div className="mt-4 rounded-md border border-border bg-surface p-4 sm:p-6" style={{ boxShadow: 'var(--shadow-card)' }}>
+              <div className="mt-2 rounded-md border border-border bg-surface p-3 sm:p-4" style={{ boxShadow: 'var(--shadow-card)' }}>
                 {selectedReviewId === 'mine' && (editingReview || !mine) ? (
-                  <form onSubmit={(event) => event.preventDefault()} className="flex flex-col gap-4">
+                  <form onSubmit={(event) => event.preventDefault()} className="flex flex-col gap-3">
                     <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div><h3 className="font-display text-2xl">{mine ? 'Edit your review' : 'Write your review'}</h3><p className="text-sm text-text-muted">Type Markdown directly. Nothing is created until you add a score or write something.</p></div>
+                      <h3 className="font-display text-xl">{mine ? 'Edit your review' : 'Write your review'}</h3>
                       {mine && <Button type="button" variant="secondary" onClick={() => setEditingReview(false)}>Done</Button>}
                     </div>
+                    {reviewMembershipTags(true)}
                     <div className="grid gap-2 sm:grid-cols-3">
                       <label className="text-xs font-semibold text-text-muted">Rating<Input type="number" min="1" max="10" step="0.1" value={rating} onChange={(event) => setRating(event.target.value)} className="mt-1 min-h-10 w-full" placeholder="1-10" /></label>
                       <label className="text-xs font-semibold text-text-muted">Complexity<select value={complexity} onChange={(event) => setComplexity(event.target.value)} className={`mt-1 w-full ${selectClass}`}><option value="">Choose</option>{WEIGHT_SCALE.map((label, index) => ({ label, value: index + 1 })).reverse().map(({ label, value }) => <option key={label} value={value}>{value} - {label}</option>)}</select></label>
@@ -431,83 +461,16 @@ export function GameDetailsSheet({
                   </form>
                 ) : selectedReview ? (
                   <>
-                    <header className="mb-6 flex flex-wrap items-start justify-between gap-4 border-b border-border pb-4">
+                    <header className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-border pb-3">
                       <div><p className="text-xs font-bold uppercase tracking-wider text-text-muted">Review by</p><h3 className="mt-1 font-display text-2xl"><UserIdentityLink user={{ id: selectedReview.userId, username: selectedReview.username, displayName: selectedReview.displayName, nickname: selectedReview.nickname }} groupId={selectedReview.profileGroupId} /></h3><p className="mt-1 text-xs text-text-muted">Updated {formatDateDmy(selectedReview.updatedAt)}{selectedReview.source === 'bgg' && ' · Rating synced from BGG'}</p></div>
                       <div className="flex flex-wrap items-center gap-2">{selectedReview.rating && <Badge>{selectedReview.rating}/10</Badge>}{selectedReview.complexityScore && <Badge>Complexity {selectedReview.complexityScore}/5</Badge>}{selectedReview.depthScore && <Badge>Depth {selectedReview.depthScore}/5</Badge>}{selectedReview.isMine && <Button type="button" variant="secondary" className="min-h-9 px-3" onClick={() => setEditingReview(true)}>Edit</Button>}</div>
                     </header>
+                    {selectedReview.isMine && <div className="mb-4">{reviewMembershipTags(false)}</div>}
                     {selectedReview.body ? <ReviewArticle body={selectedReview.body} plays={details.plays} /> : <p className="py-10 text-center text-sm italic text-text-muted">This review currently contains scores only.</p>}
                   </>
                 ) : null}
               </div>
             </section>
-
-            {game?.owners && game.owners.length > 0 && (
-              <section>
-                <h3 className="font-display text-lg">Owned by</h3>
-                <p className="mt-2 text-sm">{game.owners.map((owner, index) => <span key={owner.id}>{index > 0 && ', '}<UserIdentityLink user={owner} groupId={groupId} /></span>)}</p>
-              </section>
-            )}
-            {onMutate && game && (
-              <section>
-                <h3 className="font-display text-lg">Additional info</h3>
-                <Card className="mt-3 flex flex-col gap-4 p-4">
-                  <div>
-                    <p className="text-xs font-semibold text-text-muted">Included in</p>
-                    <div className="mt-2 flex flex-col divide-y divide-border">
-                  {collectionGame && (
-                    <div className="flex min-h-11 flex-wrap items-center justify-between gap-2 py-2">
-                      <p className="text-sm font-semibold">Collection</p>
-                      {collectionGame.source === 'manual'
-                        ? <Button type="button" variant="secondary" className="min-h-9 px-3" disabled={busy} onClick={() => void onMutate(`/bgg-account/games/${game.id}`, { method: 'DELETE' }, `Removed ${game.name} from collection.`)}>Remove</Button>
-                        : <span className="max-w-52 text-right text-xs text-text-muted">Remove on BGG, then sync</span>}
-                    </div>
-                  )}
-                  {wishlistGame && (
-                    <div className="flex min-h-11 flex-wrap items-center justify-between gap-2 py-2">
-                      {wishlistGame.source === 'manual' ? (
-                        <>
-                          <label className="text-sm font-semibold">Wishlist
-                            <select aria-label={`Wishlist status for ${game.name}`} value={wishlistGame.wishlistPriority ?? 3} disabled={busy} className={`ml-2 ${selectClass}`} onChange={(event) => void onMutate(`/bgg-account/wishlist/${game.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wishlistPriority: Number(event.target.value) }) }, `Updated ${game.name}.`)}>{Object.entries(WISHLIST_PRIORITIES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
-                          </label>
-                          <Button type="button" variant="secondary" className="min-h-9 px-3" disabled={busy} onClick={() => void onMutate(`/bgg-account/wishlist/${game.id}`, { method: 'DELETE' }, `Removed ${game.name} from wishlist.`)}>Remove</Button>
-                        </>
-                      ) : (
-                        <><p className="text-sm font-semibold">Wishlist · {WISHLIST_PRIORITIES[wishlistGame.wishlistPriority ?? 3]}</p><span className="max-w-52 text-right text-xs text-text-muted">Change on BGG, then sync</span></>
-                      )}
-                    </div>
-                  )}
-                  {savedGame && (
-                    <div className="flex min-h-11 items-center justify-between gap-2 py-2">
-                      <p className="text-sm font-semibold">Saved</p>
-                      <Button type="button" variant="secondary" className="min-h-9 px-3" disabled={busy} onClick={() => void onMutate(`/bgg-account/saved/${game.id}`, { method: 'DELETE' }, `Removed ${game.name} from Saved.`)}>Remove</Button>
-                    </div>
-                  )}
-                  {containingLists.map((list) => (
-                    <div key={list.id} className="flex min-h-11 items-center justify-between gap-2 py-2">
-                      <p className="text-sm font-semibold">{list.name}{list.type === 'tier' && <span className="ml-1 font-normal text-text-muted">· Tier list</span>}</p>
-                      <Button type="button" variant="secondary" className="min-h-9 px-3" disabled={busy} onClick={() => void onMutate(`/bgg-account/lists/${list.id}/games/${game.id}`, { method: 'DELETE' }, '')}>Remove</Button>
-                    </div>
-                  ))}
-                  {!collectionGame && !wishlistGame && !savedGame && containingLists.length === 0 && <p className="py-2 text-sm text-text-muted">Not included in a list yet.</p>}
-                    </div>
-                  </div>
-                  {hasAvailableList && (
-                    <div>
-                      <p className="text-xs font-semibold text-text-muted">Add to a list</p>
-                      <div className="mt-1 flex gap-2">
-                         <select value={targetListId} disabled={busy} onChange={(event) => void addToSelectedList(event.target.value)} className={`min-w-0 flex-1 ${selectClass}`}>
-                          <option value="">Choose a list</option>
-                          {!collectionGame && <option value="built-in:collection">Collection</option>}
-                          {!wishlistGame && <option value="built-in:wishlist">Wishlist</option>}
-                          {!savedGame && <option value="built-in:saved">Saved</option>}
-                          {availableLists.map((list) => <option key={list.id} value={list.id}>{list.name}</option>)}
-                        </select>
-                      </div>
-                    </div>
-                  )}
-                </Card>
-              </section>
-            )}
 
             <section>
               <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-display text-lg">Logged plays <span className="text-sm text-text-muted">({details.plays.length})</span></h3><Button type="button" className="min-h-9 px-3 text-xs" onClick={() => setLogOpen(true)}>Log a play</Button></div>
@@ -518,7 +481,7 @@ export function GameDetailsSheet({
                   return <div id={`logged-play-${play.id}`} key={play.id} className="scroll-mt-4 overflow-hidden rounded-sm border border-border bg-surface-raised">
                     <button type="button" aria-expanded={expanded} className="flex min-h-11 w-full items-center gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-highlight" onClick={() => setEditingPlayId(expanded ? null : play.id)}>
                       <strong className="shrink-0">{formatDateDmy(play.playedAt)}</strong>
-                      <span className="shrink-0 font-semibold">{expanded ? 'Play details' : play.groupName}</span>
+                      <span className="shrink-0 font-semibold">{play.groupName}</span>
                       {!expanded && play.notes && <span className="min-w-0 max-w-48 truncate text-xs text-text-muted">{play.notes}</span>}
                       {play.startedAt && play.endedAt && <span className="shrink-0 text-xs text-text-muted">{hhmm(play.startedAt)}–{hhmm(play.endedAt)}</span>}
                       {play.durationMinutes && <span className="shrink-0 text-xs text-text-muted">{formatDuration(play.durationMinutes)}</span>}
@@ -998,7 +961,7 @@ export function PersonalCollection() {
       })}
       </div>
 
-      <GameDetailsSheet game={selected} open={Boolean(selected)} onOpenChange={(open) => { if (!open) setSelected(null); }} collectionGame={collection.find((game) => game.id === selected?.id)} wishlistGame={wishlist.find((game) => game.id === selected?.id)} savedGame={saved.find((game) => game.id === selected?.id)} lists={lists} busy={busy} onMutate={mutate} membershipLabels={selected ? [...gameMembershipLabels(selected.id, collection, wishlist, saved, lists).defaults, ...gameMembershipLabels(selected.id, collection, wishlist, saved, lists).custom] : []} onReviewChanged={() => { void loadGames(); }} />
+      <GameDetailsSheet game={selected} open={Boolean(selected)} onOpenChange={(open) => { if (!open) setSelected(null); }} collectionGame={collection.find((game) => game.id === selected?.id)} wishlistGame={wishlist.find((game) => game.id === selected?.id)} savedGame={saved.find((game) => game.id === selected?.id)} lists={lists} busy={busy} onMutate={mutate} onReviewChanged={() => { void loadGames(); }} />
     </div>
   );
 }

@@ -249,6 +249,9 @@ describe('PlayLogDialog', () => {
     fireEvent.blur(note);
 
     await waitFor(() => expect(screen.queryByText('Ghosts')).toBeNull());
+    const addNote = screen.getByRole('button', { name: '+ Add note' });
+    expect(screen.queryByLabelText('Your note')).toBeNull();
+    fireEvent.click(addNote);
     expect(screen.getByLabelText('Your note')).toBeTruthy();
   });
 
@@ -271,6 +274,11 @@ describe('PlayLogDialog', () => {
     await waitFor(() => expect(times.textContent).toContain('18:30'));
     expect(times.textContent).toContain('20:00');
     expect(times.textContent).toContain('1h 30m');
+    expect(screen.queryByText('Start')).toBeNull();
+    expect(screen.queryByText('End')).toBeNull();
+    expect(screen.queryByText('Duration')).toBeNull();
+    expect(screen.queryByText('Status')).toBeNull();
+    expect(screen.queryByLabelText('Date')).toBeNull();
     expect(screen.queryByLabelText('Duration (minutes)')).toBeNull();
 
     fireEvent.click(times);

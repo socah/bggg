@@ -158,7 +158,7 @@ export function CollectionBrowser({
       })}
       </div>
 
-      <GameDetailsSheet game={selected} groupId={groupId} open={Boolean(selected)} onOpenChange={(open) => { if (!open) setSelected(null); }} collectionGame={collection.find((game) => game.id === selected?.id)} wishlistGame={wishlist.find((game) => game.id === selected?.id)} savedGame={saved.find((game) => game.id === selected?.id)} lists={lists} membershipLabels={selected ? [...gameMembershipLabels(selected.id, collection, wishlist, saved, lists).defaults, ...gameMembershipLabels(selected.id, collection, wishlist, saved, lists).custom] : []} />
+      <GameDetailsSheet game={selected} groupId={groupId} open={Boolean(selected)} onOpenChange={(open) => { if (!open) setSelected(null); }} collectionGame={collection.find((game) => game.id === selected?.id)} wishlistGame={wishlist.find((game) => game.id === selected?.id)} savedGame={saved.find((game) => game.id === selected?.id)} lists={lists} />
     </div>
   );
 }
