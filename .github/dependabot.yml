@@ -44,6 +44,11 @@ updates:
       # an untested major bump here until apps/api's blockers clear.
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
+      # eslint-plugin-react 7.37.5, provided by the current Next.js lint stack,
+      # crashes under ESLint 10 while loading react/display-name. Keep ESLint 9
+      # updates enabled and retry the major once Next's plugins support it.
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
 
   # Scans docker-compose.yml for 'image:' tags (e.g. postgres:16-alpine).
   # Dev-specific overrides live in docker-compose.dev.yml which Dependabot ignores
