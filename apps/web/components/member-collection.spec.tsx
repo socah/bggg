@@ -55,6 +55,7 @@ describe('MemberCollection', () => {
     expect(screen.getByRole('button', { name: 'Saved (1)' }).getAttribute('aria-expanded')).toBe('false');
     expect(screen.getByRole('button', { name: 'Favorites (1)' }).getAttribute('aria-expanded')).toBe('false');
     expect(screen.getByRole('button', { name: 'Collection (1)' }).getAttribute('aria-expanded')).toBe('false');
+    expect(screen.getAllByTestId('collection-list-preview')[0].querySelector('img')?.getAttribute('src')).toBe('/thumb.jpg');
     expect(screen.queryByText('Owned Game')).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Collection (1)' }));

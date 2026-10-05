@@ -15,6 +15,7 @@ import { PlayLogDialog, type PlayLogDefaults } from '@/components/play-log-dialo
 import { ReviewArticle, ReviewEditor } from '@/components/review-article';
 import { DisclosureChevron } from '@/components/ui/disclosure-chevron';
 import { apiFetch } from '@/lib/api';
+import { rankCollectionPreviewGames } from '@/lib/collection-list-preview';
 import { formatDateDmy, hhmm } from '@/lib/datetime';
 import { formatDuration } from '@/lib/time-interval';
 import { groupDisplayName } from '@/lib/user-identity';
@@ -780,11 +781,11 @@ export function PersonalCollection() {
     }, success);
   }
 
-  const listEntries: Array<{ value: LibraryTab; label: string; count: number }> = [
-    { value: 'collection', label: 'Collection', count: collection.length },
-    { value: 'wishlist', label: 'Wishlist', count: wishlist.length },
-    { value: 'saved', label: 'Saved', count: saved.length },
-    ...lists.map((list) => ({ value: `list:${list.id}` as LibraryTab, label: `${list.type === 'tier' ? 'Tier: ' : ''}${list.name}`, count: list.items.length })),
+  const listEntries: Array<{ value: LibraryTab; label: string; games: Array<CollectionGame | PersonalListGame> }> = [
+    { value: 'collection', label: 'Collection', games: collection },
+    { value: 'wishlist', label: 'Wishlist', games: wishlist },
+    { value: 'saved', label: 'Saved', games: saved },
+    ...lists.map((list) => ({ value: `list:${list.id}` as LibraryTab, label: `${list.type === 'tier' ? 'Tier: ' : ''}${list.name}`, games: list.items })),
   ];
 
   function addTier(event: FormEvent) {
@@ -882,7 +883,7 @@ export function PersonalCollection() {
       {listEntries.map((entry) => {
         const isExpanded = expanded && tab === entry.value;
         const entryList = entry.value.startsWith('list:') ? lists.find((list) => `list:${list.id}` === entry.value) : undefined;
-        return <CollectionListAccordion key={entry.value} label={entry.label} count={entry.count} expanded={isExpanded} onToggle={() => { if (tab === entry.value) setExpanded((current) => !current); else changeTab(entry.value); }} actions={entryList ? <DropdownMenu><DropdownMenuTrigger asChild><button type="button" className="flex min-h-10 w-10 items-center justify-center rounded-sm text-lg font-bold text-text-muted hover:bg-highlight" aria-label={`${entryList.name} settings`} disabled={busy}>...</button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onSelect={() => { const entering = editingListId !== entryList.id; setEditingListId(entering ? entryList.id : null); if (entering) { setTab(entry.value); setExpanded(true); } }}>{editingListId === entryList.id ? 'Exit edit mode' : 'Enter edit mode'}</DropdownMenuItem><DropdownMenuItem onSelect={() => { setRenamingList(entryList); setRenamedListName(entryList.name); }}>Rename list</DropdownMenuItem><DropdownMenuSeparator /><DropdownMenuItem className="text-accent" onSelect={() => { if (window.confirm(`Delete ${entryList.name}?`)) void mutate(`/bgg-account/lists/${entryList.id}`, { method: 'DELETE' }, '').then((deleted) => { if (deleted && tab === entry.value) { setTab('collection'); setExpanded(false); setEditingListId(null); } }); }}>Delete list</DropdownMenuItem></DropdownMenuContent></DropdownMenu> : undefined}>
+        return <CollectionListAccordion key={entry.value} label={entry.label} count={entry.games.length} expanded={isExpanded} previewGames={rankCollectionPreviewGames(entry.games, reviews, entry.value === 'wishlist' ? 'wishlistPriority' : 'userRating', entry.value)} onToggle={() => { if (tab === entry.value) setExpanded((current) => !current); else changeTab(entry.value); }} actions={entryList ? <DropdownMenu><DropdownMenuTrigger asChild><button type="button" className="flex min-h-10 w-10 items-center justify-center rounded-sm text-lg font-bold text-text-muted hover:bg-highlight" aria-label={`${entryList.name} settings`} disabled={busy}>...</button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onSelect={() => { const entering = editingListId !== entryList.id; setEditingListId(entering ? entryList.id : null); if (entering) { setTab(entry.value); setExpanded(true); } }}>{editingListId === entryList.id ? 'Exit edit mode' : 'Enter edit mode'}</DropdownMenuItem><DropdownMenuItem onSelect={() => { setRenamingList(entryList); setRenamedListName(entryList.name); }}>Rename list</DropdownMenuItem><DropdownMenuSeparator /><DropdownMenuItem className="text-accent" onSelect={() => { if (window.confirm(`Delete ${entryList.name}?`)) void mutate(`/bgg-account/lists/${entryList.id}`, { method: 'DELETE' }, '').then((deleted) => { if (deleted && tab === entry.value) { setTab('collection'); setExpanded(false); setEditingListId(null); } }); }}>Delete list</DropdownMenuItem></DropdownMenuContent></DropdownMenu> : undefined}>
         {tab === entry.value && <>
       <Card className="p-3">
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">

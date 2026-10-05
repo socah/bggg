@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { CollectionListAccordion } from '@/components/collection-list-accordion';
 import { gameMembershipLabels, GameDetailsSheet, LibraryGame } from '@/components/personal-collection';
+import { rankCollectionPreviewGames } from '@/lib/collection-list-preview';
 import type { CollectionGame, GameCardGame, PersonalGameList, PersonalListGame, PersonalReview } from '@/lib/types';
 
 type LibraryTab = 'collection' | 'wishlist' | 'saved' | `list:${string}`;
@@ -93,11 +94,11 @@ export function CollectionBrowser({
     else if (sort === 'priority') setSort('name');
   }
 
-  const listEntries: Array<{ value: LibraryTab; label: string; count: number }> = [
-    { value: 'collection', label: 'Collection', count: collection.length },
-    { value: 'wishlist', label: 'Wishlist', count: wishlist.length },
-    { value: 'saved', label: 'Saved', count: saved.length },
-    ...lists.map((list) => ({ value: `list:${list.id}` as LibraryTab, label: `${list.type === 'tier' ? 'Tier: ' : ''}${list.name}`, count: list.items.length })),
+  const listEntries: Array<{ value: LibraryTab; label: string; games: Array<CollectionGame | PersonalListGame> }> = [
+    { value: 'collection', label: 'Collection', games: collection },
+    { value: 'wishlist', label: 'Wishlist', games: wishlist },
+    { value: 'saved', label: 'Saved', games: saved },
+    ...lists.map((list) => ({ value: `list:${list.id}` as LibraryTab, label: `${list.type === 'tier' ? 'Tier: ' : ''}${list.name}`, games: list.items })),
   ];
 
   return (
@@ -105,7 +106,7 @@ export function CollectionBrowser({
       <div className="flex flex-col gap-2">
       {listEntries.map((entry) => {
         const isExpanded = expanded && tab === entry.value;
-        return <CollectionListAccordion key={entry.value} label={entry.label} count={entry.count} expanded={isExpanded} onToggle={() => toggleList(entry.value)}>
+        return <CollectionListAccordion key={entry.value} label={entry.label} count={entry.games.length} expanded={isExpanded} previewGames={rankCollectionPreviewGames(entry.games, reviews, entry.value === 'wishlist' ? 'wishlistPriority' : 'userRating', entry.value)} onToggle={() => toggleList(entry.value)}>
         {tab === entry.value && <>
       <Card className="p-3">
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
