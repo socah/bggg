@@ -8,6 +8,10 @@ import { Dialog, DialogClose, DialogContent, DialogTitle } from '@/components/ui
 import { Input } from '@/components/ui/input';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { CollectionListAccordion } from '@/components/collection-list-accordion';
+import { CollectionViewControls } from '@/components/collection-view-controls';
+import { WishlistPrioritySelect } from '@/components/wishlist-priority-select';
+import { compareWishlistPriority, wishlistPriority } from '@/lib/wishlist-priority';
+import { bestCollectionMatch, matchesCollectionFilters } from '@/lib/collection-filter';
 import { GameArtwork } from '@/components/game-artwork';
 import { GamePickerDialog } from '@/components/game-picker-dialog';
 import { UserIdentityLink } from '@/components/user-identity-link';
@@ -32,7 +36,7 @@ import type {
 
 type LibraryTab = 'collection' | 'wishlist' | 'saved' | `list:${string}`;
 type ViewMode = 'compact' | 'list';
-type SortMode = 'priority' | 'source' | 'position' | 'name' | 'rating' | 'userRating' | 'complexity' | 'depth' | 'players' | 'time' | 'year' | 'added';
+type SortMode = 'source' | 'position' | 'name' | 'rating' | 'userRating' | 'complexity' | 'depth' | 'players' | 'time' | 'year' | 'added';
 
 const RATING_SCALE: Record<number, string> = {
   10: 'Outstanding. Always want to play and expect this will never change.',
@@ -49,7 +53,7 @@ const RATING_SCALE: Record<number, string> = {
 
 const WEIGHT_SCALE = ['Light', 'Medium Light', 'Medium', 'Medium Heavy', 'Heavy'];
 const selectClass = 'min-h-10 rounded-sm border-[length:var(--border-w)] border-border bg-surface-raised px-2 text-sm text-text';
-const SORT_LABELS: Record<SortMode, string> = { priority: 'Wishlist priority', source: 'Source', position: 'Position', name: 'Name', rating: 'BGG rating', userRating: 'User rating', complexity: 'Complexity', depth: 'Depth', players: 'Minimum players', time: 'Playing time', year: 'Year published', added: 'Recently added' };
+const SORT_LABELS: Record<SortMode, string> = { source: 'Source', position: 'Position', name: 'Name', rating: 'BGG rating', userRating: 'User rating', complexity: 'Complexity', depth: 'Depth', players: 'Minimum players', time: 'Playing time', year: 'Year published', added: 'Recently added' };
 
 function todayKey(): string {
   const now = new Date();
@@ -120,6 +124,7 @@ export function LibraryGame({
   listLabels,
   review,
   averageReview,
+  wishlistGame,
 }: {
   game: GameCardGame;
   view: ViewMode;
@@ -129,14 +134,19 @@ export function LibraryGame({
   listLabels?: string[];
   review?: PersonalReview;
   averageReview?: { rating: number | null; complexity: number | null; depth: number | null };
+  wishlistGame?: CollectionGame;
 }) {
+  const priority = wishlistGame ? wishlistPriority(wishlistGame) : undefined;
+  const priorityClass = priority ? `border-l-4 ${priority.accent}` : '';
+  const priorityBadge = priority && <Badge className={priority.badge} title={wishlistGame?.source === 'bgg' ? 'Priority managed by BoardGameGeek' : undefined}>P{priority.value} · {priority.label}</Badge>;
   if (view === 'list') {
     return (
-      <Card className="relative flex min-h-20 items-start gap-2 p-2 transition-transform hover:-translate-y-0.5">
+      <Card className={`relative flex min-h-20 items-start gap-2 p-2 transition-transform hover:-translate-y-0.5 ${priorityClass}`}>
         <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-start gap-3 pr-1 text-left">
           <GameArtwork game={game} className="size-20" />
           <div className="min-w-0 flex-1">
             <h3 className="truncate font-display text-lg">{game.name}</h3>
+            {priorityBadge}
             <div className="mt-1"><GameMeta game={game} listLabels={listLabels} /></div>
             {game.owners && game.owners.length > 0 && <p className="mt-1 text-xs text-text-muted">Owned by {game.owners.map(groupDisplayName).join(', ')}</p>}
             {review && <div className="mt-1"><ReviewExcerpt review={review} /></div>}
@@ -144,17 +154,18 @@ export function LibraryGame({
             {note && <div className="mt-1 text-xs text-text-muted">{note}</div>}
           </div>
         </button>
-        {actions && <div className="flex shrink-0 flex-col items-end gap-1">{actions}</div>}
+        {actions && <div className="flex max-w-[45%] shrink-0 flex-col items-end gap-1">{actions}</div>}
       </Card>
     );
   }
 
   return (
-    <Card className="relative flex h-full flex-col overflow-hidden transition-transform hover:-translate-y-0.5">
+    <Card className={`relative flex h-full flex-col overflow-hidden transition-transform hover:-translate-y-0.5 ${priorityClass}`}>
       <button type="button" onClick={onOpen} className="flex flex-1 flex-col text-left">
         <GameArtwork game={game} />
         <div className="flex flex-1 flex-col gap-1.5 p-2">
           <h3 className="line-clamp-2 font-display text-base leading-tight">{game.name}</h3>
+          {priorityBadge}
           <GameMeta game={game} listLabels={listLabels} />
           {game.owners && game.owners.length > 0 && <p className="text-xs text-text-muted">Owned by {game.owners.map(groupDisplayName).join(', ')}</p>}
           {review && <div className="mt-auto"><ReviewExcerpt review={review} /></div>}
@@ -162,7 +173,7 @@ export function LibraryGame({
           {note && <div className="text-xs text-text-muted">{note}</div>}
         </div>
       </button>
-      {actions && <div className="absolute right-1 top-1 flex flex-wrap items-center justify-end gap-1 rounded-sm bg-surface-raised/90 p-1">{actions}</div>}
+      {actions && <div className={wishlistGame ? 'flex flex-wrap gap-1 p-2 pt-0' : 'absolute right-1 top-1 flex flex-wrap items-center justify-end gap-1 rounded-sm bg-surface-raised/90 p-1'}>{actions}</div>}
     </Card>
   );
 }
@@ -428,6 +439,10 @@ export function GameDetailsSheet({
           <DialogClose className="rounded-sm px-3 py-2 text-sm font-semibold text-text-muted">Close</DialogClose>
         </div>
 
+        {wishlistGame && <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Badge className={wishlistPriority(wishlistGame).badge}>P{wishlistPriority(wishlistGame).value} · {wishlistPriority(wishlistGame).label}</Badge>
+          {wishlistGame.source === 'bgg' ? <span className="text-xs text-text-muted">Change priority on BoardGameGeek, then sync.</span> : onMutate && <WishlistPrioritySelect game={wishlistGame} busy={busy} onChange={(priority) => void onMutate(`/bgg-account/wishlist/${wishlistGame.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wishlistPriority: priority }) }, '')} />}
+        </div>}
         {error && <p role="alert" className="mt-4 text-sm text-accent">{error}</p>}
         {!details && !error && <p className="py-12 text-center text-sm text-text-muted">Loading reviews and plays...</p>}
         {details && (
@@ -503,10 +518,13 @@ export function GameDetailsSheet({
   );
 }
 
-function sortGames(games: Array<CollectionGame | PersonalListGame>, sort: SortMode, reviews: PersonalReview[] = []) {
+function sortGames(games: Array<CollectionGame | PersonalListGame>, sort: SortMode, reviews: PersonalReview[] = [], isWishlist = false) {
   const reviewByGameId = new Map(reviews.map((review) => [review.gameId, review]));
   return [...games].sort((a, b) => {
-    if (sort === 'priority') return ((a as CollectionGame).wishlistPriority ?? 99) - ((b as CollectionGame).wishlistPriority ?? 99) || a.name.localeCompare(b.name);
+    if (isWishlist) {
+      const priorityOrder = compareWishlistPriority(a, b);
+      if (priorityOrder) return priorityOrder;
+    }
     if (sort === 'source') return (a as CollectionGame).source.localeCompare((b as CollectionGame).source) || a.name.localeCompare(b.name);
     if (sort === 'position') return (a as PersonalListGame).position - (b as PersonalListGame).position;
     if (sort === 'rating') return b.rating - a.rating || a.name.localeCompare(b.name);
@@ -544,7 +562,6 @@ export function PersonalCollection() {
   const [expanded, setExpanded] = useState(false);
   const [view, setView] = useState<ViewMode>('list');
   const [sort, setSort] = useState<SortMode>('name');
-  const [filter, setFilter] = useState('');
   const [playerCount, setPlayerCount] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -642,8 +659,11 @@ export function PersonalCollection() {
       void apiFetch(`/bgg-account/search?q=${encodeURIComponent(normalized)}`, { signal: controller.signal })
         .then(async (response) => {
           if (!response.ok) throw new Error(await responseError(response));
-          setResults((await response.json()) as BggSearchResult[]);
-          setSearchedQuery(normalized);
+           const next = (await response.json()) as BggSearchResult[];
+           if (!controller.signal.aborted) {
+             setResults(next);
+             setSearchedQuery(normalized);
+           }
         })
         .catch((reason: unknown) => {
           if (!controller.signal.aborted) {
@@ -725,13 +745,13 @@ export function PersonalCollection() {
   const pickerGames = [...new Map([...collection, ...wishlist, ...saved, ...lists.flatMap((list) => list.items)].map((game) => [game.id, game])).values()];
   const rawGames: Array<CollectionGame | PersonalListGame> = tab === 'collection' ? collection : tab === 'wishlist' ? wishlist : tab === 'saved' ? saved : activeList?.items ?? [];
   const hasMixedSources = !activeList && new Set((rawGames as CollectionGame[]).map((game) => game.source)).size > 1;
-  const effectiveSort = (sort === 'priority' && tab !== 'wishlist') || (sort === 'source' && !hasMixedSources) ? 'name' : sort;
-  const visibleGames = sortGames(rawGames.filter((game) => {
-    const matchesName = game.name.toLocaleLowerCase().includes(filter.trim().toLocaleLowerCase());
-    const count = Number(playerCount);
-    const matchesPlayers = !count || (game.minPlayers <= count && game.maxPlayers >= count);
-    return matchesName && matchesPlayers;
-  }), activeList?.type === 'tier' ? 'position' : effectiveSort, reviews);
+  const effectiveSort = sort === 'source' && !hasMixedSources ? 'name' : sort;
+   const visibleGames = sortGames(rawGames.filter((game) => matchesCollectionFilters(game, query, playerCount)), activeList?.type === 'tier' ? 'position' : effectiveSort, reviews, tab === 'wishlist');
+
+   function openSearchGame(game: GameCardGame) {
+     setSearchOpen(false);
+     setSelected(game);
+   }
 
   function labelsForGame(gameId: number): string[] {
     const labels = gameMembershipLabels(gameId, collection, wishlist, saved, lists);
@@ -762,15 +782,8 @@ export function PersonalCollection() {
     setTab(value);
     setExpanded(true);
     setEditingListId(null);
-    if (value === 'wishlist') setSort('priority');
-    else if (sort === 'priority') setSort('name');
   }
 
-  function changePlayerCount(delta: number) {
-    const current = Number(playerCount) || 0;
-    const next = current + delta;
-    setPlayerCount(next > 0 ? String(next) : '');
-  }
 
   async function updateTiers(tiers: string[], success: string): Promise<boolean> {
     if (!activeList) return false;
@@ -815,25 +828,28 @@ export function PersonalCollection() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div ref={searchContainerRef} className="relative z-20">
-      <Card className="overflow-visible p-4">
+      <div ref={searchContainerRef} className="sticky top-2 z-20">
+      <Card className="relative flex flex-col gap-2 overflow-visible bg-surface-raised/95 p-2 shadow-xl backdrop-blur sm:p-3">
         <div className="relative">
-          <Input value={query} onFocus={() => setSearchOpen(true)} onChange={(event) => { const value = event.target.value; setQuery(value); setSearchOpen(true); setSearchError(null); setSearchedQuery(''); if (value.trim().length < 2) { setResults([]); setSearching(false); } }} className="min-h-11 w-full pr-24" placeholder="Search BoardGameGeek for a game" aria-label="Search BoardGameGeek for a game" />
+          <Input value={query} onFocus={() => setSearchOpen(true)} onKeyDown={(event) => { if (event.key === 'Escape') setSearchOpen(false); if (event.key === 'Enter') { event.preventDefault(); const match = bestCollectionMatch(pickerGames.filter((game) => matchesCollectionFilters(game, query, playerCount)), query); if (match) openSearchGame(match); } }} onChange={(event) => { const value = event.target.value; setQuery(value); setSearchOpen(true); setSearchError(null); setSearchedQuery(''); setResults([]); setSearching(false); }} className="min-h-11 w-full pr-24" placeholder="Search your lists and BoardGameGeek" aria-label="Search your lists and BoardGameGeek" />
           {searching && <span className="absolute inset-y-0 right-3 flex items-center text-xs text-text-muted">Searching...</span>}
         </div>
         {searchOpen && query.trim().length >= 2 && (results.length > 0 || searchError || (!searching && searchedQuery === query.trim())) && (
-          <div className="absolute left-4 right-4 top-full mt-2 max-h-[28rem] overflow-y-auto rounded-sm border-[length:var(--border-w)] border-border bg-surface-raised shadow-xl">
+          <div className="absolute left-2 right-2 top-full mt-1 max-h-[28rem] overflow-y-auto rounded-sm border-[length:var(--border-w)] border-border bg-surface-raised shadow-xl sm:left-3 sm:right-3">
             {searchError && <p role="alert" className="p-3 text-sm text-accent">{searchError}</p>}
             {!searchError && results.length === 0 && <p className="p-3 text-sm text-text-muted">No games found.</p>}
-            {results.map((result) => (
+            {results.map((result) => {
+              const libraryGame = pickerGames.find((game) => game.bggId === result.bggId);
+              const artwork = <>
+                {result.thumbnail ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={result.thumbnail} alt="" className="size-12 shrink-0 rounded-sm object-cover" />
+                ) : <div className="size-12 shrink-0 rounded-sm bg-surface" />}
+                <div className="min-w-0"><strong className="block truncate">{result.name}</strong>{result.yearPublished > 0 && <span className="text-sm text-text-muted">{result.yearPublished}</span>}</div>
+              </>;
+              return (
               <div key={result.bggId} className="flex flex-col items-stretch justify-between gap-3 border-b border-border p-3 last:border-b-0 sm:flex-row sm:items-center">
-                <div className="flex min-w-0 items-center gap-3">
-                  {result.thumbnail ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={result.thumbnail} alt="" className="size-12 shrink-0 rounded-sm object-cover" />
-                  ) : <div className="size-12 shrink-0 rounded-sm bg-surface" />}
-                  <div className="min-w-0"><strong className="block truncate">{result.name}</strong>{result.yearPublished > 0 && <span className="text-sm text-text-muted">{result.yearPublished}</span>}</div>
-                </div>
+                {libraryGame ? <button type="button" aria-label={`Open details for ${result.name}`} onClick={() => openSearchGame(libraryGame)} className="flex min-w-0 flex-1 items-center gap-3 text-left hover:text-accent-2">{artwork}</button> : <div className="flex min-w-0 flex-1 items-center gap-3">{artwork}</div>}
                 <div className="flex flex-wrap gap-2">
                   {(['collection', 'wishlist', 'saved'] as const).map((target) => {
                     const source = target === 'collection' ? collection : target === 'wishlist' ? wishlist : saved;
@@ -843,9 +859,10 @@ export function PersonalCollection() {
                   {activeList && (() => { const active = activeList.items.some((game) => game.bggId === result.bggId); return <Button type="button" variant={active ? 'primary' : 'secondary'} aria-pressed={active} className="min-h-9 px-3" disabled={busy} onClick={() => { if (!active) void mutate(`/bgg-account/lists/${activeList.id}/games`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bggId: result.bggId }) }, `Added to ${activeList.name}.`); }}>{active ? `In ${activeList.name}` : `Add to ${activeList.name}`}</Button>; })()}
                 </div>
               </div>
-            ))}
+            ); })}
           </div>
         )}
+        <CollectionViewControls playerCount={playerCount} onPlayerCountChange={setPlayerCount} sort={effectiveSort} sortOptions={(Object.entries(SORT_LABELS) as Array<[SortMode, string]>).filter(([value]) => value !== 'position' && (value !== 'source' || hasMixedSources)).map(([value, label]) => ({ value, label }))} onSortChange={(value) => setSort(value as SortMode)} view={view} onViewChange={setView} />
       </Card>
       </div>
 
@@ -880,34 +897,11 @@ export function PersonalCollection() {
       {activeList && <GamePickerDialog open={listGamePickerOpen} title={`Add games to ${activeList.name}`} games={pickerGames} addedIds={new Set(activeList.items.map((game) => game.id))} onOpenChange={setListGamePickerOpen} onAdd={(game) => mutate(`/bgg-account/lists/${activeList.id}/games`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bggId: game.bggId }) }, '')} />}
 
       <div className="flex flex-col gap-2">
-      {listEntries.map((entry) => {
+      {listEntries.map((entry) => ({ ...entry, games: entry.games.filter((game) => matchesCollectionFilters(game, query, playerCount)) })).filter((entry) => entry.games.length > 0).map((entry) => {
         const isExpanded = expanded && tab === entry.value;
         const entryList = entry.value.startsWith('list:') ? lists.find((list) => `list:${list.id}` === entry.value) : undefined;
         return <CollectionListAccordion key={entry.value} label={entry.label} count={entry.games.length} expanded={isExpanded} previewGames={rankCollectionPreviewGames(entry.games, reviews, entry.value === 'wishlist' ? 'wishlistPriority' : 'userRating', entry.value)} onToggle={() => { if (tab === entry.value) setExpanded((current) => !current); else changeTab(entry.value); }} actions={entryList ? <DropdownMenu><DropdownMenuTrigger asChild><button type="button" className="flex min-h-10 w-10 items-center justify-center rounded-sm text-lg font-bold text-text-muted hover:bg-highlight" aria-label={`${entryList.name} settings`} disabled={busy}>...</button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onSelect={() => { const entering = editingListId !== entryList.id; setEditingListId(entering ? entryList.id : null); if (entering) { setTab(entry.value); setExpanded(true); } }}>{editingListId === entryList.id ? 'Exit edit mode' : 'Enter edit mode'}</DropdownMenuItem><DropdownMenuItem onSelect={() => { setRenamingList(entryList); setRenamedListName(entryList.name); }}>Rename list</DropdownMenuItem><DropdownMenuSeparator /><DropdownMenuItem className="text-accent" onSelect={() => { if (window.confirm(`Delete ${entryList.name}?`)) void mutate(`/bgg-account/lists/${entryList.id}`, { method: 'DELETE' }, '').then((deleted) => { if (deleted && tab === entry.value) { setTab('collection'); setExpanded(false); setEditingListId(null); } }); }}>Delete list</DropdownMenuItem></DropdownMenuContent></DropdownMenu> : undefined}>
         {tab === entry.value && <>
-      <Card className="p-3">
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          <Input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Filter by title" aria-label="Filter by title" />
-          <label className="flex flex-col gap-1 text-xs font-semibold text-text-muted">
-            <span className="flex" aria-label="Player count">
-              <button type="button" onClick={() => changePlayerCount(-1)} className="min-h-10 w-10 rounded-l-sm border-[length:var(--border-w)] border-border text-lg" aria-label="Decrease player count">-</button>
-              <Input type="text" inputMode="numeric" value={playerCount ? `Player count: ${playerCount}` : 'Player count: Any'} onChange={(event) => setPlayerCount(event.target.value.replace(/\D/g, ''))} aria-label="Player count value" className="min-w-0 rounded-none text-center" />
-              <button type="button" onClick={() => changePlayerCount(1)} className="min-h-10 w-10 rounded-r-sm border-[length:var(--border-w)] border-border text-lg" aria-label="Increase player count">+</button>
-            </span>
-          </label>
-          <label className="flex flex-col gap-1 text-xs font-semibold text-text-muted">
-            <select aria-label="Sort by" value={`display:${effectiveSort}`} onChange={(event) => setSort(event.target.value as SortMode)} className={selectClass}>
-              <option value={`display:${effectiveSort}`} hidden>Sort by: {SORT_LABELS[effectiveSort]}</option>
-              {tab === 'wishlist' && <option value="priority">Wishlist priority</option>}{hasMixedSources && <option value="source">Source</option>}<option value="name">Name</option><option value="rating">BGG rating</option><option value="userRating">User rating</option><option value="complexity">Complexity</option><option value="depth">Depth</option><option value="players">Minimum players</option><option value="time">Playing time</option><option value="year">Year published</option><option value="added">Recently added</option>
-            </select>
-          </label>
-          <div className="flex min-h-10 self-end overflow-hidden rounded-sm border-[length:var(--border-w)] border-border" aria-label="View style">
-            <button type="button" aria-pressed={view === 'compact'} onClick={() => setView('compact')} className={`flex-1 px-3 text-sm font-semibold ${view === 'compact' ? 'bg-accent-2 text-accent-2-ink' : 'text-text-muted'}`}>Grid</button>
-            <button type="button" aria-pressed={view === 'list'} onClick={() => setView('list')} className={`flex-1 border-l border-border px-3 text-sm font-semibold ${view === 'list' ? 'bg-accent-2 text-accent-2-ink' : 'text-text-muted'}`}>List</button>
-          </div>
-        </div>
-      </Card>
-
       {activeList?.type === 'tier' && editingListId === activeList.id && (
         <Card className="p-3">
           <form onSubmit={addTier} className="flex flex-col gap-2 sm:flex-row">
@@ -953,7 +947,9 @@ export function PersonalCollection() {
       ) : (
         <div className={view === 'compact' ? 'grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6' : 'flex flex-col gap-3'}>
           {visibleGames.map((game) => {
-            return <LibraryGame key={game.id} game={game} view={view} onOpen={() => setSelected(game)} actions={activeList ? listActions(game as PersonalListGame) : undefined} listLabels={labelsForGame(game.id)} review={reviewForGame(game.id)} />;
+            const wishlistGame = tab === 'wishlist' ? game as CollectionGame : undefined;
+            const actions = wishlistGame?.source === 'manual' ? <WishlistPrioritySelect game={wishlistGame} busy={busy} onChange={(priority) => void mutate(`/bgg-account/wishlist/${game.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wishlistPriority: priority }) }, '')} /> : activeList ? listActions(game as PersonalListGame) : undefined;
+            return <LibraryGame key={game.id} game={game} view={view} onOpen={() => setSelected(game)} actions={actions} wishlistGame={wishlistGame} listLabels={labelsForGame(game.id)} review={reviewForGame(game.id)} />;
           })}
         </div>
       )}

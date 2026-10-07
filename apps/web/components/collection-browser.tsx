@@ -4,22 +4,24 @@ import { useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { CollectionListAccordion } from '@/components/collection-list-accordion';
+import { CollectionViewControls } from '@/components/collection-view-controls';
+import { bestCollectionMatch, matchesCollectionFilters } from '@/lib/collection-filter';
 import { gameMembershipLabels, GameDetailsSheet, LibraryGame } from '@/components/personal-collection';
 import { rankCollectionPreviewGames } from '@/lib/collection-list-preview';
+import { compareWishlistPriority } from '@/lib/wishlist-priority';
 import type { CollectionGame, GameCardGame, PersonalGameList, PersonalListGame, PersonalReview } from '@/lib/types';
 
 type LibraryTab = 'collection' | 'wishlist' | 'saved' | `list:${string}`;
 type ViewMode = 'compact' | 'list';
-type SortMode = 'priority' | 'name' | 'rating' | 'userRating' | 'complexity' | 'depth' | 'players' | 'time' | 'year';
-const sortLabels: Record<SortMode, string> = { priority: 'Wishlist priority', name: 'Name', rating: 'BGG rating', userRating: 'User rating', complexity: 'Complexity', depth: 'Depth', players: 'Minimum players', time: 'Playing time', year: 'Year published' };
+type SortMode = 'name' | 'rating' | 'userRating' | 'complexity' | 'depth' | 'players' | 'time' | 'year';
+const sortLabels: Record<SortMode, string> = { name: 'Name', rating: 'BGG rating', userRating: 'User rating', complexity: 'Complexity', depth: 'Depth', players: 'Minimum players', time: 'Playing time', year: 'Year published' };
 
-function sortGames(games: Array<CollectionGame | PersonalListGame>, sort: SortMode, reviews: PersonalReview[]) {
+function sortGames(games: Array<CollectionGame | PersonalListGame>, sort: SortMode, reviews: PersonalReview[], isWishlist: boolean) {
   const reviewByGameId = new Map(reviews.map((review) => [review.gameId, review]));
   return [...games].sort((a, b) => {
-    if (sort === 'priority') {
-      const aPriority = 'wishlistPriority' in a && typeof a.wishlistPriority === 'number' ? a.wishlistPriority : 99;
-      const bPriority = 'wishlistPriority' in b && typeof b.wishlistPriority === 'number' ? b.wishlistPriority : 99;
-      return aPriority - bPriority || a.name.localeCompare(b.name);
+    if (isWishlist) {
+      const priorityOrder = compareWishlistPriority(a, b);
+      if (priorityOrder) return priorityOrder;
     }
     if (sort === 'rating') return b.rating - a.rating || a.name.localeCompare(b.name);
     if (sort === 'userRating' || sort === 'complexity' || sort === 'depth') {
@@ -63,11 +65,7 @@ export function CollectionBrowser({
       : tab === 'saved'
         ? saved
         : activeList?.items ?? [];
-  const count = Number(playerCount);
-  const visibleGames = sortGames(games.filter((game) =>
-    game.name.toLocaleLowerCase().includes(filter.trim().toLocaleLowerCase())
-      && (!count || (game.minPlayers <= count && game.maxPlayers >= count)),
-  ), sort, reviews);
+  const visibleGames = sortGames(games.filter((game) => matchesCollectionFilters(game, filter, playerCount)), sort, reviews, tab === 'wishlist');
 
   function labelsForGame(gameId: number): string[] {
     const labels = gameMembershipLabels(gameId, collection, wishlist, saved, lists);
@@ -78,10 +76,6 @@ export function CollectionBrowser({
     setSelected(game);
   }
 
-  function changePlayerCount(delta: number) {
-    const next = (Number(playerCount) || 0) + delta;
-    setPlayerCount(next > 0 ? String(next) : '');
-  }
 
   function toggleList(value: LibraryTab) {
     if (tab === value) {
@@ -90,8 +84,6 @@ export function CollectionBrowser({
     }
     setTab(value);
     setExpanded(true);
-    if (value === 'wishlist') setSort('priority');
-    else if (sort === 'priority') setSort('name');
   }
 
   const listEntries: Array<{ value: LibraryTab; label: string; games: Array<CollectionGame | PersonalListGame> }> = [
@@ -103,34 +95,15 @@ export function CollectionBrowser({
 
   return (
     <div className="flex flex-col gap-4">
+      <Card className="sticky top-2 z-20 flex flex-col gap-2 bg-surface-raised/95 p-2 shadow-xl backdrop-blur sm:p-3">
+        <Input value={filter} onChange={(event) => setFilter(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); const match = bestCollectionMatch([...collection, ...wishlist, ...saved, ...lists.flatMap((list) => list.items)].filter((game) => matchesCollectionFilters(game, filter, playerCount)), filter); if (match) openGame(match); } }} placeholder="Search by title" aria-label="Search by title" />
+        <CollectionViewControls playerCount={playerCount} onPlayerCountChange={setPlayerCount} sort={sort} sortOptions={(Object.entries(sortLabels) as Array<[SortMode, string]>).map(([value, label]) => ({ value, label }))} onSortChange={(value) => setSort(value as SortMode)} view={view} onViewChange={setView} />
+      </Card>
       <div className="flex flex-col gap-2">
-      {listEntries.map((entry) => {
+      {listEntries.map((entry) => ({ ...entry, games: entry.games.filter((game) => matchesCollectionFilters(game, filter, playerCount)) })).filter((entry) => entry.games.length > 0).map((entry) => {
         const isExpanded = expanded && tab === entry.value;
         return <CollectionListAccordion key={entry.value} label={entry.label} count={entry.games.length} expanded={isExpanded} previewGames={rankCollectionPreviewGames(entry.games, reviews, entry.value === 'wishlist' ? 'wishlistPriority' : 'userRating', entry.value)} onToggle={() => toggleList(entry.value)}>
         {tab === entry.value && <>
-      <Card className="p-3">
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          <Input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Filter by title" aria-label="Filter by title" />
-          <label className="flex flex-col gap-1 text-xs font-semibold text-text-muted">
-            <span className="flex" aria-label="Player count">
-              <button type="button" onClick={() => changePlayerCount(-1)} className="min-h-10 w-10 rounded-l-sm border-[length:var(--border-w)] border-border text-lg" aria-label="Decrease player count">-</button>
-              <Input type="text" inputMode="numeric" value={playerCount ? `Player count: ${playerCount}` : 'Player count: Any'} onChange={(event) => setPlayerCount(event.target.value.replace(/\D/g, ''))} aria-label="Player count value" className="min-w-0 rounded-none text-center" />
-              <button type="button" onClick={() => changePlayerCount(1)} className="min-h-10 w-10 rounded-r-sm border-[length:var(--border-w)] border-border text-lg" aria-label="Increase player count">+</button>
-            </span>
-          </label>
-          <label className="flex flex-col gap-1 text-xs font-semibold text-text-muted">
-            <select aria-label="Sort by" value={`display:${sort}`} onChange={(event) => setSort(event.target.value as SortMode)} className="min-h-10 rounded-sm border-[length:var(--border-w)] border-border bg-surface-raised px-2 text-sm text-text">
-              <option value={`display:${sort}`} hidden>Sort by: {sortLabels[sort]}</option>
-              {tab === 'wishlist' && <option value="priority">Wishlist priority</option>}<option value="name">Name</option><option value="rating">BGG rating</option><option value="userRating">User rating</option><option value="complexity">Complexity</option><option value="depth">Depth</option><option value="players">Minimum players</option><option value="time">Playing time</option><option value="year">Year published</option>
-            </select>
-          </label>
-          <div className="flex min-h-10 self-end overflow-hidden rounded-sm border-[length:var(--border-w)] border-border" aria-label="View style">
-            <button type="button" aria-pressed={view === 'compact'} onClick={() => setView('compact')} className={`flex-1 px-3 text-sm font-semibold ${view === 'compact' ? 'bg-accent-2 text-accent-2-ink' : 'text-text-muted'}`}>Grid</button>
-            <button type="button" aria-pressed={view === 'list'} onClick={() => setView('list')} className={`flex-1 border-l border-border px-3 text-sm font-semibold ${view === 'list' ? 'bg-accent-2 text-accent-2-ink' : 'text-text-muted'}`}>List</button>
-          </div>
-        </div>
-      </Card>
-
       {visibleGames.length === 0 && activeList?.type !== 'tier' ? (
         <Card className="p-8 text-center text-sm text-text-muted">No games match this view.</Card>
       ) : activeList?.type === 'tier' ? (
@@ -151,7 +124,7 @@ export function CollectionBrowser({
         </div>
       ) : (
         <div className={view === 'compact' ? 'grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6' : 'flex flex-col gap-3'}>
-          {visibleGames.map((game) => <LibraryGame key={game.id} game={game} view={view} onOpen={() => openGame(game)} listLabels={labelsForGame(game.id)} review={reviews.find((review) => review.gameId === game.id)} />)}
+          {visibleGames.map((game) => <LibraryGame key={game.id} game={game} view={view} onOpen={() => openGame(game)} wishlistGame={tab === 'wishlist' ? game as CollectionGame : undefined} listLabels={labelsForGame(game.id)} review={reviews.find((review) => review.gameId === game.id)} />)}
         </div>
       )}
         </>}

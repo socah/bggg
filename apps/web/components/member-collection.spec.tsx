@@ -74,7 +74,22 @@ describe('MemberCollection', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Wishlist (1)' }));
     const sort = screen.getByLabelText('Sort by') as HTMLSelectElement;
-    expect(sort.value).toBe('display:priority');
+    expect(sort.value).toBe('display:name');
+    expect(Array.from(sort.options, (option) => option.value)).not.toContain('priority');
+    expect(screen.getByText('P2 · Love to have')).toBeTruthy();
+    expect(screen.queryByLabelText('Wishlist priority for Wanted Game')).toBeNull();
     expect(Array.from(sort.options, (option) => option.textContent)).toEqual(expect.arrayContaining(['User rating', 'Complexity', 'Depth']));
+
+    expect(screen.getAllByLabelText('Player count value')).toHaveLength(1);
+    fireEvent.change(screen.getByLabelText('Search by title'), { target: { value: 'owned' } });
+    expect(screen.getByRole('button', { name: 'Collection (1)' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Wishlist (1)' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Favorites (1)' })).toBeNull();
+    expect(screen.getAllByTestId('collection-list-preview')).toHaveLength(1);
+    fireEvent.change(screen.getByLabelText('Player count value'), { target: { value: '5' } });
+    expect(screen.queryByRole('button', { name: 'Collection (1)' })).toBeNull();
+    fireEvent.change(screen.getByLabelText('Player count value'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('Search by title'), { target: { value: '' } });
+    expect(screen.getByRole('button', { name: 'Wishlist (1)' })).toBeTruthy();
   });
 });
