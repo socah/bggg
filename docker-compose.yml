@@ -307,6 +307,7 @@ services:
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
       BGG_API_TOKEN: ${BGG_API_TOKEN}
+      BOARDGAMEPRICES_SITE_URL: ${BOARDGAMEPRICES_SITE_URL:-https://${DOMAIN_NAME}}
       # Cloudflare R2 — read by apps/api/src/uploads/r2.service.ts for
       # presigned photo upload/download URLs. No R2_PUBLIC_URL_BASE: this
       # bucket is private (see R2Service.createPresignedGetUrl's own

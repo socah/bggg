@@ -25,6 +25,9 @@ const apiFetch = jest.fn(async (path: string, init?: RequestInit) => {
 const defaultApiFetch = apiFetch.getMockImplementation()!;
 
 jest.unstable_mockModule('@/lib/api', () => ({ apiFetch }));
+jest.unstable_mockModule('@/components/game-price-overview', () => ({
+  GamePriceOverview: ({ gameId }: { gameId: number }) => <section aria-label="Price overview">Prices for {gameId}</section>,
+}));
 jest.unstable_mockModule('@/components/play-log-dialog', () => ({
   PlayLogDialog: ({ open, defaults }: { open: boolean; defaults?: { groupId: string } }) => open ? <div data-testid="play-log-group">{defaults?.groupId ?? 'fallback'}</div> : null,
 }));
@@ -94,6 +97,17 @@ describe('GameDetailsSheet history', () => {
 });
 
 describe('GameDetailsSheet interactions', () => {
+  it('places wishlist prices before reviews', async () => {
+    render(<GameDetailsSheet game={game} open onOpenChange={jest.fn()} wishlistGame={{ ...game, source: 'manual', addedAt: '', wishlistPriority: 3 }} />);
+    const review = await screen.findByText('Write your review');
+    expect(screen.getByRole('region', { name: 'Price overview' }).compareDocumentPosition(review) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('places non-wishlist prices after reviews and plays', async () => {
+    render(<GameDetailsSheet game={game} open onOpenChange={jest.fn()} />);
+    const plays = await screen.findByRole('heading', { name: /Logged plays/ });
+    expect(plays.compareDocumentPosition(screen.getByRole('region', { name: 'Price overview' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
   it('opens the most extensive review and keeps the personal review switch available', async () => {
     apiFetch.mockImplementationOnce(async () => ({ ok: true, json: async () => ({
       reviews: [

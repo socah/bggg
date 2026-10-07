@@ -2,6 +2,7 @@ import { Injectable, HttpException } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { XMLParser } from 'fast-xml-parser';
+import { BggMarketListing, parseMarketListings } from './market-listings';
 
 // Shape of the data we extract from BGG and hand back to callers.
 // This is what gets stored in the DB cache — one field per column.
@@ -113,6 +114,11 @@ export class BggService {
     const url = `https://boardgamegeek.com/xmlapi2/thing?id=${bggId}&stats=1`;
     const xml = await this.fetchWithPolling(url);
     return this.parseGame(xml, bggId);
+  }
+
+  async getMarketListings(bggId: number): Promise<BggMarketListing[]> {
+    const xml = await this.fetchWithPolling(`https://boardgamegeek.com/xmlapi2/thing?id=${bggId}&marketplace=1`);
+    return parseMarketListings(xml, bggId);
   }
 
   // Fetches many games in one call via BGG's comma-separated id support on

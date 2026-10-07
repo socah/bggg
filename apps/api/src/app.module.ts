@@ -13,6 +13,7 @@ import { CollectionsModule } from './collections/collections.module';
 import { UsersModule } from './users/users.module';
 import { SessionsModule } from './sessions/sessions.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { PricesModule } from './prices/prices.module';
 
 // AppModule is the root of the dependency graph. NestFactory starts here.
 // Every feature module must be listed in `imports` for its routes and
@@ -53,6 +54,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     CalendarModule,
     UsersModule,
     NotificationsModule,
+    PricesModule,
   ],
 })
 export class AppModule {}

@@ -13,6 +13,7 @@ import { WishlistPrioritySelect } from '@/components/wishlist-priority-select';
 import { compareWishlistPriority, wishlistPriority } from '@/lib/wishlist-priority';
 import { bestCollectionMatch, matchesCollectionFilters } from '@/lib/collection-filter';
 import { GameArtwork } from '@/components/game-artwork';
+import { GamePriceOverview } from '@/components/game-price-overview';
 import { GamePickerDialog } from '@/components/game-picker-dialog';
 import { UserIdentityLink } from '@/components/user-identity-link';
 import { PlayLogDialog, type PlayLogDefaults } from '@/components/play-log-dialog';
@@ -443,6 +444,7 @@ export function GameDetailsSheet({
           <Badge className={wishlistPriority(wishlistGame).badge}>P{wishlistPriority(wishlistGame).value} · {wishlistPriority(wishlistGame).label}</Badge>
           {wishlistGame.source === 'bgg' ? <span className="text-xs text-text-muted">Change priority on BoardGameGeek, then sync.</span> : onMutate && <WishlistPrioritySelect game={wishlistGame} busy={busy} onChange={(priority) => void onMutate(`/bgg-account/wishlist/${wishlistGame.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wishlistPriority: priority }) }, '')} />}
         </div>}
+        {open && game && wishlistGame && <div className="mt-4"><GamePriceOverview key={game.id} gameId={game.id} /></div>}
         {error && <p role="alert" className="mt-4 text-sm text-accent">{error}</p>}
         {!details && !error && <p className="py-12 text-center text-sm text-text-muted">Loading reviews and plays...</p>}
         {details && (
@@ -512,6 +514,7 @@ export function GameDetailsSheet({
             </section>
           </div>
         )}
+        {open && game && !wishlistGame && <div className="mt-5"><GamePriceOverview key={game.id} gameId={game.id} /></div>}
       </DialogContent>
        {logOpen && <PlayLogDialog game={game} open={logOpen} defaults={effectivePlayDefaults} onOpenChange={setLogOpen} onLogged={() => { if (game) void loadDetails(game); onPlayLogged?.(); }} />}
     </Dialog>

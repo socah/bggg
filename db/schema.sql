@@ -660,6 +660,28 @@ CREATE TABLE IF NOT EXISTS legacy_orphaned_messages (
   created_at TIMESTAMPTZ
 );
 
+-- ── GAME PRICE TRACKING ───────────────────────────────────────────────────
+-- Shared EUR observations; retail includes known shipping to Greece.
+CREATE TABLE IF NOT EXISTS game_price_sources (
+  game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  source TEXT NOT NULL CHECK (source IN ('retail', 'market')),
+  attempted_at TIMESTAMPTZ NOT NULL,
+  fetched_at TIMESTAMPTZ,
+  offers JSONB NOT NULL DEFAULT '[]',
+  attribution JSONB,
+  error TEXT,
+  PRIMARY KEY (game_id, source)
+);
+
+CREATE TABLE IF NOT EXISTS game_price_history (
+  game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  source TEXT NOT NULL CHECK (source IN ('retail', 'market')),
+  day DATE NOT NULL,
+  observed_at TIMESTAMPTZ NOT NULL,
+  offers JSONB NOT NULL,
+  PRIMARY KEY (game_id, source, day)
+);
+
 -- ── AUDIT LOG ─────────────────────────────────────────────────────────────
 -- Append-only record of security-relevant events (Phase 2 — audit_logging topic).
 -- actor_id stores the raw Keycloak subject so the audit trail survives user
