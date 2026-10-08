@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/api';
-import type { GroupLibraryGame } from '@/lib/types';
+import type { CollectionGame, GroupLibraryGame } from '@/lib/types';
 
 interface UseGroupLibraryResult {
   games: GroupLibraryGame[];
@@ -11,7 +11,7 @@ interface UseGroupLibraryResult {
   reload: () => void;
 }
 
-export function useGroupLibrary(groupId: string | null): UseGroupLibraryResult {
+export function useGroupLibrary(groupId: string | null, { includeSaved = false }: { includeSaved?: boolean } = {}): UseGroupLibraryResult {
   const [games, setGames] = useState<GroupLibraryGame[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,16 +25,25 @@ export function useGroupLibrary(groupId: string | null): UseGroupLibraryResult {
     setLoading(true);
     setError(null);
 
-    apiFetch(`/groups/${groupId}/games`)
-      .then((res) => {
+    Promise.all([
+      apiFetch(`/groups/${groupId}/games`).then((res) => {
         if (!res.ok) throw new Error(`Unexpected status ${res.status}`);
-        return res.json();
-      })
-      .then((data: GroupLibraryGame[]) => {
-        if (!cancelled) setGames(data);
+        return res.json() as Promise<GroupLibraryGame[]>;
+      }),
+      includeSaved ? apiFetch('/bgg-account/saved').then((res) => {
+        if (!res.ok) throw new Error(`Unexpected status ${res.status}`);
+        return res.json() as Promise<CollectionGame[]>;
+      }) : Promise.resolve([] as CollectionGame[]),
+    ])
+      .then(([owned, saved]) => {
+        const gamesById = new Map(owned.map((game) => [game.id, game]));
+        for (const game of saved) {
+          if (!gamesById.has(game.id)) gamesById.set(game.id, { ...game, averageUserRating: null, averageComplexity: null, averageDepth: null });
+        }
+        if (!cancelled) setGames([...gamesById.values()]);
       })
       .catch(() => {
-        if (!cancelled) setError('Could not load the group game library');
+        if (!cancelled) setError(includeSaved ? 'Could not load owned and saved games' : 'Could not load the group game library');
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -43,7 +52,7 @@ export function useGroupLibrary(groupId: string | null): UseGroupLibraryResult {
     return () => {
       cancelled = true;
     };
-  }, [groupId, refreshKey]);
+  }, [groupId, refreshKey, includeSaved]);
 
   return {
     games,

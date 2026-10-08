@@ -200,7 +200,7 @@ describe('GameDetailsSheet interactions', () => {
 });
 
 describe('PersonalCollection lists', () => {
-  it('starts collapsed and keeps list settings between the name and right toggle', async () => {
+  it('shows list settings only while expanded, between the name and right toggle', async () => {
     render(<PersonalCollection />);
 
     const collection = await screen.findByRole('button', { name: 'Collection (2)' });
@@ -208,19 +208,22 @@ describe('PersonalCollection lists', () => {
     expect(collection.getAttribute('aria-expanded')).toBe('false');
     expect(favorites.getAttribute('aria-expanded')).toBe('false');
     expect(screen.getByLabelText('Create a game list')).toBeTruthy();
-    const settings = screen.getByRole('button', { name: 'Favorites settings' });
-    expect(settings).toBeTruthy();
-    expect(settings.parentElement?.nextElementSibling?.textContent).toBe('(1)');
-    expect(settings.parentElement?.nextElementSibling?.nextElementSibling?.getAttribute('aria-label')).toBe('Expand Favorites');
+    expect(screen.queryByRole('button', { name: 'Favorites settings' })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Expand Favorites' }));
 
     expect(favorites.getAttribute('aria-expanded')).toBe('true');
     expect(screen.getByRole('button', { name: 'Collapse Favorites' })).toBeTruthy();
+    const settings = screen.getByRole('button', { name: 'Favorites settings' });
+    expect(settings.parentElement?.nextElementSibling?.textContent).toBe('(1)');
+    expect(settings.parentElement?.nextElementSibling?.nextElementSibling?.getAttribute('aria-label')).toBe('Collapse Favorites');
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse Favorites' }));
+    expect(screen.queryByRole('button', { name: 'Favorites settings' })).toBeNull();
   });
 
   it('offers rename and delete from one list settings menu', async () => {
     render(<PersonalCollection />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Favorites (1)' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Favorites settings' }));
 
     expect(await screen.findByRole('menuitem', { name: 'Rename list' })).toBeTruthy();

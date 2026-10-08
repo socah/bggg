@@ -39,7 +39,7 @@ export function CollectionListAccordion({
           <span className="relative z-10"><DisclosureChevron expanded={expanded} /></span>
           <span className="relative z-10 min-w-0 flex-1 truncate [text-shadow:0_1px_2px_var(--color-surface-raised)]">{label}</span>
         </button>
-        {actions && <div className="shrink-0">{actions}</div>}
+        {expanded && actions && <div className="shrink-0">{actions}</div>}
         <span className="w-10 shrink-0 text-center font-body text-sm font-semibold text-text-muted">({count})</span>
         <button type="button" aria-label={`${expanded ? 'Collapse' : 'Expand'} ${label}`} aria-expanded={expanded} aria-controls={panelId} onClick={onToggle} className="flex min-h-12 w-12 shrink-0 items-center justify-center transition-colors hover:bg-highlight"><DisclosureChevron expanded={expanded} /></button>
       </div>

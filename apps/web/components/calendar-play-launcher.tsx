@@ -12,7 +12,7 @@ export function CalendarPlayLauncher({ date, groups, defaultGroupId, onLogged, o
   const [groupId, setGroupId] = useState(defaultGroupId ?? groups[0]?.id ?? '');
   const [game, setGame] = useState<GameCardGame | null>(null);
   const effectiveGroupId = defaultGroupId || groupId || groups[0]?.id || '';
-  const library = useGroupLibrary(pickerOpen ? effectiveGroupId || null : null);
+  const library = useGroupLibrary(pickerOpen ? effectiveGroupId || null : null, { includeSaved: true });
 
   return <>
     <Button type="button" variant="secondary" className={compact ? 'min-h-9 w-full min-w-0 max-w-full whitespace-normal px-0.5 text-[0.6rem] leading-tight @min-[5rem]/day:px-2 @min-[5rem]/day:text-xs' : 'px-3 text-xs'} disabled={groups.length === 0} onClick={() => setPickerOpen(true)}>Log a play</Button>
