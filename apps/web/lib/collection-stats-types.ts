@@ -5,6 +5,7 @@ export interface CollectionStats {
   acquisitionPriceCount: number;
   estimatedMarketValue: number | null;
   marketPriceCount: number;
+  acquisitionFallbackCount: number;
   stalePriceCount: number;
   fallbackDateCount: number;
   growth: Array<{ month: string; acquired: number; collectionSize: number; recordedSpend: number }>;
@@ -15,7 +16,7 @@ export interface CollectionStats {
     dateAcquired: string | null;
     addedAt: string;
     estimatedValue: number | null;
-    basis: 'second-hand' | 'retail-minus-25-percent' | null;
+    basis: 'second-hand' | 'retail-minus-25-percent' | 'acquisition' | null;
     stale: boolean;
   }>;
 }

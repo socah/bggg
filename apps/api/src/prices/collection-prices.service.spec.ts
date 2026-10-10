@@ -34,6 +34,15 @@ function setup() {
 }
 
 describe('Collection pricing and marketplace reports', () => {
+  it('uses the saved purchase price when neither current price source has an offer', async () => {
+    const { service, sources } = setup();
+    sources.forEach((source) => { source.offers = []; });
+    const stats = await service.collectionStats('user-1');
+    expect(stats.estimatedMarketValue).toBe(40);
+    expect(stats.acquisitionFallbackCount).toBe(1);
+    expect(stats.games[0]).toMatchObject({ estimatedValue: 40, basis: 'acquisition', stale: false });
+  });
+
   it('immediately updates overview, history and collection valuation after discarding a listing', async () => {
     const { service, firstUrl, secondUrl, http, bgg } = setup();
     expect((await service.collectionStats('user-1')).estimatedMarketValue).toBe(20);

@@ -44,8 +44,23 @@ describe('Collection growth and valuation', () => {
     expect(result.acquisitionValue).toBe(35.3);
   });
 
+  it('uses acquisition value only when both price sources are missing, including zero', () => {
+    const result = collectionStats([
+      game({ id: 1, marketPrice: null, retailPrice: null, amountPaid: 45.5, stale: true }),
+      game({ id: 2, marketPrice: null, retailPrice: null, amountPaid: 0, stale: true }),
+      game({ id: 3, marketPrice: null, retailPrice: null, amountPaid: null }),
+    ]);
+    expect(result.estimatedMarketValue).toBe(45.5);
+    expect(result.acquisitionFallbackCount).toBe(2);
+    expect(result.marketPriceCount).toBe(0);
+    expect(result.stalePriceCount).toBe(0);
+    expect(result.games.map((entry) => entry.estimatedValue)).toEqual([45.5, 0, null]);
+    expect(result.games.map((entry) => entry.basis)).toEqual(['acquisition', 'acquisition', null]);
+    expect(result.games.every((entry) => !entry.stale)).toBe(true);
+  });
+
   it('represents an empty collection and absent market data without inventing a valuation', () => {
     expect(collectionStats([])).toMatchObject({ gameCount: 0, growth: [], acquisitionValue: 0, estimatedMarketValue: null });
-    expect(collectionStats([game({ marketPrice: null, retailPrice: null })]).estimatedMarketValue).toBeNull();
+    expect(collectionStats([game({ marketPrice: null, retailPrice: null, amountPaid: null })]).estimatedMarketValue).toBeNull();
   });
 });

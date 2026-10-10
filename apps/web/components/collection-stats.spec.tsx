@@ -6,7 +6,7 @@ const apiFetch = jest.fn<(path: string, init?: RequestInit) => Promise<Response>
 jest.unstable_mockModule('@/lib/api', () => ({ apiFetch }));
 const { PersonalCollectionStats } = await import('./collection-stats');
 const stats = (): CollectionStats => ({ currency: 'EUR', gameCount: 2, acquisitionValue: 40, acquisitionPriceCount: 1,
-  estimatedMarketValue: 30, marketPriceCount: 1, stalePriceCount: 0, fallbackDateCount: 1,
+  estimatedMarketValue: 30, marketPriceCount: 1, acquisitionFallbackCount: 0, stalePriceCount: 0, fallbackDateCount: 1,
   growth: [{ month: '2026-01', acquired: 1, collectionSize: 1, recordedSpend: 40 }, { month: '2026-10', acquired: 1, collectionSize: 2, recordedSpend: 40 }],
   games: [{ gameId: 1, name: 'Azul', amountPaid: 40, dateAcquired: '2026-01-10', addedAt: '2026-10-10', estimatedValue: 30, basis: 'retail-minus-25-percent', stale: false },
     { gameId: 2, name: 'Catan', amountPaid: null, dateAcquired: null, addedAt: '2026-10-10', estimatedValue: null, basis: null, stale: true }],
@@ -35,6 +35,19 @@ describe('Private profile collection statistics', () => {
     fireEvent(window, new Event('collection-stats-changed'));
     expect(await screen.findByText('€50.00')).toBeTruthy();
     expect(apiFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('identifies acquisition-price fallbacks in the total and per-game breakdown', async () => {
+    const data = stats();
+    data.acquisitionFallbackCount = 1;
+    data.estimatedMarketValue = 55;
+    data.games[1] = { ...data.games[1], amountPaid: 25, estimatedValue: 25, basis: 'acquisition', stale: false };
+    apiFetch.mockResolvedValue(response(data));
+    render(<PersonalCollectionStats />);
+    await screen.findByText('€55.00');
+    expect(screen.getByText(/1 use acquisition value/)).toBeTruthy();
+    const table = screen.getByRole('table', { name: 'Private collection acquisition prices and estimated values by game', hidden: true });
+    expect(within(table).getByText('Acquisition value')).toBeTruthy();
   });
 
   it('retries failed loads using refresh', async () => {

@@ -26,9 +26,13 @@ For each owned game:
 3. If second-hand is higher than retail, use `retail × 0.75`. Also use this fallback
    when no eligible second-hand offer is available but retail is available.
 4. Otherwise use the second-hand minimum. Marketplace shipping is not included.
-5. Without either price, leave the game unvalued and exclude it from the subtotal.
+5. Without either price, use the recorded acquisition value when available,
+   including a recorded zero. Only games with none of these values are excluded
+   from the estimated subtotal.
 
-The UI displays coverage, stale-price counts, and each game's valuation basis.
+The UI displays market-price coverage, acquisition-fallback counts, stale-price
+counts, and each game's valuation basis. Acquisition fallbacks are not marked as
+stale marketplace prices.
 Profile visits bulk-read cached prices; the existing daily collector tracks owned
 games in the background. The totals are asking-price estimates, not sale proceeds.
 

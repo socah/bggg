@@ -61,20 +61,20 @@ export function GamePrivateDetailsForm({ gameId, initialDetails }: { gameId: num
     };
   }, [save]);
 
-  return <section className="rounded-md border border-border bg-surface p-3 sm:p-4" aria-labelledby="game-private-details-heading">
-    <h3 id="game-private-details-heading" className="font-display text-lg">Private details</h3>
-    <p className="mt-1 text-xs text-text-muted">Only you can see your comment, purchase price and date acquired.</p>
-    <form ref={form} onSubmit={(event) => event.preventDefault()} className="mt-3 flex flex-col gap-3">
-      <label className="text-xs font-semibold text-text-muted">Private comment
-        <textarea value={comment} maxLength={5000} onChange={(event) => { setComment(event.target.value); setSaved(false); }} rows={3} className="mt-1 block w-full rounded-sm border-[length:var(--border-w)] border-border bg-surface-raised p-2 text-sm text-text" placeholder="Add a note just for you" />
-      </label>
-      <label className="max-w-64 text-xs font-semibold text-text-muted">Amount paid (EUR)
-        <Input type="number" min="0" max="9999999999.99" step="0.01" value={amountPaid} onChange={(event) => { setAmountPaid(event.target.value); setSaved(false); }} className="mt-1 min-h-10 w-full" placeholder="Not recorded" />
-      </label>
-      <label className="max-w-64 text-xs font-semibold text-text-muted">Date acquired
-        <Input type="date" value={dateAcquired} onChange={(event) => { setDateAcquired(event.target.value); setSaved(false); }} className="mt-1 min-h-10 w-full" />
-      </label>
-      <span role="status" className="text-xs text-text-muted">{saving ? 'Saving private details...' : saved ? 'Private details saved' : 'Changes save automatically'}</span>
+  return <section className="rounded-md border border-border bg-surface p-3" aria-labelledby="game-private-details-heading">
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <h3 id="game-private-details-heading" className="font-display text-lg">Private details</h3>
+      <span role="status" className="text-xs text-text-muted">{saving ? 'Saving private details...' : saved ? 'Private details saved' : 'Only you · Saves automatically'}</span>
+    </div>
+    <form ref={form} onSubmit={(event) => event.preventDefault()} className="mt-2 flex flex-col gap-2">
+      <textarea aria-label="Private comment" value={comment} maxLength={5000} onChange={(event) => { setComment(event.target.value); setSaved(false); }} rows={2} className="block w-full rounded-sm border-[length:var(--border-w)] border-border bg-surface-raised p-2 text-sm text-text placeholder:text-text-muted" placeholder="Private comment…" />
+      <div className="grid max-w-lg grid-cols-2 gap-2">
+        <Input aria-label="Amount paid (EUR)" type="number" min="0" max="9999999999.99" step="0.01" value={amountPaid} onChange={(event) => { setAmountPaid(event.target.value); setSaved(false); }} className="min-h-10 w-full min-w-0" placeholder="Amount paid (€)" />
+        <div className="group relative min-w-0">
+          <Input aria-label="Date acquired" title="Date acquired" type="date" value={dateAcquired} onChange={(event) => { setDateAcquired(event.target.value); setSaved(false); }} className={`min-h-10 w-full min-w-0 ${dateAcquired ? '' : 'text-transparent focus:text-text'}`} />
+          {!dateAcquired && <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-2 flex items-center text-sm text-text-muted group-focus-within:hidden">Date acquired</span>}
+        </div>
+      </div>
       {error && <p role="alert" className="text-sm text-accent">{error}</p>}
     </form>
   </section>;
