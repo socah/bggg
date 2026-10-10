@@ -18,14 +18,16 @@ export default async function ShellLayout({ children }: { children: React.ReactN
   return (
     <div className="flex min-h-screen flex-col">
       <header
-        className="flex items-center justify-between gap-3 bg-surface-raised px-4 py-3"
+        className="flex items-center justify-between gap-3 bg-surface-raised px-4 py-3 md:grid md:grid-cols-[minmax(max-content,1fr)_auto_minmax(max-content,1fr)]"
         style={{ borderBottom: 'var(--border-w) solid var(--border)' }}
       >
-        <ShellContextControl />
+        <div className="min-w-0 justify-self-start">
+          <ShellContextControl />
+        </div>
         <div className="hidden md:block">
           <ViewTabs />
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-self-end gap-2">
           <CollectionSyncButton />
           <UserMenu name={name} />
         </div>
