@@ -359,7 +359,7 @@ export class CollectionsService {
   async upsertGamePrivateDetails(userId: string, gameId: number, dto: UpsertGamePrivateDetailsDto) {
     const [game] = await this.games.findByIds([gameId]);
     if (!game) throw new NotFoundException('Game not found');
-    const details = { comment: dto.comment?.trim() || null, amountPaid: dto.amountPaid ?? null };
+    const details = { comment: dto.comment?.trim() || null, amountPaid: dto.amountPaid ?? null, dateAcquired: dto.dateAcquired ?? null };
     await this.privateDetails.upsert({ userId, gameId, ...details }, ['userId', 'gameId']);
     return details;
   }
@@ -435,6 +435,7 @@ export class CollectionsService {
       privateDetails: {
         comment: privateDetails?.comment ?? null,
         amountPaid: privateDetails?.amountPaid ?? null,
+        dateAcquired: privateDetails?.dateAcquired ?? null,
       },
       reviews: reviewViews,
       plays: playRows.map((play) => {

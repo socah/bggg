@@ -16,4 +16,7 @@ export class GamePrivateDetails {
     from: (value: string | null) => value === null ? null : Number(value),
   } })
   amountPaid!: number | null;
+
+  @Column({ name: 'date_acquired', type: 'date', nullable: true })
+  dateAcquired!: string | null;
 }

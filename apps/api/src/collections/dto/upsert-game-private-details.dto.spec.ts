@@ -16,4 +16,13 @@ describe('UpsertGamePrivateDetailsDto', () => {
     const errors = await validate(plainToInstance(UpsertGamePrivateDetailsDto, { comment: 'a'.repeat(5001) }));
     expect(errors.some((error) => error.property === 'comment')).toBe(true);
   });
+
+  it.each(['2026-02-30', '2026-13-01', 'October 10', '2026-10-10T12:00:00Z'])('rejects invalid acquisition date %s', async (dateAcquired) => {
+    const errors = await validate(plainToInstance(UpsertGamePrivateDetailsDto, { dateAcquired }));
+    expect(errors.some((error) => error.property === 'dateAcquired')).toBe(true);
+  });
+
+  it.each(['2026-10-10', '2024-02-29', null])('accepts acquisition date %s', async (dateAcquired) => {
+    expect(await validate(plainToInstance(UpsertGamePrivateDetailsDto, { dateAcquired }))).toEqual([]);
+  });
 });

@@ -7,7 +7,7 @@ import type { PriceOverview, PricePoint, PriceSource } from '@/lib/price-types';
 
 const euros = (price: number) => new Intl.NumberFormat('en-IE', { style: 'currency', currency: 'EUR' }).format(price);
 
-function OfferCard({ title, source, shipping }: { title: string; source: PriceSource; shipping: string }) {
+function OfferCard({ title, source, shipping, onFlag, flagging }: { title: string; source: PriceSource; shipping: string; onFlag?: () => void; flagging?: boolean }) {
   const offer = source.cheapest;
   return <div className="rounded-sm border border-border bg-surface-raised p-3">
     <h4 className="text-xs font-semibold text-text-muted">{title}</h4>
@@ -15,6 +15,7 @@ function OfferCard({ title, source, shipping }: { title: string; source: PriceSo
       <a href={offer.url} target="_blank" rel="noreferrer" className="mt-1 inline-block font-display text-2xl text-accent underline underline-offset-4">{euros(offer.price)}</a>
       <p className="mt-1 text-xs">{offer.label}{offer.language && ` · ${offer.language}`}{offer.country && ` · ${offer.country}`}</p>
       {offer.product !== undefined && <p className="mt-1 text-xs text-text-muted">Game {euros(offer.product)} · shipping {euros(offer.shipping ?? 0)}</p>}
+      {onFlag && <button type="button" disabled={flagging} onClick={onFlag} title="Discard this specific listing from prices and collection valuations, for example if it is an insert or accessory" className="mt-2 text-xs font-semibold text-accent underline disabled:opacity-50">{flagging ? 'Discarding listing...' : 'Flag incorrect listing'}</button>}
     </> : <p className="mt-2 text-sm text-text-muted">{source.error ? 'Unavailable' : 'No eligible listings'}</p>}
     <p className="mt-1 text-xs text-text-muted">{shipping}</p>
     {source.stale && offer && <p className="mt-1 text-xs text-accent">Last known price · may have changed</p>}
@@ -85,6 +86,7 @@ function HistoryTable({ data }: { data: PriceOverview }) {
 export function GamePriceOverview({ gameId }: { gameId: number }) {
   const [result, setResult] = useState<{ gameId: number; data?: PriceOverview; error?: string } | null>(null);
   const [retry, setRetry] = useState(0);
+  const [report, setReport] = useState<{ gameId: number; saving?: boolean; error?: string; saved?: boolean } | null>(null);
   useEffect(() => {
     let active = true;
     void (async () => {
@@ -101,6 +103,25 @@ export function GamePriceOverview({ gameId }: { gameId: number }) {
   }, [gameId, retry]);
   const current = result?.gameId === gameId ? result : null;
   const data = current?.data;
+  const currentReport = report?.gameId === gameId ? report : null;
+
+  async function flagListing() {
+    const offer = data?.market.cheapest;
+    if (!offer || currentReport?.saving) return;
+    setReport({ gameId, saving: true });
+    try {
+      const response = await apiFetch(`/bgg-account/games/${gameId}/prices/market-exclusions`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: offer.url }),
+      });
+      if (!response.ok) throw new Error('Unable to discard this listing. Please try again.');
+      const next = await response.json() as PriceOverview;
+      setResult((current) => current?.gameId === gameId ? { gameId, data: next } : current);
+      setReport({ gameId, saved: true });
+      window.dispatchEvent(new Event('collection-stats-changed'));
+    } catch (reason: unknown) {
+      setReport({ gameId, error: reason instanceof Error ? reason.message : 'Unable to discard this listing.' });
+    }
+  }
   return <section aria-label="Price overview" className="rounded-md border border-border bg-surface p-3 sm:p-4">
     <h3 className="font-display text-xl">Price overview</h3>
     <p className="mt-1 text-xs text-text-muted">EUR · retail delivery to Greece · tracked daily</p>
@@ -109,13 +130,15 @@ export function GamePriceOverview({ gameId }: { gameId: number }) {
     {data && <>
       <div className="mt-3 grid gap-3 sm:grid-cols-3">
         <OfferCard title="Cheapest retail · buy now" source={data.retail} shipping="In stock · includes known shipping and fees" />
-        <OfferCard title="Probably cheapest second-hand" source={data.market} shipping="Shipping extra · confirm condition and delivery with seller" />
+        <OfferCard title="Probably cheapest second-hand" source={data.market} shipping="Shipping extra · confirm condition and delivery with seller" onFlag={() => void flagListing()} flagging={currentReport?.saving} />
         <div className="rounded-sm border border-border bg-surface-raised p-3">
           <h4 className="text-xs font-semibold text-text-muted">Bargain price · estimated</h4>
           <p className="mt-1 font-display text-2xl">{data.bargain.price === null ? 'Building history' : euros(data.bargain.price)}</p>
           <p className="mt-2 text-xs text-text-muted">{data.bargain.price === null ? `${data.bargain.sampleDays} observed days; needs at least 5 days spanning 14 days.` : 'A second-hand asking price at or below this trend is a potential bargain. Shipping extra.'}</p>
         </div>
       </div>
+      {currentReport?.error && <p role="alert" className="mt-2 text-xs text-accent">{currentReport.error}</p>}
+      {currentReport?.saved && <p role="status" className="mt-2 text-xs text-text-muted">Listing discarded. Prices and collection estimates recalculated.</p>}
       <PriceChart data={data} />
       <HistoryTable data={data} />
       <p className="mt-3 text-xs text-text-muted">History starts when tracking begins; neither API supplies past prices. GeekMarket EUR listings are a proxy for European offers: seller country is unavailable in its feed. These are asking prices, not completed sales.</p>

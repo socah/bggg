@@ -450,7 +450,6 @@ export function GameDetailsSheet({
         {!details && !error && <p className="py-12 text-center text-sm text-text-muted">Loading reviews and plays...</p>}
         {details && (
           <div className="mt-4 flex flex-col gap-5">
-            {game && <GamePrivateDetailsForm key={game.id} gameId={game.id} initialDetails={details.privateDetails} />}
             <section>
               <div className="flex gap-1.5 overflow-x-auto pb-1" aria-label="Choose a review">
                 <button type="button" aria-pressed={selectedReviewId === 'mine'} className={`shrink-0 rounded-full border px-3 py-1.5 text-sm font-bold ${selectedReviewId === 'mine' ? 'border-accent bg-accent text-accent-ink' : 'border-border bg-surface'}`} onClick={() => { setSelectedReviewId('mine'); setEditingReview(!mine); }}>Your review{!mine && ' · Start writing'}</button>
@@ -514,6 +513,7 @@ export function GameDetailsSheet({
                 })}
               </div>
             </section>
+            {game && <GamePrivateDetailsForm key={game.id} gameId={game.id} initialDetails={details.privateDetails} />}
           </div>
         )}
         {open && game && !wishlistGame && <div className="mt-5"><GamePriceOverview key={game.id} gameId={game.id} /></div>}

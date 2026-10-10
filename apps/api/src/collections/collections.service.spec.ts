@@ -187,18 +187,18 @@ describe('CollectionsService', () => {
   describe('private game details', () => {
     it('saves private data under the authenticated user, including a free game', async () => {
       mockGamesService.findByIds.mockResolvedValue([makeGame()]);
-      const result = await service.upsertGamePrivateDetails('user-1', 1, { comment: '  Gift  ', amountPaid: 0 });
+      const result = await service.upsertGamePrivateDetails('user-1', 1, { comment: '  Gift  ', amountPaid: 0, dateAcquired: '2026-10-10' });
       expect(mockPrivateDetailsRepo.upsert).toHaveBeenCalledWith(
-        { userId: 'user-1', gameId: 1, comment: 'Gift', amountPaid: 0 }, ['userId', 'gameId'],
+        { userId: 'user-1', gameId: 1, comment: 'Gift', amountPaid: 0, dateAcquired: '2026-10-10' }, ['userId', 'gameId'],
       );
-      expect(result).toEqual({ comment: 'Gift', amountPaid: 0 });
+      expect(result).toEqual({ comment: 'Gift', amountPaid: 0, dateAcquired: '2026-10-10' });
     });
 
     it('clears previously recorded private data', async () => {
       mockGamesService.findByIds.mockResolvedValue([makeGame()]);
       await service.upsertGamePrivateDetails('user-1', 1, { comment: '', amountPaid: null });
       expect(mockPrivateDetailsRepo.upsert).toHaveBeenCalledWith(
-        { userId: 'user-1', gameId: 1, comment: null, amountPaid: null }, ['userId', 'gameId'],
+        { userId: 'user-1', gameId: 1, comment: null, amountPaid: null, dateAcquired: null }, ['userId', 'gameId'],
       );
     });
 
@@ -212,15 +212,15 @@ describe('CollectionsService', () => {
       mockGamesService.findByIds.mockResolvedValue([makeGame()]);
       emptyRepo.findBy.mockResolvedValue([]);
       mockReviewsRepo.find.mockResolvedValue([]);
-      mockPrivateDetailsRepo.findOneBy.mockResolvedValue({ userId: 'user-1', gameId: 1, comment: 'Private', amountPaid: 39.95 });
+      mockPrivateDetailsRepo.findOneBy.mockResolvedValue({ userId: 'user-1', gameId: 1, comment: 'Private', amountPaid: 39.95, dateAcquired: '2026-10-10' });
       const result = await service.getGameDetails('user-1', 1);
       expect(mockPrivateDetailsRepo.findOneBy).toHaveBeenCalledWith({ userId: 'user-1', gameId: 1 });
-      expect(result.privateDetails).toEqual({ comment: 'Private', amountPaid: 39.95 });
+      expect(result.privateDetails).toEqual({ comment: 'Private', amountPaid: 39.95, dateAcquired: '2026-10-10' });
       expect(result.reviews).toEqual([]);
       mockPrivateDetailsRepo.findOneBy.mockResolvedValue(null);
       const otherUser = await service.getGameDetails('user-2', 1);
       expect(mockPrivateDetailsRepo.findOneBy).toHaveBeenLastCalledWith({ userId: 'user-2', gameId: 1 });
-      expect(otherUser.privateDetails).toEqual({ comment: null, amountPaid: null });
+      expect(otherUser.privateDetails).toEqual({ comment: null, amountPaid: null, dateAcquired: null });
     });
   });
 

@@ -1,21 +1,26 @@
-import { Injectable, Logger, NotFoundException, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { DataSource } from 'typeorm';
 import { firstValueFrom } from 'rxjs';
 import { BggService } from '../bgg/bgg.service';
-import { bargainEstimate, cheapest, filterMarketOffers, PriceHistoryPoint, PriceOffer } from './price-analysis';
+import { PriceOffer } from './price-analysis';
 import { Attribution, parseRetailPrices } from './retail-prices';
+import { priceOverview, PriceHistoryRow, PriceSourceName, PriceSourceRow } from './price-overview';
+import { collectionStats } from './collection-analysis';
 
-type Source = 'retail' | 'market';
-interface SourceRow {
-  source: Source;
-  attempted_at: Date;
-  fetched_at: Date | null;
-  offers: PriceOffer[];
-  attribution: Attribution | null;
-  error: string | null;
+type Source = PriceSourceName;
+type SourceRow = PriceSourceRow;
+type HistoryRow = PriceHistoryRow;
+
+function byGame<T extends { game_id: number }>(rows: T[]) {
+  const result = new Map<number, T[]>();
+  for (const row of rows) {
+    const entries = result.get(row.game_id) ?? [];
+    entries.push(row);
+    result.set(row.game_id, entries);
+  }
+  return result;
 }
-interface HistoryRow { source: Source; day: string; offers: PriceOffer[] }
 
 @Injectable()
 export class PricesService implements OnApplicationBootstrap, OnModuleDestroy {
@@ -47,29 +52,61 @@ export class PricesService implements OnApplicationBootstrap, OnModuleDestroy {
     const game = await this.game(gameId);
     // Serialize the two upstream calls, including when the collector is running.
     for (const source of ['retail', 'market'] as const) await this.refresh(game.id, game.bgg_id, source);
+    return this.cachedOverview(gameId);
+  }
+
+  private async cachedOverview(gameId: number) {
     const sources = await this.db.query<SourceRow[]>('SELECT * FROM game_price_sources WHERE game_id = $1', [gameId]);
     const history = await this.db.query<HistoryRow[]>(`SELECT source, day::text, offers FROM game_price_history
       WHERE game_id = $1 AND day >= CURRENT_DATE - 365 ORDER BY day`, [gameId]);
-    const marketRows = history.filter((row) => row.source === 'market');
-    const reference = marketRows.slice(-90).flatMap((row) => filterMarketOffers(row.offers).map((offer) => offer.price));
-    const points = (source: Source): PriceHistoryPoint[] => history.filter((row) => row.source === source).map((row) => {
-      const filtered = source === 'market' ? filterMarketOffers(row.offers, reference) : row.offers;
-      return { date: row.day, price: cheapest(row.offers)?.price ?? null,
-        filteredPrice: cheapest(filtered)?.price ?? null, offerCount: row.offers.length,
-        excludedCount: row.offers.length - filtered.length };
-    });
-    const view = (source: Source) => {
-      const state = sources.find((row) => row.source === source);
-      const offers = state?.offers ?? [];
-      const filtered = source === 'market' ? filterMarketOffers(offers, reference) : offers;
-      return { cheapest: cheapest(filtered), offerCount: offers.length, excludedCount: offers.length - filtered.length,
-        fetchedAt: state?.fetched_at?.toISOString() ?? null,
-        stale: !state?.fetched_at || Date.now() - state.fetched_at.getTime() > 86_400_000 || Boolean(state.error),
-        error: state?.error ?? null, attribution: state?.attribution ?? null, history: points(source) };
-    };
-    const retail = view('retail');
-    const market = view('market');
-    return { currency: 'EUR', destination: 'GR', retail, market, bargain: bargainEstimate(market.history) };
+    const exclusions = await this.db.query<Array<{ url: string }>>('SELECT url FROM game_market_exclusions WHERE game_id = $1', [gameId]);
+    return priceOverview(sources, history, new Set(exclusions.map((row) => row.url)));
+  }
+
+  async excludeMarketListing(gameId: number, url: string) {
+    await this.game(gameId);
+    const known = await this.db.query<Array<{ found: number }>>(`SELECT 1 AS found FROM (
+      SELECT offers FROM game_price_sources WHERE game_id = $1 AND source = 'market'
+      UNION ALL SELECT offers FROM game_price_history WHERE game_id = $1 AND source = 'market'
+      ) observations WHERE EXISTS (
+        SELECT 1 FROM jsonb_array_elements(offers) offer WHERE offer->>'url' = $2
+      ) LIMIT 1`, [gameId, url]);
+    if (!known.length) throw new BadRequestException('This listing is not a known marketplace offer for this game');
+    await this.db.query(`INSERT INTO game_market_exclusions (game_id, url) VALUES ($1, $2)
+      ON CONFLICT (game_id, url) DO NOTHING`, [gameId, url]);
+    // Recompute from cached offers immediately without bypassing provider limits.
+    return this.cachedOverview(gameId);
+  }
+
+  async collectionStats(userId: string) {
+    const games = await this.db.query<Array<{ id: number; name: string; added_at: string; date_acquired: string | null; amount_paid: string | null }>>(`
+      SELECT g.id, g.name, o.added_at::text, d.date_acquired::text, d.amount_paid
+      FROM game_ownership o JOIN games g ON g.id = o.game_id
+      LEFT JOIN game_private_details d ON d.game_id = o.game_id AND d.user_id = o.user_id
+      WHERE o.user_id = $1 ORDER BY g.name`, [userId]);
+    if (!games.length) return collectionStats([]);
+    const gameIds = games.map((game) => game.id);
+    // Bulk-read tracked prices; the daily collector hydrates missing games in the
+    // background rather than making hundreds of upstream calls on a profile visit.
+    const [sources, history, exclusions] = await Promise.all([
+      this.db.query<Array<SourceRow & { game_id: number }>>('SELECT * FROM game_price_sources WHERE game_id = ANY($1::int[])', [gameIds]),
+      this.db.query<Array<HistoryRow & { game_id: number }>>(`SELECT game_id, source, day::text, offers FROM game_price_history
+        WHERE game_id = ANY($1::int[]) AND day >= CURRENT_DATE - 365 ORDER BY day`, [gameIds]),
+      this.db.query<Array<{ game_id: number; url: string }>>('SELECT game_id, url FROM game_market_exclusions WHERE game_id = ANY($1::int[])', [gameIds]),
+    ]);
+    const sourceByGame = byGame(sources);
+    const historyByGame = byGame(history);
+    const exclusionsByGame = byGame(exclusions);
+    return collectionStats(games.map((game) => {
+      const prices = priceOverview(sourceByGame.get(game.id) ?? [], historyByGame.get(game.id) ?? [],
+        new Set((exclusionsByGame.get(game.id) ?? []).map((row) => row.url)));
+      const marketPrice = prices.market.cheapest?.price ?? null;
+      const retailPrice = prices.retail.cheapest?.price ?? null;
+      const useRetail = retailPrice !== null && (marketPrice === null || marketPrice > retailPrice);
+      return { id: game.id, name: game.name, addedAt: game.added_at, dateAcquired: game.date_acquired,
+        amountPaid: game.amount_paid === null ? null : Number(game.amount_paid), marketPrice, retailPrice,
+        stale: useRetail ? prices.retail.stale : prices.market.stale };
+    }));
   }
 
   private async refresh(gameId: number, bggId: number, source: Source) {

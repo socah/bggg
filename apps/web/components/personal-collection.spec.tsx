@@ -97,6 +97,15 @@ describe('GameDetailsSheet history', () => {
 });
 
 describe('GameDetailsSheet interactions', () => {
+  it('places private details below logged plays', async () => {
+    render(<GameDetailsSheet game={game} open onOpenChange={jest.fn()} />);
+    const privateDetails = await screen.findByRole('region', { name: 'Private details' });
+    const loggedPlays = screen.getByRole('heading', { name: /Logged plays/ });
+    expect(loggedPlays.compareDocumentPosition(privateDetails) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByLabelText('Date acquired')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Save private details' })).toBeNull();
+  });
+
   it('places wishlist prices before reviews', async () => {
     render(<GameDetailsSheet game={game} open onOpenChange={jest.fn()} wishlistGame={{ ...game, source: 'manual', addedAt: '', wishlistPriority: 3 }} />);
     const review = await screen.findByText('Write your review');

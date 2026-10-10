@@ -239,6 +239,7 @@ export interface CalendarPlaySummary {
 export interface GamePrivateDetails {
   comment: string | null;
   amountPaid: number | null;
+  dateAcquired: string | null;
 }
 
 export interface CollectionGameDetails {

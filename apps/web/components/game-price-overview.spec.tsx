@@ -13,6 +13,41 @@ const response = (data: PriceOverview) => ({ ok: true, json: async () => data })
 afterEach(() => { cleanup(); apiFetch.mockReset(); });
 
 describe('Game price overview', () => {
+  it('flags the specific marketplace listing and displays the recalculated price', async () => {
+    const data = overview();
+    data.market.cheapest = { price: 20, label: 'Good', url: 'https://boardgamegeek.com/market/product/1' };
+    const updated = overview();
+    updated.market.cheapest = { price: 30, label: 'Good', url: 'https://boardgamegeek.com/market/product/2' };
+    apiFetch.mockResolvedValueOnce(response(data)).mockResolvedValueOnce(response(updated));
+    const changed = jest.fn();
+    window.addEventListener('collection-stats-changed', changed);
+    try {
+      render(<GamePriceOverview gameId={1} />);
+      fireEvent.click(await screen.findByRole('button', { name: 'Flag incorrect listing' }));
+      expect(await screen.findByRole('link', { name: '€30.00' })).toHaveProperty('href', updated.market.cheapest.url);
+      expect(screen.queryByRole('link', { name: '€20.00' })).toBeNull();
+      expect(apiFetch).toHaveBeenLastCalledWith('/bgg-account/games/1/prices/market-exclusions', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: data.market.cheapest.url }),
+      });
+      expect(changed).toHaveBeenCalledTimes(1);
+    } finally {
+      window.removeEventListener('collection-stats-changed', changed);
+    }
+  });
+
+  it('keeps the listing visible and allows retrying when a report fails', async () => {
+    const data = overview();
+    data.market.cheapest = { price: 20, label: 'Good', url: 'https://boardgamegeek.com/market/product/1' };
+    apiFetch.mockResolvedValueOnce(response(data)).mockResolvedValueOnce({ ok: false } as Response).mockResolvedValueOnce(response(overview()));
+    render(<GamePriceOverview gameId={1} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Flag incorrect listing' }));
+    await screen.findByRole('alert');
+    expect(screen.getByRole('link', { name: '€20.00' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Flag incorrect listing' }));
+    await screen.findByText('Listing discarded. Prices and collection estimates recalculated.');
+    expect(screen.queryByRole('link', { name: '€20.00' })).toBeNull();
+  });
+
   it('shows delivered retail, secondhand exclusions and provider purchase links', async () => {
     const data = overview();
     data.retail.cheapest = { price: 35, product: 30, shipping: 5, label: 'Game edition', language: 'GB', country: 'GR', url: 'https://boardgameprices.co.uk/item/go?offer=1' };

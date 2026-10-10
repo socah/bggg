@@ -199,9 +199,18 @@ CREATE TABLE IF NOT EXISTS game_private_details (
   game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
   comment TEXT,
   amount_paid NUMERIC(12, 2),
+  date_acquired DATE,
   PRIMARY KEY (user_id, game_id),
   CONSTRAINT chk_game_private_comment_length CHECK (LENGTH(comment) <= 5000),
   CONSTRAINT chk_game_private_amount_paid CHECK (amount_paid >= 0)
+);
+
+-- Shared data-quality exclusions survive future marketplace refreshes.
+CREATE TABLE IF NOT EXISTS game_market_exclusions (
+  game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  url TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (game_id, url)
 );
 
 -- ── REVIEWS ───────────────────────────────────────────────────────────────
