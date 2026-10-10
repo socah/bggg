@@ -21,6 +21,7 @@ import { PersonalListItem } from './personal-list-item.entity';
 import { PlayUserNote } from '../sessions/play-user-note.entity';
 import { PlayPhoto } from '../uploads/play-photo.entity';
 import { R2Service } from '../uploads/r2.service';
+import { GamePrivateDetails } from './game-private-details.entity';
 
 function makeGame(overrides: Partial<Game> = {}): Game {
   return {
@@ -131,6 +132,7 @@ describe('CollectionsService', () => {
     save: jest.fn(),
   };
   const mockPlayPhotosRepo = { find: jest.fn() };
+  const mockPrivateDetailsRepo = { findOneBy: jest.fn(), upsert: jest.fn() };
   const mockR2Service = { createPresignedGetUrl: jest.fn() };
 
   const mockBggService = {
@@ -156,6 +158,7 @@ describe('CollectionsService', () => {
         { provide: getRepositoryToken(GameWishlist), useValue: mockWishlistRepo },
         { provide: getRepositoryToken(GameSaved), useValue: mockSavedRepo },
         { provide: getRepositoryToken(Review), useValue: mockReviewsRepo },
+        { provide: getRepositoryToken(GamePrivateDetails), useValue: mockPrivateDetailsRepo },
         { provide: getRepositoryToken(PersonalList), useValue: mockListsRepo },
         { provide: getRepositoryToken(PersonalListItem), useValue: mockListItemsRepo },
         { provide: getRepositoryToken(GroupMember), useValue: emptyRepo },
@@ -176,9 +179,50 @@ describe('CollectionsService', () => {
     mockWishlistRepo.findBy.mockResolvedValue([]);
     mockSavedRepo.findBy.mockResolvedValue([]);
     mockReviewsRepo.findBy.mockResolvedValue([]);
+    mockPrivateDetailsRepo.findOneBy.mockResolvedValue(null);
   });
 
   afterEach(() => jest.clearAllMocks());
+
+  describe('private game details', () => {
+    it('saves private data under the authenticated user, including a free game', async () => {
+      mockGamesService.findByIds.mockResolvedValue([makeGame()]);
+      const result = await service.upsertGamePrivateDetails('user-1', 1, { comment: '  Gift  ', amountPaid: 0 });
+      expect(mockPrivateDetailsRepo.upsert).toHaveBeenCalledWith(
+        { userId: 'user-1', gameId: 1, comment: 'Gift', amountPaid: 0 }, ['userId', 'gameId'],
+      );
+      expect(result).toEqual({ comment: 'Gift', amountPaid: 0 });
+    });
+
+    it('clears previously recorded private data', async () => {
+      mockGamesService.findByIds.mockResolvedValue([makeGame()]);
+      await service.upsertGamePrivateDetails('user-1', 1, { comment: '', amountPaid: null });
+      expect(mockPrivateDetailsRepo.upsert).toHaveBeenCalledWith(
+        { userId: 'user-1', gameId: 1, comment: null, amountPaid: null }, ['userId', 'gameId'],
+      );
+    });
+
+    it('does not write details for a missing game', async () => {
+      mockGamesService.findByIds.mockResolvedValue([]);
+      await expect(service.upsertGamePrivateDetails('user-1', 999, { comment: 'Note' })).rejects.toThrow('Game not found');
+      expect(mockPrivateDetailsRepo.upsert).not.toHaveBeenCalled();
+    });
+
+    it('reads private details only for the requesting user', async () => {
+      mockGamesService.findByIds.mockResolvedValue([makeGame()]);
+      emptyRepo.findBy.mockResolvedValue([]);
+      mockReviewsRepo.find.mockResolvedValue([]);
+      mockPrivateDetailsRepo.findOneBy.mockResolvedValue({ userId: 'user-1', gameId: 1, comment: 'Private', amountPaid: 39.95 });
+      const result = await service.getGameDetails('user-1', 1);
+      expect(mockPrivateDetailsRepo.findOneBy).toHaveBeenCalledWith({ userId: 'user-1', gameId: 1 });
+      expect(result.privateDetails).toEqual({ comment: 'Private', amountPaid: 39.95 });
+      expect(result.reviews).toEqual([]);
+      mockPrivateDetailsRepo.findOneBy.mockResolvedValue(null);
+      const otherUser = await service.getGameDetails('user-2', 1);
+      expect(mockPrivateDetailsRepo.findOneBy).toHaveBeenLastCalledWith({ userId: 'user-2', gameId: 1 });
+      expect(otherUser.privateDetails).toEqual({ comment: null, amountPaid: null });
+    });
+  });
 
   describe('getAccount', () => {
     it('should return the linked account for this user', async () => {

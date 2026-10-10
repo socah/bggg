@@ -30,6 +30,8 @@ import { UpdateListGameDto } from './dto/update-list-game.dto';
 import { PlayUserNote } from '../sessions/play-user-note.entity';
 import { PlayPhoto } from '../uploads/play-photo.entity';
 import { R2Service } from '../uploads/r2.service';
+import { GamePrivateDetails } from './game-private-details.entity';
+import { UpsertGamePrivateDetailsDto } from './dto/upsert-game-private-details.dto';
 
 export interface SyncSummary {
   added: number;
@@ -63,6 +65,7 @@ export class CollectionsService {
     private readonly games: GamesService,
     private readonly keycloak: KeycloakAdminClient,
     private readonly r2: R2Service,
+    @InjectRepository(GamePrivateDetails) private readonly privateDetails: Repository<GamePrivateDetails>,
   ) {}
 
   getAccount(userId: string): Promise<BggAccount | null> {
@@ -353,10 +356,19 @@ export class CollectionsService {
     await this.listItems.delete({ listId, gameId });
   }
 
+  async upsertGamePrivateDetails(userId: string, gameId: number, dto: UpsertGamePrivateDetailsDto) {
+    const [game] = await this.games.findByIds([gameId]);
+    if (!game) throw new NotFoundException('Game not found');
+    const details = { comment: dto.comment?.trim() || null, amountPaid: dto.amountPaid ?? null };
+    await this.privateDetails.upsert({ userId, gameId, ...details }, ['userId', 'gameId']);
+    return details;
+  }
+
   async getGameDetails(userId: string, gameId: number) {
     const [game] = await this.games.findByIds([gameId]);
     if (!game) throw new NotFoundException('Game not found');
 
+    const privateDetails = await this.privateDetails.findOneBy({ userId, gameId });
     const myMemberships = await this.members.findBy({ userId });
     const groupIds = myMemberships.map((membership) => membership.groupId);
     const visibleMemberships = groupIds.length
@@ -420,6 +432,10 @@ export class CollectionsService {
     })));
     return {
       game,
+      privateDetails: {
+        comment: privateDetails?.comment ?? null,
+        amountPaid: privateDetails?.amountPaid ?? null,
+      },
       reviews: reviewViews,
       plays: playRows.map((play) => {
         const session = sessionById.get(play.sessionId);

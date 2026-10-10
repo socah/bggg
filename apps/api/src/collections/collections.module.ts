@@ -19,6 +19,7 @@ import { PersonalListItem } from './personal-list-item.entity';
 import { PlayUserNote } from '../sessions/play-user-note.entity';
 import { PlayPhoto } from '../uploads/play-photo.entity';
 import { R2Service } from '../uploads/r2.service';
+import { GamePrivateDetails } from './game-private-details.entity';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { R2Service } from '../uploads/r2.service';
       GameWishlist,
       GameSaved,
       Review,
+      GamePrivateDetails,
       GroupMember,
       Group,
       PlaySession,

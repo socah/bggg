@@ -89,7 +89,7 @@ export class UsersService implements OnApplicationBootstrap {
       for (const table of [
         'push_subscriptions', 'notification_preferences',
         'calendar_feed_tokens', 'chat_thread_dismissals', 'bgg_accounts',
-        'game_ownership', 'game_wishlist', 'game_saved', 'reviews', 'personal_lists',
+        'game_ownership', 'game_wishlist', 'game_saved', 'game_private_details', 'reviews', 'personal_lists',
         'play_session_proposal_rsvps', 'play_session_proposal_game_votes',
         'proposal_place_votes', 'place_owners', 'place_visibility',
       ]) {

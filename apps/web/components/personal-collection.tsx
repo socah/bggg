@@ -14,6 +14,7 @@ import { compareWishlistPriority, wishlistPriority } from '@/lib/wishlist-priori
 import { bestCollectionMatch, matchesCollectionFilters } from '@/lib/collection-filter';
 import { GameArtwork } from '@/components/game-artwork';
 import { GamePriceOverview } from '@/components/game-price-overview';
+import { GamePrivateDetailsForm } from '@/components/game-private-details-form';
 import { GamePickerDialog } from '@/components/game-picker-dialog';
 import { UserIdentityLink } from '@/components/user-identity-link';
 import { PlayLogDialog, type PlayLogDefaults } from '@/components/play-log-dialog';
@@ -449,6 +450,7 @@ export function GameDetailsSheet({
         {!details && !error && <p className="py-12 text-center text-sm text-text-muted">Loading reviews and plays...</p>}
         {details && (
           <div className="mt-4 flex flex-col gap-5">
+            {game && <GamePrivateDetailsForm key={game.id} gameId={game.id} initialDetails={details.privateDetails} />}
             <section>
               <div className="flex gap-1.5 overflow-x-auto pb-1" aria-label="Choose a review">
                 <button type="button" aria-pressed={selectedReviewId === 'mine'} className={`shrink-0 rounded-full border px-3 py-1.5 text-sm font-bold ${selectedReviewId === 'mine' ? 'border-accent bg-accent text-accent-ink' : 'border-border bg-surface'}`} onClick={() => { setSelectedReviewId('mine'); setEditingReview(!mine); }}>Your review{!mine && ' · Start writing'}</button>

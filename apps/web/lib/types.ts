@@ -236,8 +236,14 @@ export interface CalendarPlaySummary {
   sessionPlace: { id: string; name: string } | null;
 }
 
+export interface GamePrivateDetails {
+  comment: string | null;
+  amountPaid: number | null;
+}
+
 export interface CollectionGameDetails {
   game: GameCardGame;
+  privateDetails: GamePrivateDetails;
   reviews: GameReview[];
   plays: GamePlaySummary[];
 }

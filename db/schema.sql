@@ -192,6 +192,18 @@ CREATE TABLE IF NOT EXISTS game_saved (
   UNIQUE (user_id, game_id)
 );
 
+-- ── PRIVATE GAME DETAILS ──────────────────────────────────────────────────
+-- Only the owning user can read these details. Amount paid is in EUR.
+CREATE TABLE IF NOT EXISTS game_private_details (
+  user_id TEXT NOT NULL,
+  game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  comment TEXT,
+  amount_paid NUMERIC(12, 2),
+  PRIMARY KEY (user_id, game_id),
+  CONSTRAINT chk_game_private_comment_length CHECK (LENGTH(comment) <= 5000),
+  CONSTRAINT chk_game_private_amount_paid CHECK (amount_paid >= 0)
+);
+
 -- ── REVIEWS ───────────────────────────────────────────────────────────────
 -- One review per user per game (not scoped to a group — reviews are personal).
 -- The design includes complexity and depth scores alongside the main rating.

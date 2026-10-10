@@ -24,6 +24,7 @@ import { CreateListDto } from './dto/create-list.dto';
 import { UpdateListDto } from './dto/update-list.dto';
 import { AddListGameDto } from './dto/add-list-game.dto';
 import { UpdateListGameDto } from './dto/update-list-game.dto';
+import { UpsertGamePrivateDetailsDto } from './dto/upsert-game-private-details.dto';
 
 // Same local-interface convention every other controller in this repo uses
 // (GroupsController, InvitesController, UploadsController, ...) instead of
@@ -221,6 +222,15 @@ export class CollectionsController {
     @Request() req: AuthenticatedRequest,
   ) {
     return this.collectionsService.upsertReview(req.user.sub, gameId, dto);
+  }
+
+  @Put('games/:gameId/private-details')
+  upsertGamePrivateDetails(
+    @Param('gameId', ParseIntPipe) gameId: number,
+    @Body() dto: UpsertGamePrivateDetailsDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.collectionsService.upsertGamePrivateDetails(req.user.sub, gameId, dto);
   }
 
   @Delete('games/:gameId/review')
