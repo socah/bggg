@@ -23,7 +23,11 @@
     // Installs the 'opencode' AI coding assistant CLI (pre-compiled binary
     // from GitHub releases into /usr/local/bin). The Superpowers plugin it
     // runs is wired up in the project-level opencode.json.
-    "ghcr.io/devcontainer-community/devcontainer-features/opencode.ai:1": {}
+    "ghcr.io/devcontainer-community/devcontainer-features/opencode.ai:1": {},
+    // Installs the Claude Code CLI ('claude') globally via npm. Anthropic's
+    // official feature; it relies on the Node runtime the base image provides.
+    // Pairs with the anthropic.claude-code VS Code extension below.
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1": {}
   },
 
   // Extensions installed inside the container, not on the host.
