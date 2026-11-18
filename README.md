@@ -45,9 +45,7 @@ The repo includes the learning trail behind the build. [`notes/`](notes/) has a 
 
 ## Architecture
 
-Everything except object storage and the external APIs runs on a single Oracle Cloud VM under Docker Compose.
-
-### Runtime
+Everything except object storage and the external APIs runs on a single Oracle Cloud VM under Docker Compose. Arrows point from a component to what it uses.
 
 ```mermaid
 ---
@@ -73,6 +71,8 @@ flowchart TB
         keycloak["<b>Keycloak</b><br/>OIDC"]
         db[("<b>Postgres</b><br/>app")]
         kcdb[("<b>Postgres</b><br/>Keycloak")]
+        agent["<b>Vault Agent</b><br/>renders secrets"]
+        vault["<b>Vault</b><br/>secrets"]
     end
 
     %% External services (untitled box keeps them on one bottom row)
@@ -81,6 +81,7 @@ flowchart TB
         r2[("<b>Cloudflare R2</b><br/>photos")]
         bgg["<b>BGG</b><br/>XML API"]
         prices["<b>Retail</b><br/>prices"]
+        kms["<b>OCI KMS</b><br/>unseal key"]
     end
 
     user -->|HTTPS| traefik
@@ -95,38 +96,14 @@ flowchart TB
     api --> bgg
     api --> prices
 
+    db -.->|password| agent
+    api -.->|password| agent
+    agent -->|AppRole| vault
+    vault -->|"unseal (prod)"| kms
+
     %% Invisible links: keep external services as a bottom row
     db ~~~ bgg
     kcdb ~~~ prices
-```
-
-### Secrets
-
-```mermaid
----
-config:
-  flowchart:
-    nodeSpacing: 20
-    rankSpacing: 30
-    padding: 6
-  themeVariables:
-    fontSize: 13px
----
-flowchart TB
-    bootstrap["<b>vault-bootstrap</b><br/>seeds DB password"]
-    agent["<b>Vault Agent</b><br/>AppRole"]
-    vault["<b>Vault</b>"]
-    kms["<b>OCI KMS</b>"]
-    volume[("<b>vault_secrets</b>")]
-    db[("<b>Postgres</b>")]
-    api["<b>NestJS</b>"]
-
-    bootstrap -->|writes| vault
-    agent -->|reads| vault
-    vault -->|"unseal (prod)"| kms
-    agent -->|renders| volume
-    volume -->|ro mount| db
-    volume -->|ro mount| api
 ```
 
 ### Request flow
@@ -135,7 +112,7 @@ flowchart TB
 2. **Authentication**: the web app signs users in through Keycloak with OIDC (Auth.js). Every API request and WebSocket handshake carries a bearer token. The API's `AuthGuard` verifies it against Keycloak's JWKS (RS256, issuer-checked) and rejects tokens from deleted accounts.
 3. **Authorisation**: group membership and roles are checked in the service layer. Request bodies go through whitelisting DTO validation (`forbidNonWhitelisted`).
 4. **Uploads** never pass through the API. The API checks membership and hands out a short-lived presigned URL, and the browser talks to R2 directly.
-5. **Secrets**: no service reads a database password from an environment file. Vault Agent authenticates with AppRole and renders credentials to a shared volume that consuming containers mount read-only. In production, Vault unseals itself through OCI KMS.
+5. **Secrets**: no service reads a database password from an environment file. A one-shot `vault-bootstrap` container seeds the database password into Vault. Vault Agent authenticates with AppRole and renders it to a shared volume that Postgres and the API mount read-only. In production, Vault unseals itself through OCI KMS.
 
 ### Delivery pipeline
 
