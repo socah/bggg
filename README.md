@@ -50,46 +50,48 @@ Everything except object storage and the external APIs runs on a single Oracle C
 ### Runtime
 
 ```mermaid
+---
+config:
+  flowchart:
+    nodeSpacing: 20
+    rankSpacing: 38
+    padding: 6
+    subGraphTitleMargin:
+      top: 4
+      bottom: 10
+  themeVariables:
+    fontSize: 13px
+---
 flowchart TB
-    user(["👤 Browser / installed PWA"])
+    user(["👤 Browser / PWA"])
 
-    subgraph vm["Oracle Cloud VM"]
+    subgraph vm["OCI VM"]
         direction TB
-        traefik["<b>Traefik</b><br/>TLS termination<br/>path-based routing"]
-
-        subgraph app["Application"]
-            direction LR
-            web["<b>Next.js web</b><br/>SSR + PWA"]
-            api["<b>NestJS API</b><br/>REST + Socket.IO"]
-        end
-
-        keycloak["<b>Keycloak</b><br/>OIDC identity provider"]
-
-        subgraph data["Data"]
-            direction LR
-            db[("<b>PostgreSQL</b><br/>app data")]
-            kcdb[("<b>PostgreSQL</b><br/>Keycloak data")]
-        end
+        traefik["<b>Traefik</b><br/>TLS · routing"]
+        web["<b>Next.js</b><br/>web + PWA"]
+        api["<b>NestJS</b><br/>REST + Socket.IO"]
+        keycloak["<b>Keycloak</b><br/>OIDC"]
+        db[("<b>Postgres</b><br/>app")]
+        kcdb[("<b>Postgres</b><br/>Keycloak")]
     end
 
-    subgraph ext["External services"]
+    %% External services (untitled box keeps them on one bottom row)
+    subgraph ext[" "]
         direction LR
-        r2[("<b>Cloudflare R2</b><br/>photo uploads")]
-        bgg["<b>BoardGameGeek</b><br/>XML API"]
-        prices["<b>Retail prices</b>"]
+        r2[("<b>Cloudflare R2</b><br/>photos")]
+        bgg["<b>BGG</b><br/>XML API"]
+        prices["<b>Retail</b><br/>prices"]
     end
 
     user -->|HTTPS| traefik
     traefik -->|"/"| web
-    traefik -->|"/api · /socket.io"| api
+    traefik -->|"/api"| api
     traefik -->|"/auth"| keycloak
-
-    web -.->|OIDC sign-in| keycloak
-    api -->|verify JWT via JWKS| keycloak
+    web -.->|sign-in| keycloak
+    api -->|JWKS| keycloak
     api --> db
     keycloak --> kcdb
-
-    api -->|presigned URLs| r2
+    api -->|presign| r2
     api --> bgg
     api --> prices
 
@@ -101,21 +103,30 @@ flowchart TB
 ### Secrets
 
 ```mermaid
+---
+config:
+  flowchart:
+    nodeSpacing: 20
+    rankSpacing: 30
+    padding: 6
+  themeVariables:
+    fontSize: 13px
+---
 flowchart TB
-    kms["<b>OCI KMS</b><br/>unseal key"]
-    vault["<b>Vault</b><br/>KV secret store"]
-    bootstrap["<b>vault-bootstrap</b><br/>one-shot: seeds DB password"]
-    agent["<b>Vault Agent</b><br/>AppRole auth"]
-    volume[("<b>vault_secrets</b><br/>shared volume")]
-    db[("<b>PostgreSQL</b>")]
-    api["<b>NestJS API</b>"]
+    bootstrap["<b>vault-bootstrap</b><br/>seeds DB password"]
+    agent["<b>Vault Agent</b><br/>AppRole"]
+    vault["<b>Vault</b>"]
+    kms["<b>OCI KMS</b>"]
+    volume[("<b>vault_secrets</b>")]
+    db[("<b>Postgres</b>")]
+    api["<b>NestJS</b>"]
 
-    vault -->|auto-unseal · prod| kms
     bootstrap -->|writes| vault
     agent -->|reads| vault
-    agent -->|renders files| volume
-    volume -->|read-only mount| db
-    volume -->|read-only mount| api
+    vault -->|"unseal (prod)"| kms
+    agent -->|renders| volume
+    volume -->|ro mount| db
+    volume -->|ro mount| api
 ```
 
 ### Request flow
@@ -129,23 +140,26 @@ flowchart TB
 ### Delivery pipeline
 
 ```mermaid
+---
+config:
+  flowchart:
+    nodeSpacing: 20
+    rankSpacing: 30
+    padding: 6
+  themeVariables:
+    fontSize: 13px
+---
 flowchart TB
-    pr(["Push / pull request"])
+    pr(["Push / PR"])
+    scan["<b>gitleaks</b><br/>secret scan"]
+    verify["<b>Verify</b><br/>lint · tests · audit"]
+    build["<b>Build</b><br/>Docker · Trivy"]
+    gate{{"all green · main"}}
+    inf["<b>Infisical</b><br/>secrets"]
+    tf["<b>Terraform</b><br/>outputs"]
+    ans["<b>Ansible</b><br/>deploy"]
 
-    scan["<b>gitleaks</b><br/>full-history secret scan"]
-    verify["<b>Verify</b><br/>lint · unit + e2e tests<br/>npm audit"]
-    build["<b>Build</b><br/>Docker images<br/>Trivy scan"]
-
-    pr --> scan & verify & build
-
-    inf["<b>Infisical</b><br/>fetch deploy secrets"]
-    tf["<b>Terraform</b><br/>read outputs from R2 state"]
-    ans["<b>Ansible</b><br/>deploy to the OCI VM"]
-
-    gate{{"all green<br/>and branch is main"}}
-    scan & verify & build --> gate
-    gate --> inf
-    inf --> tf --> ans
+    pr --> scan & verify & build --> gate --> inf --> tf --> ans
 ```
 
 ## Repository layout
