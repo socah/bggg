@@ -185,7 +185,9 @@ Real credentials never live in the repo. `*.example` files show the expected sha
 
 Copyright © 2026 Leonidas Delimpasis.
 
-This program is free software: you can redistribute it and/or modify it under the terms of the [GNU General Public License](LICENSE) as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+This program is free software: you can redistribute it and/or modify it under the terms of the [GNU Affero General Public License](LICENSE) as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+
+In short: you can use, study, modify and self-host BGGG. If you run a modified version as a network service, you must offer its source code to that service's users under the same license.
 
 ## Acknowledgements
 
