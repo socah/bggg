@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
-import webPush from 'web-push';
+import { sendNotification, setVapidDetails } from 'web-push';
 import { GroupMember } from '../groups/group-member.entity';
 import type { ChatThread } from '../chat/chat-thread.entity';
 import type { PlaySessionProposal } from '../scheduling/play-session-proposal.entity';
@@ -28,7 +28,7 @@ export class NotificationsService {
     const { VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT } = process.env;
     this.configured = Boolean(VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY && VAPID_SUBJECT);
     if (this.configured) {
-      webPush.setVapidDetails(VAPID_SUBJECT!, VAPID_PUBLIC_KEY!, VAPID_PRIVATE_KEY!);
+      setVapidDetails(VAPID_SUBJECT!, VAPID_PUBLIC_KEY!, VAPID_PRIVATE_KEY!);
     } else {
       this.logger.warn('Web push is disabled because VAPID configuration is incomplete');
     }
@@ -121,7 +121,7 @@ export class NotificationsService {
           ?? this.preferences.create({ userId: subscription.userId, chatMessages: true, proposalUpdates: true, showMessagePreviews: false });
         if (!preference[category]) return;
         try {
-          await webPush.sendNotification({
+          await sendNotification({
             endpoint: subscription.endpoint,
             expirationTime: subscription.expirationTime ? Number(subscription.expirationTime) : null,
             keys: { p256dh: subscription.p256dh, auth: subscription.auth },
