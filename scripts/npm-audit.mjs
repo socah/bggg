@@ -10,6 +10,11 @@ const allowedAdvisories = new Set([
   // No patched braces release exists. Current uses only process trusted, static
   // build-time glob patterns in next-pwa and eslint-config-next.
   'GHSA-vfj7-8cjw-p6xm',
+  // No patched picomatch release exists (<= 4.0.7 affected). It is reached only
+  // via typeorm/tinyglobby with static entity/migration globs and via next-pwa
+  // build tooling; no user-controlled input is ever used as a glob pattern.
+  // Remove once a patched picomatch ships.
+  'GHSA-fc5q-39xc-vjpf',
 ]);
 const severityRank = { info: 0, low: 1, moderate: 2, high: 3, critical: 4 };
 const result = spawnSync('npm', ['audit', `--workspace=${workspace}`, '--json'], { encoding: 'utf8' });
