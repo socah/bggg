@@ -21,14 +21,14 @@
       "integrity": "sha256:bd7ab48a832228f633239277552c30b353867fef2e5b037e064b4e64f0b843f2"
     },
     "ghcr.io/devcontainers/features/python:1": {
-      "version": "1.8.0",
-      "resolved": "ghcr.io/devcontainers/features/python@sha256:fbcad6955caeecc5ad3f7886baf652e25cba5225a6c4c2287c536de2e5607511",
-      "integrity": "sha256:fbcad6955caeecc5ad3f7886baf652e25cba5225a6c4c2287c536de2e5607511"
+      "version": "1.8.1",
+      "resolved": "ghcr.io/devcontainers/features/python@sha256:7b35df4ff12f378effab187341b1b1b2373de6dd6d027d87aa77dd246c62b517",
+      "integrity": "sha256:7b35df4ff12f378effab187341b1b1b2373de6dd6d027d87aa77dd246c62b517"
     },
     "ghcr.io/devcontainers/features/terraform:1": {
-      "version": "1.5.0",
-      "resolved": "ghcr.io/devcontainers/features/terraform@sha256:bc9eaf21aaba050bace59f411c282cb58058535a48232c059e60c19f86caa8f5",
-      "integrity": "sha256:bc9eaf21aaba050bace59f411c282cb58058535a48232c059e60c19f86caa8f5",
+      "version": "1.5.1",
+      "resolved": "ghcr.io/devcontainers/features/terraform@sha256:bc1c2b37b85835269260a71914cfc70a6ca2e3d6f601f9a1769386f6f4e63390",
+      "integrity": "sha256:bc1c2b37b85835269260a71914cfc70a6ca2e3d6f601f9a1769386f6f4e63390",
       "dependsOn": [
         "ghcr.io/devcontainers/features/github-cli:1"
       ]
