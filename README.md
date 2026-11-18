@@ -2,7 +2,7 @@
   <img src="assets/icons/logo.png" alt="BGGG logo" width="120" />
 </p>
 
-<h1 align="center">BGGG — Board Game Group Platform</h1>
+<h1 align="center">BGGG — Board Game Geek Group Platform</h1>
 
 <p align="center">
   A self-hosted platform where a board-gaming group can share collections, schedule game nights, log plays and chat in one place.
