@@ -50,10 +50,17 @@ infra/**/terraform.tfstate.backup
 infra/**/.terraform.lock.hcl
 infra/**/tfplan*
 
-# Terraform variable files — contain real OCI/Cloudflare credentials
-infra/**/terraform.tfvars
-infra/**/*.auto.tfvars
+# Terraform variable files — contain real OCI/Cloudflare credentials.
+# Broad on purpose: any file with "tfvars" anywhere in its name is ignored
+# (including typo'd copies), and only the committed .example templates are
+# allowed back in.
+infra/**/*tfvars*
 !infra/**/terraform.tfvars.example
+
+# Claude Code per-machine settings — holds local permission allowlists that
+# can embed hostnames, IPs and command history. Shared config lives in
+# .claude/settings.json instead.
+.claude/settings.local.json
 
 # Ansible inventory — generated from Terraform output by generate_inventory.sh,
 # contains the real server IP and a local SSH key path
