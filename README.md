@@ -45,56 +45,77 @@ The repo includes the learning trail behind the build. [`notes/`](notes/) has a 
 
 ## Architecture
 
+Everything except object storage and the external APIs runs on a single Oracle Cloud VM under Docker Compose.
+
+### Runtime
+
 ```mermaid
-flowchart LR
+flowchart TB
     user(["👤 Browser / installed PWA"])
 
-    subgraph cloudflare["Cloudflare"]
-        r2[("R2<br/>photo uploads")]
-    end
-
-    bgg["BoardGameGeek<br/>XML API"]
-    prices["Retail price<br/>sources"]
-
-    subgraph oci["Oracle Cloud VM — Docker Compose"]
-        traefik["Traefik<br/>TLS · routing"]
+    subgraph vm["Oracle Cloud VM"]
+        direction TB
+        traefik["<b>Traefik</b><br/>TLS termination<br/>path-based routing"]
 
         subgraph app["Application"]
-            web["Next.js web<br/>(SSR + PWA)"]
-            api["NestJS API<br/>REST + Socket.IO"]
+            direction LR
+            web["<b>Next.js web</b><br/>SSR + PWA"]
+            api["<b>NestJS API</b><br/>REST + Socket.IO"]
         end
 
-        keycloak["Keycloak<br/>OIDC identity"]
-        db[("PostgreSQL<br/>app data")]
-        kcdb[("PostgreSQL<br/>Keycloak data")]
+        keycloak["<b>Keycloak</b><br/>OIDC identity provider"]
 
-        subgraph secrets["Secrets"]
-            vault["Vault"]
-            agent["Vault Agent"]
+        subgraph data["Data"]
+            direction LR
+            db[("<b>PostgreSQL</b><br/>app data")]
+            kcdb[("<b>PostgreSQL</b><br/>Keycloak data")]
         end
     end
 
-    kms["OCI KMS<br/>auto-unseal"]
+    subgraph ext["External services"]
+        direction LR
+        r2[("<b>Cloudflare R2</b><br/>photo uploads")]
+        bgg["<b>BoardGameGeek</b><br/>XML API"]
+        prices["<b>Retail prices</b>"]
+    end
 
-    user -- "HTTPS /" --> traefik
-    traefik -- "/" --> web
-    traefik -- "/api · /socket.io" --> api
-    traefik -- "/auth" --> keycloak
+    user -->|HTTPS| traefik
+    traefik -->|"/"| web
+    traefik -->|"/api · /socket.io"| api
+    traefik -->|"/auth"| keycloak
 
-    web -. "OIDC login" .-> keycloak
-    api -- "verify JWT (JWKS)" --> keycloak
+    web -.->|OIDC sign-in| keycloak
+    api -->|verify JWT via JWKS| keycloak
     api --> db
     keycloak --> kcdb
 
-    api -- "presigned URLs" --> r2
-    user -. "direct upload / download" .-> r2
+    api -->|presigned URLs| r2
     api --> bgg
     api --> prices
 
-    vault --> kms
-    agent -- "AppRole" --> vault
-    agent -. "renders DB credentials" .-> db
-    agent -. "renders DB credentials" .-> api
+    %% Invisible links: keep external services as a bottom row
+    db ~~~ bgg
+    kcdb ~~~ prices
+```
+
+### Secrets
+
+```mermaid
+flowchart TB
+    kms["<b>OCI KMS</b><br/>unseal key"]
+    vault["<b>Vault</b><br/>KV secret store"]
+    bootstrap["<b>vault-bootstrap</b><br/>one-shot: seeds DB password"]
+    agent["<b>Vault Agent</b><br/>AppRole auth"]
+    volume[("<b>vault_secrets</b><br/>shared volume")]
+    db[("<b>PostgreSQL</b>")]
+    api["<b>NestJS API</b>"]
+
+    vault -->|auto-unseal · prod| kms
+    bootstrap -->|writes| vault
+    agent -->|reads| vault
+    agent -->|renders files| volume
+    volume -->|read-only mount| db
+    volume -->|read-only mount| api
 ```
 
 ### Request flow
@@ -108,15 +129,23 @@ flowchart LR
 ### Delivery pipeline
 
 ```mermaid
-flowchart LR
-    pr["Push / PR"] --> verify["gitleaks · lint<br/>unit + e2e tests · npm audit"]
-    verify --> build["Docker build<br/>+ Trivy scan"]
-    build -->|main only| deploy
-    subgraph deploy["Deploy"]
-        direction TB
-        inf["Infisical<br/>secrets"] --> tf["Terraform<br/>outputs (R2 state)"]
-        tf --> ans["Ansible playbook<br/>→ OCI VM"]
-    end
+flowchart TB
+    pr(["Push / pull request"])
+
+    scan["<b>gitleaks</b><br/>full-history secret scan"]
+    verify["<b>Verify</b><br/>lint · unit + e2e tests<br/>npm audit"]
+    build["<b>Build</b><br/>Docker images<br/>Trivy scan"]
+
+    pr --> scan & verify & build
+
+    inf["<b>Infisical</b><br/>fetch deploy secrets"]
+    tf["<b>Terraform</b><br/>read outputs from R2 state"]
+    ans["<b>Ansible</b><br/>deploy to the OCI VM"]
+
+    gate{{"all green<br/>and branch is main"}}
+    scan & verify & build --> gate
+    gate --> inf
+    inf --> tf --> ans
 ```
 
 ## Repository layout
