@@ -62,6 +62,35 @@ jobs:
               - '.dockerignore'
               - '.github/workflows/**'
 
+  # Scans the FULL git history (not just the diff) for committed secrets on
+  # every push and PR. Deliberately not gated by 'changes': a leaked token
+  # can land in any file — a notes/ write-up, a stray .tfvars copy — and
+  # those are exactly the paths 'changes' treats as uninteresting.
+  # Full history rather than the PR's commit range so a secret added in one
+  # commit and deleted in the next still fails the check: deleting it from
+  # the tree doesn't remove it from history, and history is what's public.
+  # Runs the pinned upstream container image directly rather than
+  # gitleaks/gitleaks-action, which needs a paid license key on
+  # organization-owned repos. Rules/allowlist live in .gitleaks.toml.
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Default is a depth-1 shallow clone, which would only let
+          # gitleaks see the tip commit.
+          fetch-depth: 0
+
+      - name: gitleaks (full history)
+        run: >
+          docker run --rm -v "$PWD:/repo"
+          zricethezav/gitleaks:v8.21.2@sha256:0e99e8821643ea5b235718642b93bb32486af9c8162c8b8731f7cbdc951a7f46
+          git /repo
+          --config /repo/.gitleaks.toml
+          --redact
+          --no-banner
+          --exit-code 1
+
   # Decision: lint + test + npm audit share ONE job (matrixed per workspace)
   # rather than three separate jobs. Because: all three need the exact same
   # 'npm ci' first — splitting them into separate jobs would mean paying for
@@ -176,10 +205,10 @@ jobs:
 
   deploy:
     runs-on: ubuntu-latest
-    # Blocks on BOTH prior jobs (and both matrix legs of each) — a critical
-    # CVE in apps/web's image, or a failing apps/api unit test, stops this
-    # job exactly the same way.
-    needs: [verify, build-and-scan]
+    # Blocks on every prior job (and both matrix legs of each) — a critical
+    # CVE in apps/web's image, a failing apps/api unit test, or a committed
+    # secret stops this job exactly the same way.
+    needs: [secret-scan, verify, build-and-scan]
     # Second gate, independent of 'needs': even when every check above is
     # green, only a push to main should ever touch production. Without this,
     # a green pull_request run (e.g. from a fork) could deploy on its own.

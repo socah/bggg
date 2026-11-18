@@ -1,0 +1,17 @@
+# Secret-scanning config for gitleaks (run by the 'secret-scan' job in
+# .github/workflows/ci.yml). Extends gitleaks' built-in rule set rather than
+# replacing it, and only carves out values that are known to be fake.
+
+title = "bggg gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known-fake example values used in documentation"
+# Matched against the detected secret itself, not the whole line, so a real
+# key sitting next to one of these examples is still reported.
+regexes = [
+  # notes/3_vault.md: Vault Agent tutorial walk-through values.
+  '''^sk-(example|rotated)-\d+$''',
+]

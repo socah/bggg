@@ -40,7 +40,7 @@ The repo includes the learning trail behind the build. [`notes/`](notes/) has a 
 | **Edge** | Traefik v3 reverse proxy with automatic Let's Encrypt TLS, DuckDNS dynamic DNS |
 | **Storage** | Cloudflare R2 (private bucket, short-lived presigned URLs) |
 | **Infrastructure** | Terraform (OCI VCN, NSG, compute, KMS; Cloudflare R2; remote state in R2), Ansible (Docker, DuckDNS, app deploy roles) |
-| **CI/CD** | GitHub Actions: lint, unit and e2e tests, `npm audit` gate, Docker build, Trivy image scanning, automated deploy; Dependabot; scheduled image re-scans |
+| **CI/CD** | GitHub Actions: gitleaks secret scanning, lint, unit and e2e tests, `npm audit` gate, Docker build, Trivy image scanning, automated deploy; Dependabot; scheduled image re-scans |
 | **Dev experience** | Dev Containers, Docker Compose (dev/prod overlays), per-worktree isolated stacks, Jest and Testing Library (400+ tests) |
 
 ## Architecture
@@ -109,7 +109,7 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    pr["Push / PR"] --> verify["Lint · unit tests<br/>e2e tests · npm audit"]
+    pr["Push / PR"] --> verify["gitleaks · lint<br/>unit + e2e tests · npm audit"]
     verify --> build["Docker build<br/>+ Trivy scan"]
     build -->|main only| deploy
     subgraph deploy["Deploy"]
@@ -178,8 +178,14 @@ Real credentials never live in the repo. `*.example` files show the expected sha
 - Secrets injected at runtime by Vault Agent and Infisical, never committed; the Vault server auto-unseals via KMS
 - Private object storage, reachable only through short-lived presigned URLs issued after a membership check
 - Audit log of security-relevant actions
-- CI gates: `npm audit` (high/critical) and Trivy container scanning, plus scheduled re-scans of deployed images and Dependabot updates
+- CI gates: full-history gitleaks secret scanning, `npm audit` (high/critical) and Trivy container scanning, plus scheduled re-scans of deployed images and Dependabot updates
 - Network security group exposes only 80/443 publicly, with SSH limited to a single CIDR
+
+## License
+
+Copyright © 2026 Leonidas Delimpasis.
+
+This program is free software: you can redistribute it and/or modify it under the terms of the [GNU General Public License](LICENSE) as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 
 ## Acknowledgements
 
